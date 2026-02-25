@@ -6,9 +6,11 @@ import * as schema from "./schema.js";
 const { Pool } = pg;
 
 function getDatabaseUrl(): string {
-  const url = process.env["DATABASE_URL"];
+  const url = process.env["DATABASE_URL"] ?? process.env["DB_URL"];
   if (!url) {
-    throw new Error("Missing required environment variable: DATABASE_URL");
+    throw new Error(
+      "Missing required environment variable: DATABASE_URL (or DB_URL)",
+    );
   }
   return url;
 }
