@@ -19,6 +19,8 @@ RUN npm run build
 # Production stage
 FROM node:20-slim
 
+ENV NODE_ENV=production
+
 WORKDIR /app
 
 # Copy package files
