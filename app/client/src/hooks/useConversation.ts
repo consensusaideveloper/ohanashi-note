@@ -1,0 +1,677 @@
+import { useCallback, useEffect, useRef, useReducer } from "react";
+
+import {
+  SESSION_CONFIG,
+  REALTIME_TOOLS,
+  CROSS_CATEGORY_RECORDS_LIMIT,
+  FOCUSED_SUMMARIES_LIMIT,
+  GUIDED_RECENT_SUMMARIES_LIMIT,
+  RETRY_DELAY_MS,
+} from "../lib/constants";
+import { getCharacterById } from "../lib/characters";
+import {
+  buildSessionPrompt,
+  buildGuidedSessionPrompt,
+} from "../lib/prompt-builder";
+import {
+  saveConversation,
+  updateConversation,
+  saveAudioRecording,
+  listConversations,
+  getConversation,
+  getUserProfile,
+  saveUserProfile,
+} from "../lib/storage";
+import { computeContentHash, computeBlobHash } from "../lib/integrity";
+import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
+import { requestSummarize } from "../lib/api";
+import {
+  searchPastConversations,
+  getNoteEntriesForAI,
+} from "../lib/conversation-search";
+import { useWebSocket } from "./useWebSocket";
+import { useAudioInput } from "./useAudioInput";
+import { useAudioOutput } from "./useAudioOutput";
+
+import type {
+  PastConversationContext,
+  GuidedPastContext,
+} from "../lib/prompt-builder";
+import type { ServerEvent } from "../lib/websocket-protocol";
+import type {
+  CharacterId,
+  ConversationRecord,
+  ConversationState,
+  ErrorType,
+  NoteEntry,
+  QuestionCategory,
+  TranscriptEntry,
+} from "../types/conversation";
+
+// --- State machine ---
+
+type SummaryStatus = "idle" | "pending" | "completed" | "failed";
+
+interface State {
+  conversationState: ConversationState;
+  errorType: ErrorType | null;
+  transcript: TranscriptEntry[];
+  /** Accumulates partial transcript deltas for the current assistant turn. */
+  pendingAssistantText: string;
+  summaryStatus: SummaryStatus;
+}
+
+type Action =
+  | { type: "CONNECT" }
+  | { type: "CONNECTED" }
+  | { type: "START_LISTENING" }
+  | { type: "AI_SPEAKING" }
+  | { type: "AI_DONE" }
+  | { type: "DISCONNECT" }
+  | { type: "ERROR"; errorType: ErrorType }
+  | { type: "ADD_USER_TRANSCRIPT"; text: string }
+  | { type: "APPEND_ASSISTANT_DELTA"; delta: string }
+  | { type: "FINALIZE_ASSISTANT_TRANSCRIPT"; text: string }
+  | { type: "SUMMARY_PENDING" }
+  | { type: "SUMMARY_COMPLETED" }
+  | { type: "SUMMARY_FAILED" };
+
+const initialState: State = {
+  conversationState: "idle",
+  errorType: null,
+  transcript: [],
+  pendingAssistantText: "",
+  summaryStatus: "idle",
+};
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "CONNECT":
+      return {
+        ...state,
+        conversationState: "connecting",
+        errorType: null,
+      };
+    case "CONNECTED":
+      return {
+        ...state,
+        conversationState: "listening",
+      };
+    case "START_LISTENING":
+      return {
+        ...state,
+        conversationState: "listening",
+        pendingAssistantText: "",
+      };
+    case "AI_SPEAKING":
+      return {
+        ...state,
+        conversationState: "ai-speaking",
+      };
+    case "AI_DONE":
+      return {
+        ...state,
+        conversationState: "listening",
+      };
+    case "DISCONNECT":
+      return {
+        ...initialState,
+        summaryStatus: state.summaryStatus,
+      };
+    case "ERROR":
+      return {
+        ...state,
+        conversationState: "error",
+        errorType: action.errorType,
+      };
+    case "ADD_USER_TRANSCRIPT":
+      return {
+        ...state,
+        transcript: [
+          ...state.transcript,
+          { role: "user", text: action.text, timestamp: Date.now() },
+        ],
+      };
+    case "APPEND_ASSISTANT_DELTA":
+      return {
+        ...state,
+        pendingAssistantText: state.pendingAssistantText + action.delta,
+      };
+    case "FINALIZE_ASSISTANT_TRANSCRIPT":
+      return {
+        ...state,
+        transcript: [
+          ...state.transcript,
+          { role: "assistant", text: action.text, timestamp: Date.now() },
+        ],
+        pendingAssistantText: "",
+      };
+    case "SUMMARY_PENDING":
+      return { ...state, summaryStatus: "pending" };
+    case "SUMMARY_COMPLETED":
+      return { ...state, summaryStatus: "completed" };
+    case "SUMMARY_FAILED":
+      return { ...state, summaryStatus: "failed" };
+    default:
+      return state;
+  }
+}
+
+// --- Hook ---
+
+interface UseConversationReturn {
+  state: ConversationState;
+  errorType: ErrorType | null;
+  transcript: TranscriptEntry[];
+  pendingAssistantText: string;
+  audioLevel: number;
+  characterId: CharacterId | null;
+  summaryStatus: SummaryStatus;
+  /** Start a conversation. Pass null for category to use AI-guided mode. */
+  start: (characterId: CharacterId, category: QuestionCategory | null) => void;
+  /** Stop the conversation and disconnect. */
+  stop: () => void;
+  /** Retry after an error. */
+  retry: () => void;
+}
+
+/** Collect latest note entries from past records for change-aware summarization. */
+function collectCurrentNoteEntries(
+  records: readonly ConversationRecord[],
+  category: QuestionCategory | null,
+): NoteEntry[] {
+  if (records.length === 0) return [];
+
+  const questionIds =
+    category !== null
+      ? new Set(getQuestionsByCategory(category).map((q) => q.id))
+      : null;
+
+  const entryMap = new Map<string, NoteEntry>();
+  const sorted = [...records].sort((a, b) => a.startedAt - b.startedAt);
+
+  for (const record of sorted) {
+    if (record.noteEntries === undefined) continue;
+    for (const entry of record.noteEntries) {
+      if (questionIds === null || questionIds.has(entry.questionId)) {
+        entryMap.set(entry.questionId, entry);
+      }
+    }
+  }
+
+  return Array.from(entryMap.values());
+}
+
+export function useConversation(): UseConversationReturn {
+  const [state, dispatch] = useReducer(reducer, initialState);
+
+  const ws = useWebSocket();
+  const audioOutput = useAudioOutput();
+
+  // Track whether we've sent the session.update to avoid sending it twice
+  const sessionConfigSentRef = useRef(false);
+
+  // Conversation persistence refs
+  const conversationIdRef = useRef<string | null>(null);
+  const characterIdRef = useRef<CharacterId | null>(null);
+  const categoryRef = useRef<QuestionCategory | null>(null);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+
+  // Past conversation context (loaded on start, used in session.created)
+  const pastContextRef = useRef<PastConversationContext | null>(null);
+
+  // Guided mode context (loaded on start when category is null)
+  const guidedContextRef = useRef<GuidedPastContext | null>(null);
+
+  // User name (loaded on start, used in session.created)
+  const userNameRef = useRef<string | null>(null);
+
+  // All conversation records (loaded on start, used for function call search)
+  const allRecordsRef = useRef<ConversationRecord[]>([]);
+
+  // Keep transcript ref in sync with reducer state
+  useEffect(() => {
+    transcriptRef.current = state.transcript;
+  }, [state.transcript]);
+
+  // Callback for audio chunks from the microphone
+  const handleAudioChunk = useCallback(
+    (base64: string): void => {
+      ws.send({
+        type: "input_audio_buffer.append",
+        audio: base64,
+      });
+    },
+    [ws],
+  );
+
+  const audioInput = useAudioInput({ onAudioChunk: handleAudioChunk });
+
+  // Handle function calls from the Realtime API
+  const handleFunctionCall = useCallback(
+    (callId: string, functionName: string, argsJson: string): void => {
+      try {
+        let result: string;
+
+        if (functionName === "search_past_conversations") {
+          const args = JSON.parse(argsJson) as {
+            query: string;
+            category?: QuestionCategory | null;
+          };
+          const searchResult = searchPastConversations(
+            allRecordsRef.current,
+            args,
+          );
+          result = JSON.stringify(searchResult);
+        } else if (functionName === "get_note_entries") {
+          const args = JSON.parse(argsJson) as { category: QuestionCategory };
+          const noteResult = getNoteEntriesForAI(
+            allRecordsRef.current,
+            args.category,
+          );
+          result = JSON.stringify(noteResult);
+        } else {
+          result = JSON.stringify({ error: "Unknown function" });
+        }
+
+        ws.send({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output: result,
+          },
+        });
+        ws.send({ type: "response.create" });
+      } catch {
+        ws.send({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output: JSON.stringify({
+              error: "検索中にエラーが発生しました",
+            }),
+          },
+        });
+        ws.send({ type: "response.create" });
+      }
+    },
+    [ws],
+  );
+
+  // Handle incoming server events
+  const handleServerEvent = useCallback(
+    (event: ServerEvent): void => {
+      switch (event.type) {
+        case "session.created":
+        case "session.updated":
+          // Session is ready — if we haven't sent config yet, send it
+          if (
+            event.type === "session.created" &&
+            !sessionConfigSentRef.current
+          ) {
+            sessionConfigSentRef.current = true;
+            const charId = characterIdRef.current ?? "character-a";
+            const character = getCharacterById(charId);
+            let instructions: string;
+            if (categoryRef.current !== null) {
+              // Focused mode: category-specific prompt
+              instructions = buildSessionPrompt(
+                charId,
+                categoryRef.current,
+                pastContextRef.current ?? undefined,
+                userNameRef.current ?? undefined,
+              );
+            } else {
+              // Guided mode: cross-category prompt
+              instructions = buildGuidedSessionPrompt(
+                charId,
+                guidedContextRef.current ?? {
+                  allCoveredQuestionIds: [],
+                  recentSummaries: [],
+                },
+                userNameRef.current ?? undefined,
+              );
+            }
+            ws.send({
+              type: "session.update",
+              session: {
+                ...SESSION_CONFIG,
+                voice: character.voice,
+                instructions,
+                tools: [...REALTIME_TOOLS],
+                tool_choice: "auto",
+              },
+            });
+          }
+          if (event.type === "session.updated") {
+            dispatch({ type: "CONNECTED" });
+            // Trigger AI to greet the user first
+            ws.send({ type: "response.create" });
+          }
+          break;
+
+        case "response.audio.delta":
+          // AI is sending audio — transition to speaking state and play
+          if (state.conversationState !== "ai-speaking") {
+            dispatch({ type: "AI_SPEAKING" });
+          }
+          audioOutput.enqueueAudio(event.delta);
+          break;
+
+        case "response.audio_transcript.delta":
+          dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
+          break;
+
+        case "response.audio_transcript.done":
+          dispatch({
+            type: "FINALIZE_ASSISTANT_TRANSCRIPT",
+            text: event.transcript,
+          });
+          break;
+
+        case "conversation.item.input_audio_transcription.completed":
+          if (event.transcript.trim()) {
+            dispatch({ type: "ADD_USER_TRANSCRIPT", text: event.transcript });
+          }
+          break;
+
+        case "response.done":
+          dispatch({ type: "AI_DONE" });
+          break;
+
+        case "input_audio_buffer.speech_started":
+          // User started speaking — stop any AI audio that's playing
+          audioOutput.stopPlayback();
+          break;
+
+        case "response.output_item.done": {
+          const { item } = event;
+          if (
+            item.type === "function_call" &&
+            item.call_id !== undefined &&
+            item.name !== undefined &&
+            item.arguments !== undefined
+          ) {
+            handleFunctionCall(item.call_id, item.name, item.arguments);
+          }
+          break;
+        }
+
+        case "error":
+          dispatch({ type: "ERROR", errorType: "aiUnavailable" });
+          break;
+
+        default:
+          // Other events — no action needed
+          break;
+      }
+    },
+    [ws, audioOutput, state.conversationState, handleFunctionCall],
+  );
+
+  // Register/unregister message handler
+  useEffect(() => {
+    ws.addMessageHandler(handleServerEvent);
+    return () => {
+      ws.removeMessageHandler(handleServerEvent);
+    };
+  }, [ws, handleServerEvent]);
+
+  // Watch for WebSocket connection failures
+  useEffect(() => {
+    if (ws.status === "failed") {
+      dispatch({ type: "ERROR", errorType: "network" });
+    }
+  }, [ws.status]);
+
+  // Start conversation — load past context, then connect
+  const start = useCallback(
+    (characterId: CharacterId, category: QuestionCategory | null): void => {
+      conversationIdRef.current = crypto.randomUUID();
+      characterIdRef.current = characterId;
+      categoryRef.current = category;
+      dispatch({ type: "CONNECT" });
+      sessionConfigSentRef.current = false;
+
+      // Load all conversations and user profile
+      Promise.all([listConversations(), getUserProfile()])
+        .then(([allRecords, profile]) => {
+          allRecordsRef.current = allRecords;
+
+          if (category !== null) {
+            // FOCUSED MODE: build context for a specific category
+            const pastRecords = allRecords.filter(
+              (r) => r.category === category,
+            );
+            const coveredIds: string[] = [];
+            const summaries: string[] = [];
+            for (const record of pastRecords) {
+              if (record.coveredQuestionIds) {
+                coveredIds.push(...record.coveredQuestionIds);
+              }
+              if (record.summary) {
+                summaries.push(record.summary);
+              }
+            }
+
+            const otherCategoryRecords = allRecords
+              .filter((r) => r.category !== category && r.summary !== null)
+              .slice(0, CROSS_CATEGORY_RECORDS_LIMIT);
+
+            const crossCategorySummaries = otherCategoryRecords.map((r) => ({
+              category:
+                QUESTION_CATEGORIES.find((c) => c.id === r.category)?.label ??
+                r.category ??
+                "",
+              summary: r.summary ?? "",
+            }));
+
+            pastContextRef.current = {
+              coveredQuestionIds: [...new Set(coveredIds)],
+              summaries: summaries.slice(0, FOCUSED_SUMMARIES_LIMIT),
+              crossCategorySummaries,
+            };
+            guidedContextRef.current = null;
+          } else {
+            // GUIDED MODE: build context across all categories
+            const allCoveredIds: string[] = [];
+            for (const record of allRecords) {
+              if (record.coveredQuestionIds) {
+                allCoveredIds.push(...record.coveredQuestionIds);
+              }
+            }
+
+            const recentSummaries = allRecords
+              .filter((r) => r.summary !== null)
+              .slice(0, GUIDED_RECENT_SUMMARIES_LIMIT)
+              .map((r) => ({
+                category:
+                  QUESTION_CATEGORIES.find((c) => c.id === r.category)?.label ??
+                  r.category ??
+                  "その他",
+                summary: r.summary ?? "",
+              }));
+
+            guidedContextRef.current = {
+              allCoveredQuestionIds: [...new Set(allCoveredIds)],
+              recentSummaries,
+            };
+            pastContextRef.current = null;
+          }
+
+          userNameRef.current = profile?.name ?? null;
+        })
+        .catch(() => {
+          pastContextRef.current = null;
+          guidedContextRef.current = null;
+          userNameRef.current = null;
+        })
+        .finally(() => {
+          ws.connect();
+        });
+
+      // Start audio capture (must be in user gesture handler context)
+      audioInput.startCapture().catch(() => {
+        dispatch({ type: "ERROR", errorType: "microphone" });
+      });
+    },
+    [ws, audioInput],
+  );
+
+  // Stop conversation, save transcript, recording, and request summary
+  const stop = useCallback((): void => {
+    const currentTranscript = transcriptRef.current;
+    const convId = conversationIdRef.current;
+    const category = categoryRef.current;
+    const charId = characterIdRef.current;
+
+    // Stop audio capture and get the recording blob asynchronously
+    const audioBlobPromise = audioInput.stopCaptureWithRecording();
+
+    if (convId !== null && currentTranscript.length > 0) {
+      const firstEntry = currentTranscript[0];
+      const record = {
+        id: convId,
+        category,
+        characterId: charId,
+        startedAt: firstEntry !== undefined ? firstEntry.timestamp : Date.now(),
+        endedAt: Date.now(),
+        transcript: [...currentTranscript],
+        summary: null,
+        summaryStatus: "pending" as const,
+        audioAvailable: false,
+      };
+
+      // Save immediately with pending status
+      dispatch({ type: "SUMMARY_PENDING" });
+
+      // Gather previous note entries for change-aware summarization
+      const previousEntries = collectCurrentNoteEntries(
+        allRecordsRef.current,
+        category,
+      );
+
+      saveConversation(record)
+        .then(() => {
+          // Request summarization in the background
+          return requestSummarize(category, record.transcript, previousEntries)
+            .then((result) => {
+              // Auto-save extracted user name to profile
+              if (
+                result.extractedUserName !== undefined &&
+                result.extractedUserName !== null &&
+                result.extractedUserName !== ""
+              ) {
+                getUserProfile()
+                  .then((currentProfile) =>
+                    saveUserProfile({
+                      name: result.extractedUserName ?? "",
+                      characterId: currentProfile?.characterId,
+                      updatedAt: Date.now(),
+                    }),
+                  )
+                  .catch(() => {});
+              }
+
+              // Use atomic update to avoid overwriting audioAvailable
+              return updateConversation(convId, {
+                summary: result.summary,
+                coveredQuestionIds: result.coveredQuestionIds,
+                noteEntries: result.noteEntries,
+                summaryStatus: "completed",
+                oneLinerSummary: result.oneLinerSummary,
+                emotionAnalysis: result.emotionAnalysis,
+                discussedCategories:
+                  result.discussedCategories as QuestionCategory[],
+                keyPoints: result.keyPoints,
+                topicAdherence: result.topicAdherence,
+                offTopicSummary: result.offTopicSummary,
+              });
+            })
+            .then(() => {
+              // Compute integrity hash on the finalized record
+              return getConversation(convId).then((fullRecord) => {
+                if (fullRecord !== null) {
+                  return computeContentHash(fullRecord).then((integrityHash) =>
+                    updateConversation(convId, {
+                      integrityHash,
+                      integrityHashedAt: Date.now(),
+                    }),
+                  );
+                }
+              });
+            })
+            .then(() => {
+              dispatch({ type: "SUMMARY_COMPLETED" });
+            });
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to save/summarize conversation:", error);
+          // Mark summary as failed but keep the transcript saved
+          updateConversation(convId, { summaryStatus: "failed" }).catch(
+            () => {},
+          );
+          dispatch({ type: "SUMMARY_FAILED" });
+        });
+
+      // Save audio recording in parallel (separate IndexedDB store)
+      audioBlobPromise
+        .then((audioBlob) => {
+          if (audioBlob !== null && audioBlob.size > 0) {
+            return computeBlobHash(audioBlob).then((audioHash) =>
+              saveAudioRecording(convId, audioBlob, audioBlob.type).then(() =>
+                // Use atomic update to avoid overwriting summary
+                updateConversation(convId, {
+                  audioAvailable: true,
+                  audioHash,
+                }),
+              ),
+            );
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to save audio recording:", error);
+        });
+    }
+
+    audioOutput.stopPlayback();
+    ws.disconnect();
+    dispatch({ type: "DISCONNECT" });
+
+    conversationIdRef.current = null;
+    characterIdRef.current = null;
+    categoryRef.current = null;
+    pastContextRef.current = null;
+    guidedContextRef.current = null;
+    userNameRef.current = null;
+    allRecordsRef.current = [];
+  }, [ws, audioInput, audioOutput]);
+
+  // Retry after error
+  const retry = useCallback((): void => {
+    const retryCharacterId = characterIdRef.current;
+    const retryCategory = categoryRef.current;
+    stop();
+    // Small delay to ensure cleanup before reconnecting
+    setTimeout(() => {
+      if (retryCharacterId !== null) {
+        start(retryCharacterId, retryCategory);
+      }
+    }, RETRY_DELAY_MS);
+  }, [stop, start]);
+
+  return {
+    state: state.conversationState,
+    errorType: state.errorType,
+    transcript: state.transcript,
+    pendingAssistantText: state.pendingAssistantText,
+    audioLevel: audioInput.audioLevel,
+    characterId: characterIdRef.current,
+    summaryStatus: state.summaryStatus,
+    start,
+    stop,
+    retry,
+  };
+}

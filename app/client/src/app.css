@@ -1,0 +1,270 @@
+/* Noto Sans JP — optimized Japanese rendering */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap");
+
+@import "tailwindcss";
+
+@theme {
+  /* --- Colors --- */
+  --color-bg-primary: #fbf7f0;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-hover: #f5f0e8;
+
+  --color-accent-primary: #e8935a;
+  --color-accent-primary-hover: #d4803e;
+  --color-accent-primary-light: #f5d4b8;
+
+  --color-accent-secondary: #7ba68c;
+  --color-accent-secondary-hover: #6a9479;
+  --color-accent-secondary-light: #d1e5d8;
+
+  --color-accent-tertiary: #6ba8a9;
+  --color-accent-tertiary-light: #c8e0e0;
+
+  --color-text-primary: #3d3532;
+  --color-text-secondary: #8c8279;
+  --color-text-on-accent: #ffffff;
+
+  --color-active-glow: #f0c75e;
+  --color-error: #d4726a;
+  --color-error-light: #f5d0cc;
+
+  --color-success: #7ba68c;
+  --color-success-light: #d1e5d8;
+  --color-warning: #e8935a;
+  --color-warning-light: #f5d4b8;
+
+  --color-border: #e8e0d6;
+  --color-border-light: #f0ebe3;
+
+  /* --- Orb gradient colors --- */
+  --color-orb-idle-from: #7ba68c;
+  --color-orb-idle-to: #6ba8a9;
+  --color-orb-connecting-from: #8c8279;
+  --color-orb-connecting-to: #b0a99f;
+  --color-orb-listening-from: #f0c75e;
+  --color-orb-listening-to: #e8935a;
+  --color-orb-speaking-from: #e8935a;
+  --color-orb-speaking-to: #7ba68c;
+  --color-orb-error-from: #d4726a;
+  --color-orb-error-to: #b85c55;
+
+  /* --- Border radius --- */
+  --radius-card: 20px;
+
+  /* --- Typography --- */
+  --font-sans: "Noto Sans JP", system-ui, -apple-system, sans-serif;
+
+  /* --- Animations --- */
+  --animate-breathe: breathe 4s ease-in-out infinite;
+  --animate-ripple: ripple 2s ease-out infinite;
+  --animate-flow: flow 3s ease-in-out infinite;
+  --animate-fade-in: fadeIn 300ms ease-in-out;
+}
+
+/* --- Keyframe Animations --- */
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.9;
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes flow {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  33% {
+    transform: scale(1.05) rotate(2deg);
+  }
+  66% {
+    transform: scale(0.97) rotate(-2deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Reduced Motion --- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- Font Size Scaling --- */
+
+/* All three font-size levels apply CSS overrides to ensure text is
+   sufficiently large for elderly Japanese users (60-80 years old).
+   Even "standard" overrides Tailwind defaults because the built-in
+   sizes (text-base=16px, text-lg=18px) are too small for this audience.
+   Un-layered selectors naturally override @layer utilities. */
+
+/* Custom property for notebook line spacing (must scale with text) */
+:root {
+  --notebook-line-height: 1.9rem;
+}
+
+html[data-font-size="large"] {
+  --notebook-line-height: 2.1rem;
+}
+
+html[data-font-size="x-large"] {
+  --notebook-line-height: 2.3rem;
+}
+
+/* Standard: body text 20px — already large for elderly readability */
+html[data-font-size="standard"] .text-base {
+  font-size: 18px;
+}
+html[data-font-size="standard"] .text-lg {
+  font-size: 20px;
+}
+html[data-font-size="standard"] .text-xl {
+  font-size: 22px;
+}
+html[data-font-size="standard"] .text-2xl {
+  font-size: 26px;
+}
+html[data-font-size="standard"] .text-3xl {
+  font-size: 32px;
+}
+
+/* Large: body text 22px */
+html[data-font-size="large"] .text-base {
+  font-size: 20px;
+}
+html[data-font-size="large"] .text-lg {
+  font-size: 22px;
+}
+html[data-font-size="large"] .text-xl {
+  font-size: 24px;
+}
+html[data-font-size="large"] .text-2xl {
+  font-size: 28px;
+}
+html[data-font-size="large"] .text-3xl {
+  font-size: 34px;
+}
+
+/* X-Large: body text 24px — maximum readability */
+html[data-font-size="x-large"] .text-base {
+  font-size: 22px;
+}
+html[data-font-size="x-large"] .text-lg {
+  font-size: 24px;
+}
+html[data-font-size="x-large"] .text-xl {
+  font-size: 26px;
+}
+html[data-font-size="x-large"] .text-2xl {
+  font-size: 32px;
+}
+html[data-font-size="x-large"] .text-3xl {
+  font-size: 38px;
+}
+
+/* Responsive text variant overrides */
+@media (min-width: 768px) {
+  html[data-font-size="standard"] .md\:text-xl {
+    font-size: 22px;
+  }
+  html[data-font-size="standard"] .md\:text-2xl {
+    font-size: 26px;
+  }
+  html[data-font-size="standard"] .md\:text-3xl {
+    font-size: 32px;
+  }
+
+  html[data-font-size="large"] .md\:text-xl {
+    font-size: 24px;
+  }
+  html[data-font-size="large"] .md\:text-2xl {
+    font-size: 28px;
+  }
+  html[data-font-size="large"] .md\:text-3xl {
+    font-size: 34px;
+  }
+
+  html[data-font-size="x-large"] .md\:text-xl {
+    font-size: 26px;
+  }
+  html[data-font-size="x-large"] .md\:text-2xl {
+    font-size: 32px;
+  }
+  html[data-font-size="x-large"] .md\:text-3xl {
+    font-size: 38px;
+  }
+}
+
+/* --- Notebook Effect --- */
+
+/* Subtle horizontal ruled lines evoking a physical notebook page.
+   Line spacing scales with font size via custom property. */
+.notebook-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent calc(var(--notebook-line-height) - 1px),
+    var(--color-border-light) calc(var(--notebook-line-height) - 1px),
+    var(--color-border-light) var(--notebook-line-height)
+  );
+}
+
+/* --- Base Styles --- */
+
+html {
+  font-size: 17px;
+  line-height: 1.7;
+  letter-spacing: 0.03em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+}
+
+/* --- Focus Visible --- */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
