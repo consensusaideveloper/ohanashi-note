@@ -44,4 +44,4 @@ COPY --from=base /app/server/dist server/dist
 
 EXPOSE 3000
 
-CMD ["node", "server/dist/index.js"]
+CMD sh -c 'echo "=== ENV CHECK ===" && echo "DATABASE_URL set: $(test -n "$DATABASE_URL" && echo YES || echo NO)" && echo "OPENAI_API_KEY set: $(test -n "$OPENAI_API_KEY" && echo YES || echo NO)" && echo "NODE_ENV: $NODE_ENV" && echo "=================" && node server/dist/index.js'
