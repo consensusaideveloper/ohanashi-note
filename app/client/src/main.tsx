@@ -6,7 +6,7 @@ import { DEFAULT_FONT_SIZE_LEVEL } from "./lib/constants";
 import "./app.css";
 
 // Set default font-size attribute before first render to prevent FOUC.
-// FontSizeProvider will overwrite this with the saved value from IndexedDB.
+// FontSizeProvider will overwrite this with the saved value from the server.
 document.documentElement.dataset["fontSize"] = DEFAULT_FONT_SIZE_LEVEL;
 
 const rootElement = document.getElementById("root");

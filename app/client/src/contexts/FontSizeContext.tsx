@@ -33,7 +33,7 @@ export function FontSizeProvider({
     DEFAULT_FONT_SIZE_LEVEL,
   );
 
-  // Load saved font size from IndexedDB on mount
+  // Load saved font size from server on mount
   useEffect(() => {
     void getUserProfile().then((profile) => {
       const level =
@@ -53,7 +53,7 @@ export function FontSizeProvider({
 
   const setFontSize = useCallback((level: FontSizeLevel): void => {
     setFontSizeState(level);
-    // Persist to IndexedDB (merge with existing profile)
+    // Persist to server (merge with existing profile)
     void getUserProfile().then((existingProfile) => {
       const profile = existingProfile ?? {
         name: "",

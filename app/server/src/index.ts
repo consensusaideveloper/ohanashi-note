@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -125,16 +127,14 @@ const wsRoute = createWsRoute(upgradeWebSocket);
 app.route("/", wsRoute);
 
 // In production, serve the client static files
+// Use absolute path to avoid CWD dependency on deployment platforms
+const CLIENT_DIST = resolve(import.meta.dirname, "../../client/dist");
+
 if (config.nodeEnv === "production") {
-  app.use(
-    "/*",
-    serveStatic({
-      root: "../client/dist",
-    }),
-  );
+  app.use("/*", serveStatic({ root: CLIENT_DIST }));
 
   // SPA fallback: serve index.html for non-API, non-file routes
-  app.get("*", serveStatic({ root: "../client/dist", path: "index.html" }));
+  app.get("*", serveStatic({ root: CLIENT_DIST, path: "index.html" }));
 }
 
 // --- Server startup ---

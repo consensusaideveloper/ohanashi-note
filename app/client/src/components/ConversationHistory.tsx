@@ -56,7 +56,7 @@ function getTranscriptPreview(record: ConversationRecord): string {
   if (previewLines.length === 0) {
     return "（会話内容なし）";
   }
-  // Guard against undefined from legacy IndexedDB records
+  // Guard against undefined from legacy records
   const assistantName =
     record.characterId != null
       ? getCharacterShortName(record.characterId)

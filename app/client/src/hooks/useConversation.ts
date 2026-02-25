@@ -616,7 +616,7 @@ export function useConversation(): UseConversationReturn {
           dispatch({ type: "SUMMARY_FAILED" });
         });
 
-      // Save audio recording in parallel (separate IndexedDB store)
+      // Save audio recording in parallel
       audioBlobPromise
         .then((audioBlob) => {
           if (audioBlob !== null && audioBlob.size > 0) {

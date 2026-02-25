@@ -179,7 +179,7 @@ function truncateResponse(json: string): string {
 
 /**
  * Search past conversations by keyword.
- * Operates on an in-memory array — no IndexedDB access needed.
+ * Operates on an in-memory array.
  */
 export function searchPastConversations(
   records: readonly ConversationRecord[],
