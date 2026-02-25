@@ -13,6 +13,14 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Accept VITE_* build args so Vite can embed them into the client bundle
+ARG VITE_FIREBASE_API_KEY
+ARG VITE_FIREBASE_AUTH_DOMAIN
+ARG VITE_FIREBASE_PROJECT_ID
+ARG VITE_FIREBASE_APP_ID
+ARG VITE_FIREBASE_STORAGE_BUCKET
+ARG VITE_FIREBASE_MESSAGING_SENDER_ID
+
 # Build client and server
 RUN npm run build
 
