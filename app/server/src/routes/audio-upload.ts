@@ -108,4 +108,63 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
   }
 });
 
+/** GET /api/conversations/:id/audio-url — Get a signed download URL for audio. */
+audioUploadRoute.get("/api/conversations/:id/audio-url", async (c: Context) => {
+  try {
+    if (r2 === null) {
+      return c.json(
+        {
+          error: "音声ストレージが設定されていません",
+          code: "R2_NOT_CONFIGURED",
+        },
+        503,
+      );
+    }
+
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const conversationId = c.req.param("id");
+
+    // Verify the conversation belongs to this user and has audio
+    const row = await db.query.conversations.findFirst({
+      where: and(
+        eq(conversations.id, conversationId),
+        eq(conversations.userId, userId),
+      ),
+      columns: {
+        id: true,
+        audioAvailable: true,
+        audioStorageKey: true,
+      },
+    });
+
+    if (!row) {
+      return c.json({ error: "会話が見つかりません", code: "NOT_FOUND" }, 404);
+    }
+
+    if (!row.audioAvailable || row.audioStorageKey === null) {
+      return c.json(
+        { error: "この会話には録音データがありません", code: "NO_AUDIO" },
+        404,
+      );
+    }
+
+    const downloadUrl = await r2.generateDownloadUrl(row.audioStorageKey);
+
+    return c.json({ downloadUrl });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to generate audio download URL", {
+      error: message,
+    });
+    return c.json(
+      {
+        error: "録音データの取得に失敗しました",
+        code: "DOWNLOAD_URL_FAILED",
+      },
+      500,
+    );
+  }
+});
+
 export { audioUploadRoute };
