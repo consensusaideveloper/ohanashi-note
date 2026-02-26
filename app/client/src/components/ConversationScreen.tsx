@@ -74,6 +74,20 @@ export function ConversationScreen({
       });
   }, [start, initialCategory, onCategoryConsumed]);
 
+  // Auto-start conversation when navigating from "このテーマで話す"
+  const hasAutoStarted = useRef(false);
+  useEffect(() => {
+    if (
+      initialCategory !== undefined &&
+      state === "idle" &&
+      summaryStatus !== "pending" &&
+      !hasAutoStarted.current
+    ) {
+      hasAutoStarted.current = true;
+      handleQuickStart();
+    }
+  }, [initialCategory, state, summaryStatus, handleQuickStart]);
+
   const handleStop = useCallback((): void => {
     stop();
     activeCharacterRef.current = null;
@@ -122,8 +136,18 @@ export function ConversationScreen({
     );
   }
 
-  // Idle screen — quick start button
+  // Idle screen — quick start button or auto-start preparing state
   if (state === "idle") {
+    // Show preparing screen when auto-starting from note or manually starting
+    if (initialCategory !== undefined || isStarting) {
+      return (
+        <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
+          <p className="text-2xl text-text-primary font-medium mb-10">
+            準備しています...
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
         <p className="text-2xl text-text-primary font-medium mb-10">
@@ -133,9 +157,8 @@ export function ConversationScreen({
           type="button"
           className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
           onClick={handleQuickStart}
-          disabled={isStarting}
         >
-          {isStarting ? "準備中..." : "お話しする"}
+          お話しする
         </button>
       </div>
     );

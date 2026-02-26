@@ -40,6 +40,9 @@ function createR2Client(): R2Client | null {
       accessKeyId,
       secretAccessKey,
     },
+    // Disable automatic checksum calculation for presigned URLs
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 
   return {
