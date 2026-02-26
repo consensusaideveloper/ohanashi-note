@@ -6,6 +6,7 @@ import {
   RECONNECT_BASE_DELAY_MS,
   RECONNECT_MAX_DELAY_MS,
 } from "../lib/constants";
+import { getIdToken } from "../lib/auth";
 
 import type { ClientEvent, ServerEvent } from "../lib/websocket-protocol";
 import type { WebSocketStatus } from "../types/conversation";
@@ -73,28 +74,12 @@ export function useWebSocket(): UseWebSocketReturn {
     ws.send(JSON.stringify(event));
   }, []);
 
-  const connectInternal = useCallback((): void => {
-    // Guard against duplicate connections
-    if (isConnectingRef.current) {
-      return;
-    }
-    const existingWs = wsRef.current;
-    if (
-      existingWs !== null &&
-      (existingWs.readyState === WebSocket.OPEN ||
-        existingWs.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
+  // Ref to hold connectInternal for use in reconnect without circular deps
+  const connectInternalRef = useRef<() => void>(() => {});
 
-    isConnectingRef.current = true;
-    clearReconnectTimer();
-
-    const isReconnect = reconnectAttemptRef.current > 0;
-    setStatus(isReconnect ? "reconnecting" : "connecting");
-    setLastError(null);
-
-    const ws = new WebSocket(WS_URL);
+  /** Open the WebSocket with the given URL and set up event handlers. */
+  const openWebSocket = useCallback((url: string): void => {
+    const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.addEventListener("open", () => {
@@ -106,7 +91,6 @@ export function useWebSocket(): UseWebSocketReturn {
     ws.addEventListener("message", (messageEvent: MessageEvent) => {
       try {
         const data: unknown = JSON.parse(String(messageEvent.data));
-        // Minimal shape check: must be an object with a string `type` field
         if (
           typeof data === "object" &&
           data !== null &&
@@ -137,7 +121,6 @@ export function useWebSocket(): UseWebSocketReturn {
         return;
       }
 
-      // Auto-reconnect with exponential backoff
       if (reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
         const attempt = reconnectAttemptRef.current;
         reconnectAttemptRef.current = attempt + 1;
@@ -147,14 +130,56 @@ export function useWebSocket(): UseWebSocketReturn {
         );
         setStatus("reconnecting");
         reconnectTimerRef.current = setTimeout(() => {
-          connectInternal();
+          connectInternalRef.current();
         }, delay);
       } else {
         setStatus("failed");
         setLastError("Maximum reconnection attempts reached");
       }
     });
-  }, [clearReconnectTimer]);
+  }, []);
+
+  const connectInternal = useCallback((): void => {
+    // Guard against duplicate connections
+    if (isConnectingRef.current) {
+      return;
+    }
+    const existingWs = wsRef.current;
+    if (
+      existingWs !== null &&
+      (existingWs.readyState === WebSocket.OPEN ||
+        existingWs.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    isConnectingRef.current = true;
+    clearReconnectTimer();
+
+    const isReconnect = reconnectAttemptRef.current > 0;
+    setStatus(isReconnect ? "reconnecting" : "connecting");
+    setLastError(null);
+
+    // Get Firebase auth token and append to WebSocket URL for authentication
+    getIdToken()
+      .then((token) => {
+        if (!isConnectingRef.current) return;
+        const url =
+          token !== null
+            ? `${WS_URL}?token=${encodeURIComponent(token)}`
+            : WS_URL;
+        openWebSocket(url);
+      })
+      .catch(() => {
+        if (!isConnectingRef.current) return;
+        openWebSocket(WS_URL);
+      });
+  }, [clearReconnectTimer, openWebSocket]);
+
+  // Keep connectInternalRef in sync
+  useEffect(() => {
+    connectInternalRef.current = connectInternal;
+  }, [connectInternal]);
 
   const connect = useCallback((): void => {
     intentionalCloseRef.current = false;

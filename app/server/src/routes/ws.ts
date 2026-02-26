@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { createRelay } from "../services/openai-relay.js";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
+import { verifyIdToken } from "../lib/firebase-admin.js";
 import { trackConnect, trackDisconnect } from "../lib/rate-limiter.js";
 
 import type { UpgradeWebSocket } from "hono/ws";
@@ -37,6 +38,36 @@ function getClientIpFromHeaders(headers: Headers): string {
 export function createWsRoute(upgradeWebSocket: NodeUpgradeWebSocket): Hono {
   const wsApp = new Hono();
   const config = loadConfig();
+
+  // Verify Firebase auth token from query parameter before WebSocket upgrade
+  wsApp.use("/ws", async (c, next) => {
+    const token = c.req.query("token");
+
+    // In development, allow connections without token for testing
+    if (config.nodeEnv === "development" && !token) {
+      await next();
+      return;
+    }
+
+    if (!token) {
+      return c.json({ error: "認証が必要です", code: "AUTH_REQUIRED" }, 401);
+    }
+
+    try {
+      await verifyIdToken(token);
+      await next();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Token verification failed";
+      logger.warn("WebSocket auth token verification failed", {
+        error: message,
+      });
+      return c.json(
+        { error: "認証に失敗しました", code: "AUTH_INVALID_TOKEN" },
+        401,
+      );
+    }
+  });
 
   wsApp.get(
     "/ws",

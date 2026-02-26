@@ -112,6 +112,10 @@ export const UI_MESSAGES = {
       "ただいま混み合っています。少し時間をおいてからお試しください。",
     unknown: "うまくいきませんでした。もう一度お試しください。",
   },
+  sessionWarning: "まもなくお時間です。お話をまとめましょう。",
+  sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
+  dailyLimitReached:
+    "本日の会話回数の上限に達しました。また明日お話ししましょう。",
   buttons: {
     start: "お話しを始める",
     stop: "お話しを終える",
@@ -119,6 +123,14 @@ export const UI_MESSAGES = {
     connecting: "接続しています...",
   },
 } as const;
+
+// --- Session limits ---
+/** Maximum session duration in milliseconds (20 minutes). */
+export const MAX_SESSION_DURATION_MS = 20 * 60 * 1000;
+/** Fraction of session time elapsed before showing the warning (85% = ~3 min left). */
+export const SESSION_WARNING_THRESHOLD = 0.85;
+/** Maximum number of conversation sessions per day. */
+export const MAX_DAILY_SESSIONS = 5;
 
 // --- UI timing ---
 export const SAVE_MESSAGE_TIMEOUT_MS = 3000;

@@ -12,7 +12,7 @@ import type { WSContext } from "hono/ws";
 // --- Constants ---
 
 const OPENAI_REALTIME_URL =
-  "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17";
+  "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 
 // --- Types ---
 

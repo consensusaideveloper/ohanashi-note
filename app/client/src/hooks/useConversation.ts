@@ -7,6 +7,8 @@ import {
   FOCUSED_SUMMARIES_LIMIT,
   GUIDED_RECENT_SUMMARIES_LIMIT,
   RETRY_DELAY_MS,
+  MAX_SESSION_DURATION_MS,
+  SESSION_WARNING_THRESHOLD,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import {
@@ -59,6 +61,10 @@ interface State {
   /** Accumulates partial transcript deltas for the current assistant turn. */
   pendingAssistantText: string;
   summaryStatus: SummaryStatus;
+  /** Remaining session time in milliseconds, or null when idle. */
+  remainingMs: number | null;
+  /** Whether the session time warning has been shown. */
+  sessionWarningShown: boolean;
 }
 
 type Action =
@@ -74,7 +80,9 @@ type Action =
   | { type: "FINALIZE_ASSISTANT_TRANSCRIPT"; text: string }
   | { type: "SUMMARY_PENDING" }
   | { type: "SUMMARY_COMPLETED" }
-  | { type: "SUMMARY_FAILED" };
+  | { type: "SUMMARY_FAILED" }
+  | { type: "TICK_TIMER"; remainingMs: number }
+  | { type: "SESSION_WARNING_SHOWN" };
 
 const initialState: State = {
   conversationState: "idle",
@@ -82,6 +90,8 @@ const initialState: State = {
   transcript: [],
   pendingAssistantText: "",
   summaryStatus: "idle",
+  remainingMs: null,
+  sessionWarningShown: false,
 };
 
 function reducer(state: State, action: Action): State {
@@ -117,6 +127,8 @@ function reducer(state: State, action: Action): State {
       return {
         ...initialState,
         summaryStatus: state.summaryStatus,
+        remainingMs: null,
+        sessionWarningShown: false,
       };
     case "ERROR":
       return {
@@ -152,6 +164,10 @@ function reducer(state: State, action: Action): State {
       return { ...state, summaryStatus: "completed" };
     case "SUMMARY_FAILED":
       return { ...state, summaryStatus: "failed" };
+    case "TICK_TIMER":
+      return { ...state, remainingMs: action.remainingMs };
+    case "SESSION_WARNING_SHOWN":
+      return { ...state, sessionWarningShown: true };
     default:
       return state;
   }
@@ -167,6 +183,10 @@ interface UseConversationReturn {
   audioLevel: number;
   characterId: CharacterId | null;
   summaryStatus: SummaryStatus;
+  /** Remaining session time in milliseconds, or null when idle. */
+  remainingMs: number | null;
+  /** Whether the session time warning is active. */
+  sessionWarningShown: boolean;
   /** Start a conversation. Pass null for category to use AI-guided mode. */
   start: (characterId: CharacterId, category: QuestionCategory | null) => void;
   /** Stop the conversation and disconnect. */
@@ -211,6 +231,12 @@ export function useConversation(): UseConversationReturn {
   // Track whether we've sent the session.update to avoid sending it twice
   const sessionConfigSentRef = useRef(false);
 
+  // Session timer refs
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionStartTimeRef = useRef<number | null>(null);
+
+  const TIMER_INTERVAL_MS = 1000;
+
   // Conversation persistence refs
   const conversationIdRef = useRef<string | null>(null);
   const characterIdRef = useRef<CharacterId | null>(null);
@@ -228,6 +254,9 @@ export function useConversation(): UseConversationReturn {
 
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
+
+  // Stable ref for stop so the session timer can call it without stale closures
+  const stopRef = useRef<() => void>(() => {});
 
   // Keep transcript ref in sync with reducer state
   useEffect(() => {
@@ -512,6 +541,29 @@ export function useConversation(): UseConversationReturn {
           ws.connect();
         });
 
+      // Start session timer
+      sessionStartTimeRef.current = Date.now();
+      dispatch({ type: "TICK_TIMER", remainingMs: MAX_SESSION_DURATION_MS });
+      sessionTimerRef.current = setInterval(() => {
+        const startTime = sessionStartTimeRef.current;
+        if (startTime === null) return;
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, MAX_SESSION_DURATION_MS - elapsed);
+        dispatch({ type: "TICK_TIMER", remainingMs: remaining });
+
+        // Show warning when threshold is reached
+        const warningThreshold =
+          MAX_SESSION_DURATION_MS * SESSION_WARNING_THRESHOLD;
+        if (elapsed >= warningThreshold) {
+          dispatch({ type: "SESSION_WARNING_SHOWN" });
+        }
+
+        // Auto-stop when time is up
+        if (remaining <= 0) {
+          stopRef.current();
+        }
+      }, TIMER_INTERVAL_MS);
+
       // Start audio capture (must be in user gesture handler context)
       audioInput.startCapture().catch(() => {
         dispatch({ type: "ERROR", errorType: "microphone" });
@@ -522,6 +574,13 @@ export function useConversation(): UseConversationReturn {
 
   // Stop conversation, save transcript, recording, and request summary
   const stop = useCallback((): void => {
+    // Clear session timer
+    if (sessionTimerRef.current !== null) {
+      clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+    sessionStartTimeRef.current = null;
+
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
     const category = categoryRef.current;
@@ -620,15 +679,9 @@ export function useConversation(): UseConversationReturn {
       audioBlobPromise
         .then((audioBlob) => {
           if (audioBlob !== null && audioBlob.size > 0) {
-            console.log("Saving audio recording:", {
-              size: audioBlob.size,
-              type: audioBlob.type,
-              conversationId: convId,
-            });
             return computeBlobHash(audioBlob).then((audioHash) =>
               saveAudioRecording(convId, audioBlob, audioBlob.type).then(
                 (result) => {
-                  console.log("Audio upload result:", result);
                   // Use atomic update to avoid overwriting summary
                   const audioUpdate: Partial<ConversationRecord> = {
                     audioAvailable: true,
@@ -643,8 +696,6 @@ export function useConversation(): UseConversationReturn {
                 },
               ),
             );
-          } else {
-            console.log("No audio to save:", audioBlob);
           }
         })
         .catch((error: unknown) => {
@@ -664,6 +715,20 @@ export function useConversation(): UseConversationReturn {
     userNameRef.current = null;
     allRecordsRef.current = [];
   }, [ws, audioInput, audioOutput]);
+
+  // Keep stopRef in sync with the latest stop callback
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
+
+  // Clean up session timer on unmount
+  useEffect(() => {
+    return () => {
+      if (sessionTimerRef.current !== null) {
+        clearInterval(sessionTimerRef.current);
+      }
+    };
+  }, []);
 
   // Retry after error
   const retry = useCallback((): void => {
@@ -686,6 +751,8 @@ export function useConversation(): UseConversationReturn {
     audioLevel: audioInput.audioLevel,
     characterId: characterIdRef.current,
     summaryStatus: state.summaryStatus,
+    remainingMs: state.remainingMs,
+    sessionWarningShown: state.sessionWarningShown,
     start,
     stop,
     retry,

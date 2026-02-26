@@ -2,6 +2,12 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
+import { UI_MESSAGES } from "../lib/constants";
+import {
+  canStartSession,
+  incrementDailySession,
+  getRemainingSessionCount,
+} from "../lib/usage-tracker";
 import { useConversation } from "../hooks/useConversation";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiOrb } from "./AiOrb";
@@ -9,6 +15,14 @@ import { ErrorDisplay } from "./ErrorDisplay";
 
 import type { ReactNode } from "react";
 import type { CharacterId, QuestionCategory } from "../types/conversation";
+
+/** Format remaining milliseconds as "mm:ss". */
+function formatRemainingTime(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 const STATE_GRADIENTS: Record<string, string> = {
   idle: "from-bg-primary to-bg-surface",
@@ -36,12 +50,15 @@ export function ConversationScreen({
     pendingAssistantText,
     audioLevel,
     summaryStatus,
+    remainingMs,
+    sessionWarningShown,
     start,
     stop,
     retry,
   } = useConversation();
 
   const [isStarting, setIsStarting] = useState(false);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
 
   // Track active character during conversation
   const activeCharacterRef = useRef<CharacterId | null>(null);
@@ -54,11 +71,19 @@ export function ConversationScreen({
   }, [transcript, pendingAssistantText]);
 
   const handleQuickStart = useCallback((): void => {
+    // Check daily session limit before starting
+    if (!canStartSession()) {
+      setDailyLimitReached(true);
+      return;
+    }
+
     setIsStarting(true);
+    setDailyLimitReached(false);
     const category = initialCategory ?? null; // null = guided mode
     if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
       onCategoryConsumed();
     }
+    incrementDailySession();
     getUserProfile()
       .then((profile) => {
         const characterId: CharacterId = profile?.characterId ?? "character-a";
@@ -148,18 +173,32 @@ export function ConversationScreen({
         </div>
       );
     }
+    const remaining = getRemainingSessionCount();
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
         <p className="text-2xl text-text-primary font-medium mb-10">
           今日もお話ししましょう
         </p>
-        <button
-          type="button"
-          className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
-          onClick={handleQuickStart}
-        >
-          お話しする
-        </button>
+        {dailyLimitReached ? (
+          <div className="text-center">
+            <p className="text-xl text-text-primary mb-6">
+              {UI_MESSAGES.dailyLimitReached}
+            </p>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
+              onClick={handleQuickStart}
+            >
+              お話しする
+            </button>
+            <p className="mt-6 text-lg text-text-secondary">
+              本日あと{remaining}回お話しできます
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -175,8 +214,8 @@ export function ConversationScreen({
     <div
       className={`min-h-dvh flex flex-col items-center bg-gradient-to-b ${gradient}`}
     >
-      {/* Top bar with end-conversation button */}
-      <div className="flex-none w-full max-w-lg flex items-center px-4 pt-4">
+      {/* Top bar with end-conversation button and remaining time */}
+      <div className="flex-none w-full max-w-lg flex items-center justify-between px-4 pt-4">
         <button
           type="button"
           className="min-w-11 min-h-11 flex items-center gap-1.5 rounded-full px-3 hover:bg-bg-surface/60 active:bg-bg-surface transition-colors"
@@ -198,7 +237,28 @@ export function ConversationScreen({
           </svg>
           <span className="text-lg text-text-secondary">終える</span>
         </button>
+        {remainingMs !== null && (
+          <span
+            className={`text-lg tabular-nums ${
+              sessionWarningShown
+                ? "text-error font-semibold"
+                : "text-text-secondary"
+            }`}
+            aria-live="polite"
+          >
+            残り {formatRemainingTime(remainingMs)}
+          </span>
+        )}
       </div>
+
+      {/* Session time warning banner */}
+      {sessionWarningShown && (
+        <div className="flex-none w-full max-w-lg px-4 pt-2">
+          <div className="rounded-card bg-warning/10 border border-warning/30 px-4 py-3 text-lg text-text-primary">
+            {UI_MESSAGES.sessionWarning}
+          </div>
+        </div>
+      )}
 
       {/* Status area */}
       <div className="flex-none pt-4 pb-6">
