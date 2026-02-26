@@ -85,6 +85,14 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
     const storageKey = `audio/${userId}/${conversationId}.${ext}`;
 
     // Upload directly to R2 using the server-side client
+    if (!r2.uploadObject) {
+      logger.error("R2 uploadObject method not available");
+      return c.json(
+        { error: "R2アップロード機能が利用できません", code: "R2_METHOD_MISSING" },
+        500,
+      );
+    }
+
     await r2.uploadObject(storageKey, Buffer.from(audioData), mimeType);
 
     logger.info("Audio uploaded successfully", {
