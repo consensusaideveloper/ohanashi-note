@@ -1,0 +1,1 @@
+CREATE INDEX "idx_conversations_summary_status" ON "conversations" USING btree ("summary_status","created_at");
