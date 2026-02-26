@@ -8,7 +8,11 @@ import {
   clearAllData,
 } from "../lib/storage";
 import { CHARACTERS } from "../lib/characters";
-import { SAVE_MESSAGE_TIMEOUT_MS, FONT_SIZE_OPTIONS } from "../lib/constants";
+import {
+  SAVE_MESSAGE_TIMEOUT_MS,
+  FONT_SIZE_OPTIONS,
+  SETTINGS_MESSAGES,
+} from "../lib/constants";
 import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -195,7 +199,7 @@ export function SettingsScreen(): ReactNode {
   return (
     <div className="flex-1 w-full overflow-y-auto px-4 py-4">
       <div className="max-w-lg mx-auto space-y-8">
-        {/* Section: Font Size */}
+        {/* Section 1: Font Size (safe, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             文字の大きさ
@@ -236,11 +240,14 @@ export function SettingsScreen(): ReactNode {
           </div>
         </section>
 
-        {/* Section 1: Profile */}
+        {/* Section 2: Profile (save-gated) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             プロフィール
           </h2>
+          <p className="text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.profile.description}
+          </p>
           <label className="block text-lg text-text-primary" htmlFor="name">
             お名前
           </label>
@@ -287,7 +294,36 @@ export function SettingsScreen(): ReactNode {
           )}
         </section>
 
-        {/* Section 2: Data Backup */}
+        {/* Section 3: Account (low risk, reversible) */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-text-secondary">
+            アカウント
+          </h2>
+          <p className="text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.account.description}
+          </p>
+          {user?.email !== undefined && user.email !== null && (
+            <p className="text-lg text-text-primary">{user.email}</p>
+          )}
+          <button
+            type="button"
+            className="bg-bg-surface text-text-primary border border-border-light rounded-full min-h-11 px-6 text-lg w-full"
+            onClick={handleLogout}
+          >
+            ログアウト
+          </button>
+        </section>
+
+        {/* Zone separator: safe settings above, data management below */}
+        <div className="flex items-center gap-3 pt-4">
+          <div className="flex-1 border-t border-border" />
+          <p className="text-lg text-text-secondary whitespace-nowrap">
+            データの管理
+          </p>
+          <div className="flex-1 border-t border-border" />
+        </div>
+
+        {/* Section 4: Data Backup (medium risk - import overwrites) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             データのバックアップ
@@ -310,6 +346,9 @@ export function SettingsScreen(): ReactNode {
           >
             データを読み込む
           </button>
+          <p className="text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.backup.importDescription}
+          </p>
           <input
             type="file"
             accept=".json"
@@ -324,45 +363,62 @@ export function SettingsScreen(): ReactNode {
           )}
         </section>
 
-        {/* Section 3: Data Deletion */}
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-text-secondary">
+        {/* Section 5: Data Deletion (critical, irreversible, collapsed) */}
+        <details className="group">
+          <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
+            {/* Warning triangle icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 text-error flex-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+              />
+            </svg>
             データの削除
-          </h2>
-          <button
-            type="button"
-            className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
-            onClick={handleClearAll}
-          >
-            すべてのデータを削除する
-          </button>
-          {deleteMessage !== "" && (
-            <p className="text-accent-primary">{deleteMessage}</p>
-          )}
-        </section>
-
-        {/* Section 4: Account */}
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-text-secondary">
-            アカウント
-          </h2>
-          {user?.email !== undefined && user.email !== null && (
-            <p className="text-lg text-text-secondary">{user.email}</p>
-          )}
-          <button
-            type="button"
-            className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
-            onClick={handleLogout}
-          >
-            ログアウト
-          </button>
-        </section>
+            {/* Chevron indicator */}
+            <svg
+              className="h-4 w-4 text-text-secondary flex-none ml-auto transition-transform details-chevron"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m19.5 8.25-7.5 7.5-7.5-7.5"
+              />
+            </svg>
+          </summary>
+          <div className="pt-3 space-y-3">
+            <p className="text-lg text-text-secondary leading-relaxed">
+              {SETTINGS_MESSAGES.deletion.description}
+            </p>
+            <button
+              type="button"
+              className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
+              onClick={handleClearAll}
+            >
+              すべてのデータを削除する
+            </button>
+            {deleteMessage !== "" && (
+              <p className="text-accent-primary">{deleteMessage}</p>
+            )}
+          </div>
+        </details>
       </div>
 
       <ConfirmDialog
         isOpen={showImportConfirm}
         title="データの上書き"
-        message="現在のデータはすべて上書きされます。よろしいですか？"
+        message={SETTINGS_MESSAGES.backup.importConfirm}
         confirmLabel="上書きする"
         cancelLabel="やめる"
         onConfirm={handleImportConfirm}
@@ -371,7 +427,7 @@ export function SettingsScreen(): ReactNode {
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         title="データの削除"
-        message="すべてのデータが完全に削除されます。この操作は取り消せません。よろしいですか？"
+        message={SETTINGS_MESSAGES.deletion.confirm}
         confirmLabel="削除する"
         cancelLabel="やめる"
         variant="danger"
@@ -381,7 +437,7 @@ export function SettingsScreen(): ReactNode {
       <ConfirmDialog
         isOpen={showLogoutConfirm}
         title="ログアウト"
-        message="ログアウトしてもよろしいですか？"
+        message={SETTINGS_MESSAGES.account.logoutConfirm}
         confirmLabel="ログアウトする"
         cancelLabel="やめる"
         onConfirm={handleLogoutConfirm}

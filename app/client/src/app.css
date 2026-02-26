@@ -257,6 +257,16 @@ body {
   background-color: var(--color-bg-primary);
 }
 
+/* --- Details/Summary --- */
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+details[open] > summary .details-chevron {
+  transform: rotate(180deg);
+}
+
 /* --- Focus Visible --- */
 
 button:focus-visible,

@@ -141,6 +141,31 @@ export const FONT_SIZE_OPTIONS: readonly {
   { value: "x-large", label: "とても大きい" },
 ] as const;
 
+// --- Settings screen messages (Japanese) ---
+export const SETTINGS_MESSAGES = {
+  profile: {
+    description:
+      "お名前と話し相手を設定します。変更したら「保存する」を押してください。",
+  },
+  account: {
+    description: "現在ログイン中のアカウントです",
+    logoutConfirm:
+      "ログアウトしてもよろしいですか？データは保存されたままです。同じアカウントで再度ログインできます。",
+  },
+  backup: {
+    importDescription:
+      "バックアップファイルからデータを復元します。現在のデータは上書きされます。",
+    importConfirm:
+      "現在の会話やノートの記録がバックアップファイルの内容で上書きされます。よろしいですか？",
+  },
+  deletion: {
+    description:
+      "これまでの会話やノートの記録がすべて完全に削除されます。この操作は取り消すことができません。",
+    confirm:
+      "会話の記録、ノートの内容、プロフィールがすべて削除されます。削除したデータは元に戻せません。本当に削除しますか？",
+  },
+} as const;
+
 // --- Text display ---
 export const TRANSCRIPT_PREVIEW_MAX_LENGTH = 80;
 
