@@ -26,6 +26,12 @@ function createR2Client(): R2Client | null {
   }
 
   const { accountId, accessKeyId, secretAccessKey, bucketName } = config.r2;
+  logger.info("R2 configured", {
+    accountId,
+    bucketName,
+    hasAccessKey: !!accessKeyId,
+    hasSecretKey: !!secretAccessKey,
+  });
 
   const s3 = new S3Client({
     region: "auto",

@@ -180,12 +180,21 @@ export async function saveAudioRecording(
   blob: Blob,
   mimeType: string,
 ): Promise<AudioUploadResult | null> {
+  console.log("saveAudioRecording called:", {
+    conversationId,
+    blobSize: blob.size,
+    mimeType,
+  });
+
   let uploadResponse;
   try {
     uploadResponse = await getAudioUploadUrl(conversationId, mimeType);
+    console.log("Got upload URL response:", uploadResponse);
   } catch (error) {
+    console.error("Failed to get upload URL:", error);
     // R2 not configured — skip audio upload silently
     if (error instanceof Error && error.message.includes("503")) {
+      console.log("R2 not configured (503), skipping audio upload");
       return null;
     }
     throw error;
@@ -194,18 +203,33 @@ export async function saveAudioRecording(
   const { uploadUrl, storageKey } = uploadResponse;
 
   // Upload directly to R2
+  console.log("Uploading to R2:", {
+    storageKey,
+    uploadUrl: uploadUrl.substring(0, 50) + "...",
+  });
   const putResponse = await fetch(uploadUrl, {
     method: "PUT",
     body: blob,
     headers: { "Content-Type": mimeType },
   });
 
+  console.log("R2 upload response:", {
+    status: putResponse.status,
+    ok: putResponse.ok,
+  });
+
   if (!putResponse.ok) {
+    const errorText = await putResponse.text();
+    console.error("R2 upload failed:", {
+      status: putResponse.status,
+      text: errorText,
+    });
     throw new Error(
       `Audio upload failed: ${putResponse.status} ${putResponse.statusText}`,
     );
   }
 
+  console.log("Audio successfully uploaded to R2:", storageKey);
   return { storageKey };
 }
 

@@ -44,7 +44,7 @@ export function SettingsScreen(): ReactNode {
     void getUserProfile().then((profile) => {
       if (profile !== null) {
         setName(profile.name);
-        if (profile.characterId !== undefined) {
+        if (profile.characterId !== undefined && profile.characterId !== null) {
           setSelectedCharacterId(profile.characterId);
         }
       }

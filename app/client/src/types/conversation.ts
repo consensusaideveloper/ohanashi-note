@@ -120,7 +120,7 @@ export type FontSizeLevel = "standard" | "large" | "x-large";
 
 export interface UserProfile {
   name: string;
-  characterId?: CharacterId;
+  characterId?: CharacterId | null;
   fontSize?: FontSizeLevel;
   updatedAt: number;
 }

@@ -620,9 +620,15 @@ export function useConversation(): UseConversationReturn {
       audioBlobPromise
         .then((audioBlob) => {
           if (audioBlob !== null && audioBlob.size > 0) {
+            console.log("Saving audio recording:", {
+              size: audioBlob.size,
+              type: audioBlob.type,
+              conversationId: convId,
+            });
             return computeBlobHash(audioBlob).then((audioHash) =>
               saveAudioRecording(convId, audioBlob, audioBlob.type).then(
                 (result) => {
+                  console.log("Audio upload result:", result);
                   // Use atomic update to avoid overwriting summary
                   const audioUpdate: Partial<ConversationRecord> = {
                     audioAvailable: true,
@@ -637,6 +643,8 @@ export function useConversation(): UseConversationReturn {
                 },
               ),
             );
+          } else {
+            console.log("No audio to save:", audioBlob);
           }
         })
         .catch((error: unknown) => {
