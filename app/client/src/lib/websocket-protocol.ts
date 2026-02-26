@@ -18,7 +18,7 @@ export interface SessionUpdateEvent {
     voice: string;
     input_audio_format: "pcm16" | "g711_ulaw" | "g711_alaw";
     output_audio_format: "pcm16" | "g711_ulaw" | "g711_alaw";
-    input_audio_transcription: { model: string } | null;
+    input_audio_transcription: { model: string; language?: string } | null;
     turn_detection: {
       type: "server_vad";
       threshold: number;

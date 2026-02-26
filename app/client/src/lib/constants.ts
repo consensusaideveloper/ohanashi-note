@@ -21,7 +21,7 @@ export const SESSION_CONFIG = {
   modalities: ["text", "audio"] as Array<"text" | "audio">,
   input_audio_format: "pcm16" as const,
   output_audio_format: "pcm16" as const,
-  input_audio_transcription: { model: "whisper-1" },
+  input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
     threshold: 0.5,

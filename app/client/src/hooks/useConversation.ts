@@ -614,7 +614,40 @@ export function useConversation(): UseConversationReturn {
 
       saveConversation(record)
         .then(() => {
-          // Request summarization in the background
+          // After conversation is saved, start audio processing
+          return audioBlobPromise.then((audioBlob) => {
+            if (audioBlob !== null && audioBlob.size > 0) {
+              console.log("Saving audio recording:", {
+                size: audioBlob.size,
+                type: audioBlob.type,
+                conversationId: convId,
+              });
+              return computeBlobHash(audioBlob).then((audioHash) =>
+                saveAudioRecording(convId, audioBlob, audioBlob.type).then(
+                  (result) => {
+                    console.log("Audio upload result:", result);
+                    // Use atomic update to avoid overwriting summary
+                    const audioUpdate: Partial<ConversationRecord> = {
+                      audioAvailable: true,
+                      audioHash,
+                    };
+                    // Include storage key if R2 upload succeeded
+                    if (result !== null) {
+                      audioUpdate.audioStorageKey = result.storageKey;
+                      audioUpdate.audioMimeType = audioBlob.type;
+                    }
+                    return updateConversation(convId, audioUpdate);
+                  },
+                ),
+              );
+            } else {
+              console.log("No audio to save:", audioBlob);
+              return Promise.resolve();
+            }
+          });
+        })
+        .then(() => {
+          // Request summarization after conversation and audio are saved
           return requestSummarize(category, record.transcript, previousEntries)
             .then((result) => {
               // Auto-save extracted user name to profile
@@ -673,33 +706,6 @@ export function useConversation(): UseConversationReturn {
             () => {},
           );
           dispatch({ type: "SUMMARY_FAILED" });
-        });
-
-      // Save audio recording in parallel
-      audioBlobPromise
-        .then((audioBlob) => {
-          if (audioBlob !== null && audioBlob.size > 0) {
-            return computeBlobHash(audioBlob).then((audioHash) =>
-              saveAudioRecording(convId, audioBlob, audioBlob.type).then(
-                (result) => {
-                  // Use atomic update to avoid overwriting summary
-                  const audioUpdate: Partial<ConversationRecord> = {
-                    audioAvailable: true,
-                    audioHash,
-                  };
-                  // Include storage key if R2 upload succeeded
-                  if (result !== null) {
-                    audioUpdate.audioStorageKey = result.storageKey;
-                    audioUpdate.audioMimeType = audioBlob.type;
-                  }
-                  return updateConversation(convId, audioUpdate);
-                },
-              ),
-            );
-          }
-        })
-        .catch((error: unknown) => {
-          console.error("Failed to save audio recording:", error);
         });
     }
 
