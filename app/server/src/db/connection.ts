@@ -23,7 +23,11 @@ try {
     `[DB] Connecting to ${parsed.hostname}:${parsed.port}${parsed.pathname} (ssl=${String(isProduction)})`,
   );
 } catch {
-  console.info("[DB] Connecting with provided DATABASE_URL (ssl=" + String(isProduction) + ")");
+  console.info(
+    "[DB] Connecting with provided DATABASE_URL (ssl=" +
+      String(isProduction) +
+      ")",
+  );
 }
 
 const pool = new Pool({

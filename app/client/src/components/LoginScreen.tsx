@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useAuthContext } from "../contexts/AuthContext";
+import { LOGIN_MESSAGES } from "../lib/constants";
 
 import type { ReactNode } from "react";
 
@@ -40,10 +41,8 @@ export function LoginScreen(): ReactNode {
         <h1 className="text-2xl md:text-3xl font-bold text-text-primary">
           おはなし
         </h1>
-        <p className="text-lg text-text-secondary text-center leading-relaxed">
-          みどりさんと一緒に
-          <br />
-          大切な想いをノートにまとめましょう
+        <p className="text-lg text-text-secondary text-center leading-relaxed whitespace-pre-line">
+          {LOGIN_MESSAGES.subtitle}
         </p>
       </div>
 
@@ -73,19 +72,19 @@ export function LoginScreen(): ReactNode {
             fill="#EA4335"
           />
         </svg>
-        {isSigningIn ? "ログイン中..." : "Googleでログイン"}
+        {isSigningIn ? LOGIN_MESSAGES.signingIn : LOGIN_MESSAGES.signInButton}
       </button>
 
       {/* Error message */}
       {error !== null && (
         <p className="mt-6 text-lg text-error text-center" role="alert">
-          ログインできませんでした。もう一度お試しください。
+          {LOGIN_MESSAGES.error}
         </p>
       )}
 
       {/* Footer note */}
       <p className="mt-12 text-base text-text-secondary text-center">
-        Googleアカウントで安全にログインできます
+        {LOGIN_MESSAGES.footer}
       </p>
     </div>
   );

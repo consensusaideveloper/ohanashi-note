@@ -141,6 +141,15 @@ export const FONT_SIZE_OPTIONS: readonly {
   { value: "x-large", label: "とても大きい" },
 ] as const;
 
+// --- Login screen messages (Japanese) ---
+export const LOGIN_MESSAGES = {
+  subtitle: "会話をしながら\n大切な想いをノートにまとめましょう",
+  signingIn: "ログイン中...",
+  signInButton: "Googleでログイン",
+  error: "ログインできませんでした。もう一度お試しください。",
+  footer: "Googleアカウントで安全にログインできます",
+} as const;
+
 // --- Settings screen messages (Japanese) ---
 export const SETTINGS_MESSAGES = {
   profile: {
