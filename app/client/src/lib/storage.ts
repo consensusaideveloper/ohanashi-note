@@ -1,4 +1,4 @@
-import { fetchWithAuth, getAudioUploadUrl, getAudioDownloadUrl } from "./api";
+import { fetchWithAuth, getAudioDownloadUrl } from "./api";
 import { getQuestionsByCategory } from "./questions";
 
 import type {
@@ -186,12 +186,33 @@ export async function saveAudioRecording(
     mimeType,
   });
 
-  let uploadResponse;
+  // New approach: Upload directly to server endpoint
   try {
-    uploadResponse = await getAudioUploadUrl(conversationId, mimeType);
-    console.log("Got upload URL response:", uploadResponse);
+    const response = await fetchWithAuth(
+      `/api/conversations/${conversationId}/audio`,
+      {
+        method: "POST",
+        body: blob,
+        headers: {
+          "Content-Type": mimeType,
+        },
+      },
+    );
+
+    const result = (await response.json()) as {
+      success: boolean;
+      storageKey?: string;
+      error?: string;
+    };
+
+    if (result.success && result.storageKey) {
+      console.log("Audio successfully uploaded via server:", result.storageKey);
+      return { storageKey: result.storageKey };
+    } else {
+      throw new Error(result.error ?? "Upload failed");
+    }
   } catch (error) {
-    console.error("Failed to get upload URL:", error);
+    console.error("Failed to upload audio:", error);
     // R2 not configured — skip audio upload silently
     if (error instanceof Error && error.message.includes("503")) {
       console.log("R2 not configured (503), skipping audio upload");
@@ -199,38 +220,6 @@ export async function saveAudioRecording(
     }
     throw error;
   }
-
-  const { uploadUrl, storageKey } = uploadResponse;
-
-  // Upload directly to R2
-  console.log("Uploading to R2:", {
-    storageKey,
-    uploadUrl: uploadUrl.substring(0, 50) + "...",
-  });
-  const putResponse = await fetch(uploadUrl, {
-    method: "PUT",
-    body: blob,
-    headers: { "Content-Type": mimeType },
-  });
-
-  console.log("R2 upload response:", {
-    status: putResponse.status,
-    ok: putResponse.ok,
-  });
-
-  if (!putResponse.ok) {
-    const errorText = await putResponse.text();
-    console.error("R2 upload failed:", {
-      status: putResponse.status,
-      text: errorText,
-    });
-    throw new Error(
-      `Audio upload failed: ${putResponse.status} ${putResponse.statusText}`,
-    );
-  }
-
-  console.log("Audio successfully uploaded to R2:", storageKey);
-  return { storageKey };
 }
 
 /**

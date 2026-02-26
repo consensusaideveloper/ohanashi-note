@@ -16,6 +16,7 @@ interface R2Client {
   generateUploadUrl: (key: string, mimeType: string) => Promise<string>;
   generateDownloadUrl: (key: string) => Promise<string>;
   deleteObject: (key: string) => Promise<void>;
+  uploadObject: (key: string, data: Buffer, mimeType: string) => Promise<void>;
 }
 
 function createR2Client(): R2Client | null {
@@ -71,6 +72,16 @@ function createR2Client(): R2Client | null {
       const command = new DeleteObjectCommand({
         Bucket: bucketName,
         Key: key,
+      });
+      await s3.send(command);
+    },
+
+    async uploadObject(key: string, data: Buffer, mimeType: string): Promise<void> {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: data,
+        ContentType: mimeType,
       });
       await s3.send(command);
     },
