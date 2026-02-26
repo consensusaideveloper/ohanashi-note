@@ -10,12 +10,14 @@ import {
 import { CHARACTERS } from "../lib/characters";
 import { SAVE_MESSAGE_TIMEOUT_MS, FONT_SIZE_OPTIONS } from "../lib/constants";
 import { useFontSize } from "../contexts/FontSizeContext";
+import { useAuthContext } from "../contexts/AuthContext";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
 import type { ReactNode } from "react";
 
 export function SettingsScreen(): ReactNode {
+  const { user, handleSignOut } = useAuthContext();
   const [name, setName] = useState("");
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("character-a");
@@ -31,6 +33,7 @@ export function SettingsScreen(): ReactNode {
 
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -143,6 +146,19 @@ export function SettingsScreen(): ReactNode {
 
   const handleDeleteCancel = useCallback((): void => {
     setShowDeleteConfirm(false);
+  }, []);
+
+  const handleLogout = useCallback((): void => {
+    setShowLogoutConfirm(true);
+  }, []);
+
+  const handleLogoutConfirm = useCallback((): void => {
+    setShowLogoutConfirm(false);
+    void handleSignOut();
+  }, [handleSignOut]);
+
+  const handleLogoutCancel = useCallback((): void => {
+    setShowLogoutConfirm(false);
   }, []);
 
   const handleNameChange = useCallback(
@@ -324,6 +340,23 @@ export function SettingsScreen(): ReactNode {
             <p className="text-accent-primary">{deleteMessage}</p>
           )}
         </section>
+
+        {/* Section 4: Account */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-text-secondary">
+            アカウント
+          </h2>
+          {user?.email !== undefined && user.email !== null && (
+            <p className="text-lg text-text-secondary">{user.email}</p>
+          )}
+          <button
+            type="button"
+            className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
+            onClick={handleLogout}
+          >
+            ログアウト
+          </button>
+        </section>
       </div>
 
       <ConfirmDialog
@@ -344,6 +377,15 @@ export function SettingsScreen(): ReactNode {
         variant="danger"
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="ログアウト"
+        message="ログアウトしてもよろしいですか？"
+        confirmLabel="ログアウトする"
+        cancelLabel="やめる"
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutCancel}
       />
     </div>
   );
