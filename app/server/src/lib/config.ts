@@ -12,6 +12,13 @@ interface FirebaseAdminConfig {
   privateKey: string;
 }
 
+interface R2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+}
+
 interface Config {
   openaiApiKey: string;
   port: number;
@@ -19,6 +26,7 @@ interface Config {
   allowedOrigins: string[];
   logLevel: LogLevel;
   firebaseAdmin: FirebaseAdminConfig;
+  r2: R2Config | null;
 }
 
 function getRequiredEnv(name: string): string {
@@ -49,5 +57,19 @@ export function loadConfig(): Config {
       clientEmail: getRequiredEnv("FIREBASE_CLIENT_EMAIL"),
       privateKey: getRequiredEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n"),
     },
+    r2: loadR2Config(),
+  };
+}
+
+function loadR2Config(): R2Config | null {
+  const accountId = process.env["R2_ACCOUNT_ID"];
+  if (!accountId) {
+    return null;
+  }
+  return {
+    accountId,
+    accessKeyId: getRequiredEnv("R2_ACCESS_KEY_ID"),
+    secretAccessKey: getRequiredEnv("R2_SECRET_ACCESS_KEY"),
+    bucketName: getOptionalEnv("R2_BUCKET_NAME", "ohanashi-media"),
   };
 }

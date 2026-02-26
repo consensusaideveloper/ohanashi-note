@@ -75,8 +75,12 @@ export interface ConversationRecord {
   coveredQuestionIds?: string[];
   noteEntries?: NoteEntry[];
   summaryStatus?: "pending" | "completed" | "failed";
-  /** Whether an audio recording is stored in the separate audio-recordings store. */
+  /** Whether an audio recording is stored. */
   audioAvailable?: boolean;
+  /** R2 storage key for the audio recording. */
+  audioStorageKey?: string;
+  /** MIME type of the stored audio recording. */
+  audioMimeType?: string;
   /** Short one-line summary for list card display. */
   oneLinerSummary?: string;
   /** Emotion/atmosphere analysis of the conversation. */

@@ -55,6 +55,42 @@ export interface SummarizeResult {
   offTopicSummary: string;
 }
 
+// --- Audio URL endpoints ---
+
+interface AudioUploadUrlResponse {
+  uploadUrl: string;
+  storageKey: string;
+}
+
+interface AudioDownloadUrlResponse {
+  downloadUrl: string;
+}
+
+export async function getAudioUploadUrl(
+  conversationId: string,
+  mimeType: string,
+): Promise<AudioUploadUrlResponse> {
+  const response = await fetchWithAuth(
+    `/api/conversations/${conversationId}/audio-url`,
+    {
+      method: "POST",
+      body: JSON.stringify({ mimeType }),
+    },
+  );
+  return response.json() as Promise<AudioUploadUrlResponse>;
+}
+
+export async function getAudioDownloadUrl(
+  conversationId: string,
+): Promise<AudioDownloadUrlResponse> {
+  const response = await fetchWithAuth(
+    `/api/conversations/${conversationId}/audio-url`,
+  );
+  return response.json() as Promise<AudioDownloadUrlResponse>;
+}
+
+// --- Summarize ---
+
 export async function requestSummarize(
   category: QuestionCategory | null,
   transcript: TranscriptEntry[],

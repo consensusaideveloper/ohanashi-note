@@ -1,4 +1,4 @@
-import { fetchWithAuth } from "./api";
+import { fetchWithAuth, getAudioUploadUrl, getAudioDownloadUrl } from "./api";
 import { getQuestionsByCategory } from "./questions";
 
 import type {
@@ -164,24 +164,81 @@ export async function getNoteEntriesForCategory(
   return Array.from(entryMap.values());
 }
 
-// --- Audio recording storage (placeholder for R2 integration) ---
-// Audio will use R2 signed URLs in the future.
-// For now, audio functions are no-ops that resolve cleanly.
+// --- Audio recording storage via Cloudflare R2 signed URLs ---
 
-export function saveAudioRecording(
-  _conversationId: string,
-  _blob: Blob,
-  _mimeType: string,
-): Promise<void> {
-  // TODO: Implement R2 signed URL upload
-  return Promise.resolve();
+interface AudioUploadResult {
+  storageKey: string;
 }
 
-export function getAudioRecording(
-  _conversationId: string,
+/**
+ * Upload an audio blob to R2 via a signed URL.
+ * Returns the storage key for later retrieval.
+ * If R2 is not configured (503), resolves without error (audio simply not saved).
+ */
+export async function saveAudioRecording(
+  conversationId: string,
+  blob: Blob,
+  mimeType: string,
+): Promise<AudioUploadResult | null> {
+  let uploadResponse;
+  try {
+    uploadResponse = await getAudioUploadUrl(conversationId, mimeType);
+  } catch (error) {
+    // R2 not configured — skip audio upload silently
+    if (error instanceof Error && error.message.includes("503")) {
+      return null;
+    }
+    throw error;
+  }
+
+  const { uploadUrl, storageKey } = uploadResponse;
+
+  // Upload directly to R2
+  const putResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    body: blob,
+    headers: { "Content-Type": mimeType },
+  });
+
+  if (!putResponse.ok) {
+    throw new Error(
+      `Audio upload failed: ${putResponse.status} ${putResponse.statusText}`,
+    );
+  }
+
+  return { storageKey };
+}
+
+/**
+ * Download an audio recording from R2 via a signed URL.
+ * Returns null if no audio is available or R2 is not configured.
+ */
+export async function getAudioRecording(
+  conversationId: string,
 ): Promise<AudioRecording | null> {
-  // TODO: Implement R2 signed URL download
-  return Promise.resolve(null);
+  let downloadResponse;
+  try {
+    downloadResponse = await getAudioDownloadUrl(conversationId);
+  } catch {
+    // No audio available or R2 not configured
+    return null;
+  }
+
+  const { downloadUrl } = downloadResponse;
+
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    return null;
+  }
+
+  const blob = await response.blob();
+
+  return {
+    conversationId,
+    blob,
+    mimeType: blob.type || "audio/webm",
+    createdAt: Date.now(),
+  };
 }
 
 // --- User profile storage ---

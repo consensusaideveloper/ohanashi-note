@@ -621,12 +621,20 @@ export function useConversation(): UseConversationReturn {
         .then((audioBlob) => {
           if (audioBlob !== null && audioBlob.size > 0) {
             return computeBlobHash(audioBlob).then((audioHash) =>
-              saveAudioRecording(convId, audioBlob, audioBlob.type).then(() =>
-                // Use atomic update to avoid overwriting summary
-                updateConversation(convId, {
-                  audioAvailable: true,
-                  audioHash,
-                }),
+              saveAudioRecording(convId, audioBlob, audioBlob.type).then(
+                (result) => {
+                  // Use atomic update to avoid overwriting summary
+                  const audioUpdate: Partial<ConversationRecord> = {
+                    audioAvailable: true,
+                    audioHash,
+                  };
+                  // Include storage key if R2 upload succeeded
+                  if (result !== null) {
+                    audioUpdate.audioStorageKey = result.storageKey;
+                    audioUpdate.audioMimeType = audioBlob.type;
+                  }
+                  return updateConversation(convId, audioUpdate);
+                },
               ),
             );
           }
