@@ -180,12 +180,6 @@ export async function saveAudioRecording(
   blob: Blob,
   mimeType: string,
 ): Promise<AudioUploadResult | null> {
-  console.log("saveAudioRecording called:", {
-    conversationId,
-    blobSize: blob.size,
-    mimeType,
-  });
-
   // New approach: Upload directly to server endpoint
   try {
     const response = await fetchWithAuth(
@@ -206,7 +200,6 @@ export async function saveAudioRecording(
     };
 
     if (result.success && result.storageKey) {
-      console.log("Audio successfully uploaded via server:", result.storageKey);
       return { storageKey: result.storageKey };
     } else {
       throw new Error(result.error ?? "Upload failed");
@@ -215,7 +208,6 @@ export async function saveAudioRecording(
     console.error("Failed to upload audio:", error);
     // R2 not configured — skip audio upload silently
     if (error instanceof Error && error.message.includes("503")) {
-      console.log("R2 not configured (503), skipping audio upload");
       return null;
     }
     throw error;

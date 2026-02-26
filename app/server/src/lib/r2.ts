@@ -76,7 +76,11 @@ function createR2Client(): R2Client | null {
       await s3.send(command);
     },
 
-    async uploadObject(key: string, data: Buffer, mimeType: string): Promise<void> {
+    async uploadObject(
+      key: string,
+      data: Buffer,
+      mimeType: string,
+    ): Promise<void> {
       const command = new PutObjectCommand({
         Bucket: bucketName,
         Key: key,

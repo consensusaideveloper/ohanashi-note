@@ -75,36 +75,25 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
     const audioData = await c.req.arrayBuffer();
 
     if (audioData.byteLength === 0) {
-      return c.json(
-        { error: "音声データが空です", code: "EMPTY_FILE" },
-        400,
-      );
+      return c.json({ error: "音声データが空です", code: "EMPTY_FILE" }, 400);
     }
 
     const ext = getExtension(mimeType);
     const storageKey = `audio/${userId}/${conversationId}.${ext}`;
 
     // Upload directly to R2 using the server-side client
-    if (!r2.uploadObject) {
-      logger.error("R2 uploadObject method not available");
-      return c.json(
-        { error: "R2アップロード機能が利用できません", code: "R2_METHOD_MISSING" },
-        500,
-      );
-    }
-
     await r2.uploadObject(storageKey, Buffer.from(audioData), mimeType);
 
     logger.info("Audio uploaded successfully", {
       conversationId,
       storageKey,
-      size: audioData.byteLength
+      size: audioData.byteLength,
     });
 
     return c.json({
       success: true,
       storageKey,
-      size: audioData.byteLength
+      size: audioData.byteLength,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

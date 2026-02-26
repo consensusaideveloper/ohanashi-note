@@ -612,22 +612,14 @@ export function useConversation(): UseConversationReturn {
         category,
       );
 
-      console.log("Saving conversation:", record);
       saveConversation(record)
         .then(() => {
-          console.log("Conversation saved successfully:", convId);
           // After conversation is saved, start audio processing
           return audioBlobPromise.then((audioBlob) => {
             if (audioBlob !== null && audioBlob.size > 0) {
-              console.log("Saving audio recording:", {
-                size: audioBlob.size,
-                type: audioBlob.type,
-                conversationId: convId,
-              });
               return computeBlobHash(audioBlob).then((audioHash) =>
                 saveAudioRecording(convId, audioBlob, audioBlob.type).then(
                   (result) => {
-                    console.log("Audio upload result:", result);
                     // Use atomic update to avoid overwriting summary
                     const audioUpdate: Partial<ConversationRecord> = {
                       audioAvailable: true,
@@ -643,7 +635,6 @@ export function useConversation(): UseConversationReturn {
                 ),
               );
             } else {
-              console.log("No audio to save:", audioBlob);
               return Promise.resolve();
             }
           });
@@ -703,8 +694,6 @@ export function useConversation(): UseConversationReturn {
         })
         .catch((error: unknown) => {
           console.error("Failed to save/summarize conversation:", error);
-          console.error("Conversation ID:", convId);
-          console.error("Record:", record);
           // Mark summary as failed but keep the transcript saved
           updateConversation(convId, { summaryStatus: "failed" }).catch(
             () => {},

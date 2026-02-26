@@ -10,7 +10,6 @@ import { summarize } from "./routes/summarize.js";
 import { conversationsRoute } from "./routes/conversations.js";
 import { profileRoute } from "./routes/profile.js";
 import { sharingRoute } from "./routes/sharing.js";
-import { audioRoute } from "./routes/audio.js";
 import { audioUploadRoute } from "./routes/audio-upload.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
@@ -123,7 +122,6 @@ app.route("/", summarize);
 app.route("/", conversationsRoute);
 app.route("/", profileRoute);
 app.route("/", sharingRoute);
-app.route("/", audioRoute);
 app.route("/", audioUploadRoute);
 
 // WebSocket route via relay

@@ -57,27 +57,8 @@ export interface SummarizeResult {
 
 // --- Audio URL endpoints ---
 
-interface AudioUploadUrlResponse {
-  uploadUrl: string;
-  storageKey: string;
-}
-
 interface AudioDownloadUrlResponse {
   downloadUrl: string;
-}
-
-export async function getAudioUploadUrl(
-  conversationId: string,
-  mimeType: string,
-): Promise<AudioUploadUrlResponse> {
-  const response = await fetchWithAuth(
-    `/api/conversations/${conversationId}/audio-url`,
-    {
-      method: "POST",
-      body: JSON.stringify({ mimeType }),
-    },
-  );
-  return response.json() as Promise<AudioUploadUrlResponse>;
 }
 
 export async function getAudioDownloadUrl(
