@@ -8,9 +8,25 @@ import type {
 } from "../types/conversation";
 
 /**
+ * Typed API error that carries HTTP status and response body for developer
+ * debugging while keeping the user-facing `message` free of technical details.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly responseBody: string;
+
+  constructor(status: number, responseBody: string) {
+    super("API request failed");
+    this.name = "ApiError";
+    this.status = status;
+    this.responseBody = responseBody;
+  }
+}
+
+/**
  * Perform an authenticated fetch request.
  * Automatically attaches the Firebase ID token as a Bearer token.
- * Throws an Error if the user is not signed in or the request fails.
+ * Throws an ApiError if the request fails, or a plain Error if not signed in.
  */
 export async function fetchWithAuth(
   path: string,
@@ -36,7 +52,7 @@ export async function fetchWithAuth(
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`API error ${response.status}: ${text}`);
+    throw new ApiError(response.status, text);
   }
 
   return response;

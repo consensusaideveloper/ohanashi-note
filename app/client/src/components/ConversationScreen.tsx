@@ -161,6 +161,39 @@ export function ConversationScreen({
     );
   }
 
+  // Summary failed screen — shown when summarization failed but transcript was saved
+  if (state === "idle" && summaryStatus === "failed") {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
+        <div className="w-16 h-16 mb-6 rounded-full bg-error-light flex items-center justify-center">
+          <svg
+            className="w-8 h-8 text-error"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+            />
+          </svg>
+        </div>
+        <p className="text-xl text-text-primary font-medium mb-2">
+          {UI_MESSAGES.error.summaryFailed}
+        </p>
+        <button
+          type="button"
+          className="mt-8 min-h-14 min-w-48 rounded-full bg-accent-primary text-text-on-accent text-xl px-8 py-4 font-bold shadow-lg"
+          onClick={handleQuickStart}
+        >
+          新しくお話しする
+        </button>
+      </div>
+    );
+  }
+
   // Idle screen — quick start button or auto-start preparing state
   if (state === "idle") {
     // Show preparing screen when auto-starting from note or manually starting

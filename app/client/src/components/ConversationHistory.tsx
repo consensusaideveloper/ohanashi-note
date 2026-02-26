@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 
 import { getCharacterShortName } from "../lib/characters";
-import { TRANSCRIPT_PREVIEW_MAX_LENGTH } from "../lib/constants";
+import { TRANSCRIPT_PREVIEW_MAX_LENGTH, UI_MESSAGES } from "../lib/constants";
 import { listConversations } from "../lib/storage";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 
@@ -183,18 +183,21 @@ export function ConversationHistory({
 }: ConversationHistoryProps): ReactNode {
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
 
   const loadConversations = useCallback((): void => {
     setIsLoading(true);
+    setLoadError(false);
     listConversations()
       .then((records) => {
         setConversations(records);
       })
       .catch((error: unknown) => {
-        console.error("Failed to load conversations:", error);
+        console.error("Failed to load conversations:", { error });
+        setLoadError(true);
       })
       .finally(() => {
         setIsLoading(false);
@@ -271,6 +274,23 @@ export function ConversationHistory({
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-lg text-text-secondary">読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
+        <p className="text-xl text-text-primary text-center leading-relaxed">
+          {UI_MESSAGES.error.historyLoadFailed}
+        </p>
+        <button
+          type="button"
+          className="min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg px-6 py-3"
+          onClick={loadConversations}
+        >
+          もう一度読み込む
+        </button>
       </div>
     );
   }

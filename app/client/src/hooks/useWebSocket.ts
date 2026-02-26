@@ -102,8 +102,15 @@ export function useWebSocket(): UseWebSocketReturn {
             handler(serverEvent);
           }
         }
-      } catch {
-        // Silently ignore malformed messages
+      } catch (parseError: unknown) {
+        const RAW_DATA_LOG_LIMIT = 200;
+        console.error("Failed to parse WebSocket message:", {
+          error: parseError,
+          rawData:
+            typeof messageEvent.data === "string"
+              ? messageEvent.data.slice(0, RAW_DATA_LOG_LIMIT)
+              : "(non-string data)",
+        });
       }
     });
 

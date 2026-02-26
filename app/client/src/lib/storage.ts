@@ -1,4 +1,4 @@
-import { fetchWithAuth, getAudioDownloadUrl } from "./api";
+import { ApiError, fetchWithAuth, getAudioDownloadUrl } from "./api";
 import { getQuestionsByCategory } from "./questions";
 
 import type {
@@ -101,7 +101,7 @@ export async function getConversation(
     return toConversationRecord(data);
   } catch (error) {
     // 404 means not found — return null
-    if (error instanceof Error && error.message.includes("404")) {
+    if (error instanceof ApiError && error.status === 404) {
       return null;
     }
     throw error;
@@ -207,7 +207,7 @@ export async function saveAudioRecording(
   } catch (error) {
     console.error("Failed to upload audio:", error);
     // R2 not configured — skip audio upload silently
-    if (error instanceof Error && error.message.includes("503")) {
+    if (error instanceof ApiError && error.status === 503) {
       return null;
     }
     throw error;
@@ -260,7 +260,8 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     const response = await fetchWithAuth("/api/profile");
     const data = (await response.json()) as UserProfile;
     return data;
-  } catch {
+  } catch (error: unknown) {
+    console.error("Failed to load user profile:", { error });
     return null;
   }
 }
@@ -302,20 +303,53 @@ export async function importAllData(json: string): Promise<void> {
     throw new Error("Invalid backup data format");
   }
 
-  // Import conversations via API
+  // Import conversations via API — continue on individual failures
+  const failures: string[] = [];
   for (const record of data.conversations) {
-    await saveConversation(record);
+    try {
+      await saveConversation(record);
+    } catch (error: unknown) {
+      console.error("Failed to import conversation:", {
+        id: record.id,
+        error,
+      });
+      failures.push(record.id);
+    }
   }
 
   // Import profile if present
   if (data.profile !== null) {
-    await saveUserProfile(data.profile);
+    try {
+      await saveUserProfile(data.profile);
+    } catch (error: unknown) {
+      console.error("Failed to import profile:", { error });
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Failed to import ${String(failures.length)} of ${String(data.conversations.length)} conversations`,
+    );
   }
 }
 
 export async function clearAllData(): Promise<void> {
   const allConversations = await listConversations();
+  const failures: string[] = [];
   for (const record of allConversations) {
-    await deleteConversation(record.id);
+    try {
+      await deleteConversation(record.id);
+    } catch (error: unknown) {
+      console.error("Failed to delete conversation:", {
+        id: record.id,
+        error,
+      });
+      failures.push(record.id);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `Failed to delete ${String(failures.length)} of ${String(allConversations.length)} conversations`,
+    );
   }
 }

@@ -46,6 +46,7 @@ export interface CategoryNoteData {
 interface UseEndingNoteReturn {
   categories: CategoryNoteData[];
   isLoading: boolean;
+  error: boolean;
   refresh: () => void;
 }
 
@@ -137,6 +138,7 @@ export function buildCategoryData(
 export function useEndingNote(): UseEndingNoteReturn {
   const [categories, setCategories] = useState<CategoryNoteData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback((): void => {
@@ -145,17 +147,19 @@ export function useEndingNote(): UseEndingNoteReturn {
 
   useEffect(() => {
     setIsLoading(true);
+    setError(false);
     listConversations()
       .then((records) => {
         setCategories(buildCategoryData(records));
       })
-      .catch((error: unknown) => {
-        console.error("Failed to load ending note data:", error);
+      .catch((err: unknown) => {
+        console.error("Failed to load ending note data:", { error: err });
+        setError(true);
       })
       .finally(() => {
         setIsLoading(false);
       });
   }, [refreshKey]);
 
-  return { categories, isLoading, refresh };
+  return { categories, isLoading, error, refresh };
 }

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { useEndingNote } from "../hooks/useEndingNote";
+import { UI_MESSAGES } from "../lib/constants";
 import { CategoryNoteSection } from "./CategoryNoteSection";
 
 import type { ReactNode } from "react";
@@ -15,7 +16,7 @@ export function EndingNoteView({
   onStartConversation,
   onViewConversation,
 }: EndingNoteViewProps): ReactNode {
-  const { categories, isLoading, refresh } = useEndingNote();
+  const { categories, isLoading, error, refresh } = useEndingNote();
 
   // Refresh data when the view becomes visible
   useEffect(() => {
@@ -35,6 +36,23 @@ export function EndingNoteView({
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-lg text-text-secondary">読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
+        <p className="text-xl text-text-primary text-center leading-relaxed">
+          {UI_MESSAGES.error.noteLoadFailed}
+        </p>
+        <button
+          type="button"
+          className="min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg px-6 py-3"
+          onClick={refresh}
+        >
+          もう一度読み込む
+        </button>
       </div>
     );
   }

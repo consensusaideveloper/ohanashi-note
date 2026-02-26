@@ -111,6 +111,13 @@ export const UI_MESSAGES = {
     aiUnavailable:
       "ただいま混み合っています。少し時間をおいてからお試しください。",
     unknown: "うまくいきませんでした。もう一度お試しください。",
+    saveFailed: "保存できませんでした。もう一度お試しください。",
+    exportFailed: "データの書き出しに失敗しました。もう一度お試しください。",
+    deleteFailed: "削除できませんでした。もう一度お試しください。",
+    summaryFailed:
+      "お話のまとめを作れませんでした。会話の内容は保存されていますのでご安心ください。",
+    noteLoadFailed: "ノートの内容を読み込めませんでした。",
+    historyLoadFailed: "会話の記録を読み込めませんでした。",
   },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
@@ -133,8 +140,8 @@ export const SESSION_WARNING_THRESHOLD = 0.85;
 export const MAX_DAILY_SESSIONS = 5;
 
 // --- UI timing ---
-export const SAVE_MESSAGE_TIMEOUT_MS = 3000;
 export const RETRY_DELAY_MS = 300;
+export const TOAST_DISPLAY_DURATION_MS = 5000;
 
 // --- Data limits ---
 export const CROSS_CATEGORY_RECORDS_LIMIT = 5;

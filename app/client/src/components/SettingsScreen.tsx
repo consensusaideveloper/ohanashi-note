@@ -9,23 +9,26 @@ import {
 } from "../lib/storage";
 import { CHARACTERS } from "../lib/characters";
 import {
-  SAVE_MESSAGE_TIMEOUT_MS,
   FONT_SIZE_OPTIONS,
   SETTINGS_MESSAGES,
+  UI_MESSAGES,
 } from "../lib/constants";
 import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
+import { useToast } from "../hooks/useToast";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { Toast } from "./Toast";
 
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
 import type { ReactNode } from "react";
 
 export function SettingsScreen(): ReactNode {
   const { user, handleSignOut } = useAuthContext();
+  const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
+    useToast();
   const [name, setName] = useState("");
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("character-a");
-  const [saveMessage, setSaveMessage] = useState("");
   const [exportStatus, setExportStatus] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState(false);
@@ -56,34 +59,46 @@ export function SettingsScreen(): ReactNode {
       name,
       characterId: selectedCharacterId,
       updatedAt: Date.now(),
-    }).then(() => {
-      setSaveMessage("保存しました");
-      setTimeout(() => {
-        setSaveMessage("");
-      }, SAVE_MESSAGE_TIMEOUT_MS);
-    });
-  }, [name, selectedCharacterId]);
+    })
+      .then(() => {
+        showToast("保存しました", "success");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to save profile:", {
+          error,
+          name,
+          characterId: selectedCharacterId,
+        });
+        showToast(UI_MESSAGES.error.saveFailed, "error");
+      });
+  }, [name, selectedCharacterId, showToast]);
 
   const handleExport = useCallback((): void => {
     setExportStatus("書き出し中...");
-    void exportAllData().then((json) => {
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, "0");
-      const dd = String(now.getDate()).padStart(2, "0");
-      const fileName = `ohanashi-ending-note-backup-${yyyy}${mm}${dd}.json`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setExportStatus("");
-    });
-  }, []);
+    void exportAllData()
+      .then((json) => {
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, "0");
+        const dd = String(now.getDate()).padStart(2, "0");
+        const fileName = `ohanashi-ending-note-backup-${yyyy}${mm}${dd}.json`;
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setExportStatus("");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to export data:", { error });
+        setExportStatus("");
+        showToast(UI_MESSAGES.error.exportFailed, "error");
+      });
+  }, [showToast]);
 
   const handleImportClick = useCallback((): void => {
     fileInputRef.current?.click();
@@ -142,11 +157,16 @@ export function SettingsScreen(): ReactNode {
 
   const handleDeleteConfirm = useCallback((): void => {
     setShowDeleteConfirm(false);
-    void clearAllData().then(() => {
-      setDeleteMessage("すべてのデータを削除しました");
-      setName("");
-    });
-  }, []);
+    void clearAllData()
+      .then(() => {
+        setDeleteMessage("すべてのデータを削除しました");
+        setName("");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to clear all data:", { error });
+        showToast(UI_MESSAGES.error.deleteFailed, "error");
+      });
+  }, [showToast]);
 
   const handleDeleteCancel = useCallback((): void => {
     setShowDeleteConfirm(false);
@@ -289,9 +309,6 @@ export function SettingsScreen(): ReactNode {
           >
             保存する
           </button>
-          {saveMessage !== "" && (
-            <p className="text-accent-primary">{saveMessage}</p>
-          )}
         </section>
 
         {/* Section 3: Account (low risk, reversible) */}
@@ -442,6 +459,12 @@ export function SettingsScreen(): ReactNode {
         cancelLabel="やめる"
         onConfirm={handleLogoutConfirm}
         onCancel={handleLogoutCancel}
+      />
+      <Toast
+        message={toastMessage}
+        variant={toastVariant}
+        isVisible={isToastVisible}
+        onDismiss={hideToast}
       />
     </div>
   );
