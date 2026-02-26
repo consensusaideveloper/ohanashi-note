@@ -13,8 +13,11 @@ function getDatabaseUrl(): string {
   return url;
 }
 
+const isProduction = process.env["NODE_ENV"] === "production";
+
 const pool = new Pool({
   connectionString: getDatabaseUrl(),
+  ssl: isProduction ? { rejectUnauthorized: false } : undefined,
 });
 
 export const db = drizzle(pool, { schema });
