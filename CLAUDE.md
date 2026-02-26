@@ -68,10 +68,49 @@ Blank line between each group.
 
 ## Error Handling
 
+### General
+
 - Never throw raw strings. Always throw Error objects.
-- Server: Return `{ error: string, code: string }` JSON
-- Client: Errors caught at hook level, surfaced to UI via state
-- User-facing errors: Always in Japanese, always friendly, never technical
+- User-facing errors: Always in Japanese, always friendly, never technical. Elderly users (60-80) must not feel anxious — use reassuring, actionable language.
+
+### Server-side (Hono)
+
+- All async route handlers must have try/catch (also listed in Hono Server Patterns).
+- Return `{ error: string, code: string }` JSON on failure. `error` is a Japanese user-friendly message, `code` is a machine-readable identifier.
+- Use `logger.error("context", { key: value })` with structured metadata (IDs, error message) for developer debugging. Never log raw request bodies or credentials.
+- Error messages thrown internally must be in Japanese (e.g., `throw new Error("ユーザー情報の取得に失敗しました")`).
+
+### Client-side API layer
+
+- Use `ApiError` class (`lib/api.ts`) for API call failures. `ApiError` carries `status` and `responseBody` for developer debugging, while its `message` stays generic ("API request failed") — never expose HTTP status codes or response bodies to users.
+- Check error types with `error instanceof ApiError && error.status === 404`, not string matching on `error.message`.
+
+### Client-side CRUD operations
+
+Every CRUD operation (save, update, delete, export, import) must follow this pattern:
+
+1. **`.catch()` on every Promise** — No CRUD Promise chain may lack a `.catch()`. Silent failures are forbidden.
+2. **User feedback via Toast** — Use the `Toast` component + `useToast` hook for non-blocking operation feedback (success/error). Define all messages as constants in `UI_MESSAGES` (`lib/constants.ts`).
+3. **Developer logging** — Every `.catch()` must include `console.error("context:", { error, ...ids })` with structured context (relevant IDs, operation name). Never log sensitive user data.
+4. **UI state reset on error** — If the operation sets a loading/progress state (e.g., `isExporting`), always reset it in `.catch()` or `.finally()` to prevent stuck UI.
+
+### Client-side data loading
+
+Every data-fetching hook/component must follow this pattern:
+
+1. **`error` state in hooks** — Data hooks (e.g., `useEndingNote`) must expose an `error: boolean` in their return type. Set `true` in `.catch()`, reset to `false` at the start of each load.
+2. **Error UI with retry** — When `error` is `true`, show a user-friendly message (from `UI_MESSAGES.error`) + a "もう一度読み込む" retry button. Never show an empty screen on load failure.
+3. **Developer logging** — Same structured `console.error` pattern as CRUD operations.
+
+### Bulk operations (import/delete multiple items)
+
+- Use continue-on-error loops: wrap each individual operation in its own try/catch inside the loop. Collect failures, continue processing remaining items.
+- After the loop, if any failures occurred, throw a single Error summarizing the failure count.
+
+### Developer observability
+
+- Global `unhandledrejection` handler in `main.tsx` logs to `console.error` for catching missed Promise rejections. Never show these to users.
+- WebSocket message parse errors must be logged with `console.error` including truncated raw data (max 200 chars).
 
 ## Tailwind CSS
 
@@ -98,6 +137,7 @@ Blank line between each group.
 - No `eval()`, no `innerHTML`, no `dangerouslySetInnerHTML`
 - All user input through the relay must be sanitized for sensitive patterns
 - WebSocket connections must validate Origin header
+- Never expose HTTP status codes, API response bodies, or stack traces in user-facing UI. Use `ApiError` class to keep technical details in developer-only properties.
 
 ## Git
 
