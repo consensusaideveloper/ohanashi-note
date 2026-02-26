@@ -9,6 +9,10 @@ import {
   RETRY_DELAY_MS,
   MAX_SESSION_DURATION_MS,
   SESSION_WARNING_THRESHOLD,
+  POST_SPEECH_COOLDOWN_MS,
+  MIN_TRANSCRIPT_LENGTH,
+  BARGE_IN_RMS_THRESHOLD,
+  BARGE_IN_CONSECUTIVE_CHUNKS,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import {
@@ -255,6 +259,11 @@ export function useConversation(): UseConversationReturn {
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
 
+  // Echo suppression: gate audio input to server during AI speech + cooldown
+  const audioGatedRef = useRef(false);
+  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bargeInCountRef = useRef(0);
+
   // Stable ref for stop so the session timer can call it without stale closures
   const stopRef = useRef<() => void>(() => {});
 
@@ -263,15 +272,43 @@ export function useConversation(): UseConversationReturn {
     transcriptRef.current = state.transcript;
   }, [state.transcript]);
 
+  /** Cancel any pending post-speech cooldown timer. */
+  const clearCooldownTimer = useCallback((): void => {
+    if (cooldownTimerRef.current !== null) {
+      clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = null;
+    }
+  }, []);
+
   // Callback for audio chunks from the microphone
   const handleAudioChunk = useCallback(
-    (base64: string): void => {
+    (base64: string, rmsLevel: number): void => {
+      if (audioGatedRef.current) {
+        // Check for barge-in: user speaking loudly enough to override echo
+        if (rmsLevel >= BARGE_IN_RMS_THRESHOLD) {
+          bargeInCountRef.current += 1;
+          if (bargeInCountRef.current >= BARGE_IN_CONSECUTIVE_CHUNKS) {
+            // Confirmed barge-in — ungate and stop AI playback
+            audioGatedRef.current = false;
+            bargeInCountRef.current = 0;
+            clearCooldownTimer();
+            audioOutput.stopPlayback();
+            ws.send({ type: "input_audio_buffer.clear" });
+            // Fall through to send this chunk
+          } else {
+            return; // Not yet confirmed
+          }
+        } else {
+          bargeInCountRef.current = 0;
+          return; // Below threshold — skip (echo or noise)
+        }
+      }
       ws.send({
         type: "input_audio_buffer.append",
         audio: base64,
       });
     },
-    [ws],
+    [ws, audioOutput, clearCooldownTimer],
   );
 
   const audioInput = useAudioInput({ onAudioChunk: handleAudioChunk });
@@ -382,10 +419,15 @@ export function useConversation(): UseConversationReturn {
           break;
 
         case "response.audio.delta":
-          // AI is sending audio — transition to speaking state and play
+          // AI is sending audio — gate mic input and transition to speaking state
           if (state.conversationState !== "ai-speaking") {
             dispatch({ type: "AI_SPEAKING" });
+            // Clear any audio already buffered server-side to prevent stale echo
+            ws.send({ type: "input_audio_buffer.clear" });
           }
+          audioGatedRef.current = true;
+          bargeInCountRef.current = 0;
+          clearCooldownTimer();
           audioOutput.enqueueAudio(event.delta);
           break;
 
@@ -400,14 +442,23 @@ export function useConversation(): UseConversationReturn {
           });
           break;
 
-        case "conversation.item.input_audio_transcription.completed":
-          if (event.transcript.trim()) {
-            dispatch({ type: "ADD_USER_TRANSCRIPT", text: event.transcript });
+        case "conversation.item.input_audio_transcription.completed": {
+          const trimmed = event.transcript.trim();
+          if (trimmed.length >= MIN_TRANSCRIPT_LENGTH) {
+            dispatch({ type: "ADD_USER_TRANSCRIPT", text: trimmed });
           }
           break;
+        }
 
         case "response.done":
           dispatch({ type: "AI_DONE" });
+          // Start post-speech cooldown: keep audio gated briefly
+          // to prevent residual echo from triggering a new response
+          clearCooldownTimer();
+          cooldownTimerRef.current = setTimeout(() => {
+            audioGatedRef.current = false;
+            cooldownTimerRef.current = null;
+          }, POST_SPEECH_COOLDOWN_MS);
           break;
 
         case "input_audio_buffer.speech_started":
@@ -437,7 +488,13 @@ export function useConversation(): UseConversationReturn {
           break;
       }
     },
-    [ws, audioOutput, state.conversationState, handleFunctionCall],
+    [
+      ws,
+      audioOutput,
+      state.conversationState,
+      handleFunctionCall,
+      clearCooldownTimer,
+    ],
   );
 
   // Register/unregister message handler
@@ -588,6 +645,11 @@ export function useConversation(): UseConversationReturn {
     }
     sessionStartTimeRef.current = null;
 
+    // Reset echo suppression state
+    clearCooldownTimer();
+    audioGatedRef.current = false;
+    bargeInCountRef.current = 0;
+
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
     const category = categoryRef.current;
@@ -720,7 +782,7 @@ export function useConversation(): UseConversationReturn {
     guidedContextRef.current = null;
     userNameRef.current = null;
     allRecordsRef.current = [];
-  }, [ws, audioInput, audioOutput]);
+  }, [ws, audioInput, audioOutput, clearCooldownTimer]);
 
   // Keep stopRef in sync with the latest stop callback
   useEffect(() => {
@@ -732,6 +794,9 @@ export function useConversation(): UseConversationReturn {
     return () => {
       if (sessionTimerRef.current !== null) {
         clearInterval(sessionTimerRef.current);
+      }
+      if (cooldownTimerRef.current !== null) {
+        clearTimeout(cooldownTimerRef.current);
       }
     };
   }, []);

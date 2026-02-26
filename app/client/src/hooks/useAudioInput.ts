@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AUDIO_SAMPLE_RATE, AUDIO_BUFFER_SIZE } from "../lib/constants";
 import { float32ToPcm16, arrayBufferToBase64 } from "../lib/audio";
 
-/** Callback invoked with a base64-encoded PCM16 audio chunk. */
-type AudioChunkCallback = (base64: string) => void;
+/** Callback invoked with a base64-encoded PCM16 audio chunk and its RMS level. */
+type AudioChunkCallback = (base64: string, rmsLevel: number) => void;
 
 interface UseAudioInputProps {
   /** Called for each captured audio chunk (base64-encoded PCM16). */
@@ -178,7 +178,7 @@ export function useAudioInput({
       // Convert Float32 -> PCM16 -> base64 and deliver
       const pcm16Buffer = float32ToPcm16(inputData);
       const base64 = arrayBufferToBase64(pcm16Buffer);
-      onAudioChunkRef.current(base64);
+      onAudioChunkRef.current(base64, rms);
     };
 
     // Connect the processing graph: microphone -> processor -> destination

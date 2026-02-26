@@ -16,6 +16,16 @@ export const RECONNECT_MAX_DELAY_MS = 10000;
 export const AUDIO_SAMPLE_RATE = 24000;
 export const AUDIO_BUFFER_SIZE = 4096;
 
+// --- Echo suppression settings ---
+/** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
+export const POST_SPEECH_COOLDOWN_MS = 1500;
+/** Minimum character count for a user transcript to be considered valid input. */
+export const MIN_TRANSCRIPT_LENGTH = 2;
+/** RMS threshold for barge-in detection during AI speech. */
+export const BARGE_IN_RMS_THRESHOLD = 0.15;
+/** Number of consecutive audio chunks above RMS threshold to confirm barge-in. */
+export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
+
 // OpenAI Realtime API session config (voice is set dynamically per character)
 export const SESSION_CONFIG = {
   modalities: ["text", "audio"] as Array<"text" | "audio">,
@@ -24,9 +34,9 @@ export const SESSION_CONFIG = {
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
-    threshold: 0.5,
+    threshold: 0.7, // raised from 0.5 for mobile noise rejection
     prefix_padding_ms: 300,
-    silence_duration_ms: 1000, // generous pause for natural conversation
+    silence_duration_ms: 1200, // raised from 1000 for natural pauses
   },
   temperature: 0.7,
 } as const;
