@@ -8,7 +8,10 @@ import {
   incrementDailySession,
   getRemainingSessionCount,
 } from "../lib/usage-tracker";
+import { getSessionQuota } from "../lib/api";
 import { useConversation } from "../hooks/useConversation";
+
+import type { SessionQuota } from "../lib/api";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiOrb } from "./AiOrb";
 import { ErrorDisplay } from "./ErrorDisplay";
@@ -59,6 +62,7 @@ export function ConversationScreen({
 
   const [isStarting, setIsStarting] = useState(false);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  const [serverQuota, setServerQuota] = useState<SessionQuota | null>(null);
 
   // Track active character during conversation
   const activeCharacterRef = useRef<CharacterId | null>(null);
@@ -70,9 +74,28 @@ export function ConversationScreen({
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, pendingAssistantText]);
 
+  // Fetch server-sourced session quota on mount and after each session ends
+  useEffect(() => {
+    if (state === "idle" && summaryStatus !== "pending") {
+      getSessionQuota()
+        .then((quota) => {
+          setServerQuota(quota);
+          if (!quota.canStart) {
+            setDailyLimitReached(true);
+          }
+        })
+        .catch(() => {
+          // Fall back to localStorage if server is unavailable
+          setServerQuota(null);
+        });
+    }
+  }, [state, summaryStatus]);
+
   const handleQuickStart = useCallback((): void => {
-    // Check daily session limit before starting
-    if (!canStartSession()) {
+    // Check server quota first, fall back to localStorage
+    const canStart =
+      serverQuota !== null ? serverQuota.canStart : canStartSession();
+    if (!canStart) {
       setDailyLimitReached(true);
       return;
     }
@@ -83,6 +106,7 @@ export function ConversationScreen({
     if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
       onCategoryConsumed();
     }
+    // Keep localStorage sync for immediate UX feedback
     incrementDailySession();
     getUserProfile()
       .then((profile) => {
@@ -97,7 +121,7 @@ export function ConversationScreen({
       .finally(() => {
         setIsStarting(false);
       });
-  }, [start, initialCategory, onCategoryConsumed]);
+  }, [start, initialCategory, onCategoryConsumed, serverQuota]);
 
   // Auto-start conversation when navigating from "このテーマで話す"
   const hasAutoStarted = useRef(false);
@@ -206,7 +230,8 @@ export function ConversationScreen({
         </div>
       );
     }
-    const remaining = getRemainingSessionCount();
+    const remaining =
+      serverQuota !== null ? serverQuota.remaining : getRemainingSessionCount();
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
         <p className="text-2xl text-text-primary font-medium mb-10">

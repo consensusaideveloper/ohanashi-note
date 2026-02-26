@@ -11,6 +11,7 @@ import { conversationsRoute } from "./routes/conversations.js";
 import { profileRoute } from "./routes/profile.js";
 import { sharingRoute } from "./routes/sharing.js";
 import { audioUploadRoute } from "./routes/audio-upload.js";
+import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
@@ -112,6 +113,7 @@ app.use("/api/conversations/*", authMiddleware);
 app.use("/api/conversations", authMiddleware);
 app.use("/api/profile", authMiddleware);
 app.use("/api/summarize", authMiddleware);
+app.use("/api/session-quota", authMiddleware);
 // Note: /api/shares auth is handled per-method inside the sharing route
 // because GET /api/shares/:id is public.
 
@@ -123,6 +125,7 @@ app.route("/", conversationsRoute);
 app.route("/", profileRoute);
 app.route("/", sharingRoute);
 app.route("/", audioUploadRoute);
+app.route("/", sessionQuotaRoute);
 
 // WebSocket route via relay
 const wsRoute = createWsRoute(upgradeWebSocket);

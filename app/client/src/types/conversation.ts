@@ -5,7 +5,12 @@ export type ConversationState =
   | "ai-speaking"
   | "error";
 
-export type ErrorType = "microphone" | "network" | "aiUnavailable" | "unknown";
+export type ErrorType =
+  | "microphone"
+  | "network"
+  | "aiUnavailable"
+  | "quotaExceeded"
+  | "unknown";
 
 export interface TranscriptEntry {
   role: "user" | "assistant";

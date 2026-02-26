@@ -448,12 +448,19 @@ export function useConversation(): UseConversationReturn {
     };
   }, [ws, handleServerEvent]);
 
-  // Watch for WebSocket connection failures
+  // Watch for WebSocket connection failures and server rejection codes
   useEffect(() => {
     if (ws.status === "failed") {
-      dispatch({ type: "ERROR", errorType: "network" });
+      if (ws.lastError === "QUOTA_EXCEEDED") {
+        dispatch({ type: "ERROR", errorType: "quotaExceeded" });
+      } else if (ws.lastError === "SESSION_TIMEOUT") {
+        // Server forced timeout — trigger normal stop flow to save data
+        stopRef.current();
+      } else {
+        dispatch({ type: "ERROR", errorType: "network" });
+      }
     }
-  }, [ws.status]);
+  }, [ws.status, ws.lastError]);
 
   // Start conversation — load past context, then connect
   const start = useCallback(

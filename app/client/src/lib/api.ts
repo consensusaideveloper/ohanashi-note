@@ -71,6 +71,20 @@ export interface SummarizeResult {
   offTopicSummary: string;
 }
 
+// --- Session quota ---
+
+export interface SessionQuota {
+  maxDaily: number;
+  usedToday: number;
+  remaining: number;
+  canStart: boolean;
+}
+
+export async function getSessionQuota(): Promise<SessionQuota> {
+  const response = await fetchWithAuth("/api/session-quota");
+  return response.json() as Promise<SessionQuota>;
+}
+
 // --- Audio URL endpoints ---
 
 interface AudioDownloadUrlResponse {

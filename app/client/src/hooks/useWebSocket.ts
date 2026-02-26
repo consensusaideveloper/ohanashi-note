@@ -5,6 +5,8 @@ import {
   MAX_RECONNECT_ATTEMPTS,
   RECONNECT_BASE_DELAY_MS,
   RECONNECT_MAX_DELAY_MS,
+  WS_CLOSE_QUOTA_EXCEEDED,
+  WS_CLOSE_SESSION_TIMEOUT,
 } from "../lib/constants";
 import { getIdToken } from "../lib/auth";
 
@@ -119,9 +121,21 @@ export function useWebSocket(): UseWebSocketReturn {
       setLastError("WebSocket connection error");
     });
 
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (event: CloseEvent) => {
       isConnectingRef.current = false;
       wsRef.current = null;
+
+      // Handle server-side rejection codes — do NOT reconnect
+      if (event.code === WS_CLOSE_QUOTA_EXCEEDED) {
+        setStatus("failed");
+        setLastError("QUOTA_EXCEEDED");
+        return;
+      }
+      if (event.code === WS_CLOSE_SESSION_TIMEOUT) {
+        setStatus("failed");
+        setLastError("SESSION_TIMEOUT");
+        return;
+      }
 
       if (intentionalCloseRef.current) {
         setStatus("disconnected");

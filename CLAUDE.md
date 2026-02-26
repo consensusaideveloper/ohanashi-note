@@ -139,6 +139,11 @@ Every data-fetching hook/component must follow this pattern:
 - WebSocket connections must validate Origin header
 - Never expose HTTP status codes, API response bodies, or stack traces in user-facing UI. Use `ApiError` class to keep technical details in developer-only properties.
 
+## Session Limits
+
+- Session limits (daily count, duration) are enforced **server-side** (`server/src/lib/session-limits.ts`). Client-side limits in `client/src/lib/constants.ts` are for UX only and must be kept in sync with the server values.
+- Active sessions are tracked in-memory (`session-tracker.ts`), so a server restart resets the active count. Completed sessions persist in the DB and are unaffected.
+
 ## Git
 
 - Branch: `feature/{description}`, `fix/{description}`

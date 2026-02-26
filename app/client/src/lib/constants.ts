@@ -110,6 +110,8 @@ export const UI_MESSAGES = {
       "インターネットの接続が不安定です。しばらくしてからもう一度お試しください。",
     aiUnavailable:
       "ただいま混み合っています。少し時間をおいてからお試しください。",
+    quotaExceeded:
+      "本日の会話回数の上限に達しました。また明日お話ししましょう。",
     unknown: "うまくいきませんでした。もう一度お試しください。",
     saveFailed: "保存できませんでした。もう一度お試しください。",
     exportFailed: "データの書き出しに失敗しました。もう一度お試しください。",
@@ -132,12 +134,20 @@ export const UI_MESSAGES = {
 } as const;
 
 // --- Session limits ---
+// Note: The server (session-limits.ts) is the authoritative source for these values.
+// These client-side constants must be kept in sync with the server.
 /** Maximum session duration in milliseconds (20 minutes). */
 export const MAX_SESSION_DURATION_MS = 20 * 60 * 1000;
 /** Fraction of session time elapsed before showing the warning (85% = ~3 min left). */
 export const SESSION_WARNING_THRESHOLD = 0.85;
 /** Maximum number of conversation sessions per day. */
 export const MAX_DAILY_SESSIONS = 5;
+
+// --- WebSocket close codes (server-defined, RFC 6455 app range 4000-4999) ---
+/** Server close code: daily session quota exceeded. */
+export const WS_CLOSE_QUOTA_EXCEEDED = 4008;
+/** Server close code: session duration limit reached. */
+export const WS_CLOSE_SESSION_TIMEOUT = 4009;
 
 // --- UI timing ---
 export const RETRY_DELAY_MS = 300;
