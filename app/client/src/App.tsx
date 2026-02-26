@@ -2,12 +2,14 @@ import { Component, useState, useCallback } from "react";
 
 import { FontSizeProvider } from "./contexts/FontSizeContext";
 import { AuthProvider, useAuthContext } from "./contexts/AuthContext";
+import { UI_MESSAGES } from "./lib/constants";
 import { LoginScreen } from "./components/LoginScreen";
 import { ConversationScreen } from "./components/ConversationScreen";
 import { ConversationHistory } from "./components/ConversationHistory";
 import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type { QuestionCategory } from "./types/conversation";
@@ -104,6 +106,38 @@ function AppContent(): ReactNode {
     setScreen(detailReturnScreen);
   }, [detailReturnScreen]);
 
+  // Summarization guard state
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [showNavWarning, setShowNavWarning] = useState(false);
+  const [pendingNavTarget, setPendingNavTarget] = useState<AppScreen | null>(
+    null,
+  );
+
+  const navigateWithGuard = useCallback(
+    (target: AppScreen): void => {
+      if (isSummarizing && screen === "conversation" && target !== screen) {
+        setPendingNavTarget(target);
+        setShowNavWarning(true);
+      } else {
+        setScreen(target);
+      }
+    },
+    [isSummarizing, screen],
+  );
+
+  const handleConfirmNavigation = useCallback((): void => {
+    if (pendingNavTarget !== null) {
+      setScreen(pendingNavTarget);
+    }
+    setShowNavWarning(false);
+    setPendingNavTarget(null);
+  }, [pendingNavTarget]);
+
+  const handleCancelNavigation = useCallback((): void => {
+    setShowNavWarning(false);
+    setPendingNavTarget(null);
+  }, []);
+
   // Pending category for focused mode (from EndingNote "このテーマで話す")
   const [pendingCategory, setPendingCategory] = useState<
     QuestionCategory | undefined
@@ -123,20 +157,20 @@ function AppContent(): ReactNode {
   }, []);
 
   const handleNavigateConversation = useCallback((): void => {
-    setScreen("conversation");
-  }, []);
+    navigateWithGuard("conversation");
+  }, [navigateWithGuard]);
 
   const handleNavigateNote = useCallback((): void => {
-    setScreen("note");
-  }, []);
+    navigateWithGuard("note");
+  }, [navigateWithGuard]);
 
   const handleNavigateHistory = useCallback((): void => {
-    setScreen("history");
-  }, []);
+    navigateWithGuard("history");
+  }, [navigateWithGuard]);
 
   const handleNavigateSettings = useCallback((): void => {
-    setScreen("settings");
-  }, []);
+    navigateWithGuard("settings");
+  }, [navigateWithGuard]);
 
   const renderScreen = (): ReactNode => {
     switch (screen) {
@@ -145,6 +179,7 @@ function AppContent(): ReactNode {
           <ConversationScreen
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
+            onSummarizingChange={setIsSummarizing}
           />
         );
       case "history":
@@ -179,6 +214,7 @@ function AppContent(): ReactNode {
           <ConversationScreen
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
+            onSummarizingChange={setIsSummarizing}
           />
         );
     }
@@ -190,6 +226,17 @@ function AppContent(): ReactNode {
     <div className="min-h-dvh flex flex-col bg-bg-primary">
       {/* Main content area */}
       <div className="flex-1 flex flex-col pb-[72px]">{renderScreen()}</div>
+
+      {/* Navigation guard dialog during summarization */}
+      <ConfirmDialog
+        isOpen={showNavWarning}
+        title={UI_MESSAGES.summarizing.dialogTitle}
+        message={UI_MESSAGES.summarizing.navigationWarning}
+        confirmLabel={UI_MESSAGES.summarizing.leaveButton}
+        cancelLabel={UI_MESSAGES.summarizing.stayButton}
+        onConfirm={handleConfirmNavigation}
+        onCancel={handleCancelNavigation}
+      />
 
       {/* Tab bar - hidden when in detail view */}
       {!isTabHidden && (

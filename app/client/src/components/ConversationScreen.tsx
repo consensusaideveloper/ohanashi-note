@@ -40,11 +40,14 @@ interface ConversationScreenProps {
   initialCategory?: QuestionCategory;
   /** Called after the initialCategory has been consumed. */
   onCategoryConsumed?: () => void;
+  /** Called when summarization status changes so parent can guard navigation. */
+  onSummarizingChange?: (isSummarizing: boolean) => void;
 }
 
 export function ConversationScreen({
   initialCategory,
   onCategoryConsumed,
+  onSummarizingChange,
 }: ConversationScreenProps): ReactNode {
   const {
     state,
@@ -73,6 +76,29 @@ export function ConversationScreen({
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, pendingAssistantText]);
+
+  // Notify parent when summarization status changes
+  useEffect(() => {
+    onSummarizingChange?.(summaryStatus === "pending");
+  }, [summaryStatus, onSummarizingChange]);
+
+  // Warn before closing browser tab during active conversation or summarization
+  useEffect(() => {
+    const shouldGuard =
+      summaryStatus === "pending" || (state !== "idle" && state !== "error");
+    if (!shouldGuard) {
+      return;
+    }
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent): void => {
+      e.preventDefault();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [state, summaryStatus]);
 
   // Fetch server-sourced session quota on mount and after each session ends
   useEffect(() => {

@@ -15,6 +15,9 @@ import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
+
+// Start pending summary recovery (side-effect import starts the interval)
+import "./lib/pending-summary-recovery.js";
 import { checkRateLimit } from "./lib/rate-limiter.js";
 import { authMiddleware } from "./middleware/auth.js";
 

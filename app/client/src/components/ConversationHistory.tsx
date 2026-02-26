@@ -454,6 +454,16 @@ export function ConversationHistory({
                           />
                         </svg>
                       )}
+                      {record.summaryStatus === "pending" && (
+                        <span className="text-base text-accent-primary animate-pulse">
+                          {UI_MESSAGES.summarizing.pendingBadge}
+                        </span>
+                      )}
+                      {record.summaryStatus === "failed" && (
+                        <span className="text-base text-error">
+                          {UI_MESSAGES.summarizing.failedBadge}
+                        </span>
+                      )}
                     </div>
                     <p className="text-lg text-text-secondary mt-1 truncate">
                       {getCardSummary(record)}

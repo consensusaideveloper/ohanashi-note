@@ -58,6 +58,10 @@ export const conversations = pgTable(
     index("idx_conversations_user").on(table.userId),
     index("idx_conversations_user_started").on(table.userId, table.startedAt),
     index("idx_conversations_user_category").on(table.userId, table.category),
+    index("idx_conversations_summary_status").on(
+      table.summaryStatus,
+      table.createdAt,
+    ),
   ],
 );
 

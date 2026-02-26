@@ -135,6 +135,15 @@ export const UI_MESSAGES = {
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
   dailyLimitReached:
     "本日の会話回数の上限に達しました。また明日お話ししましょう。",
+  summarizing: {
+    dialogTitle: "まとめ作成中です",
+    navigationWarning:
+      "お話のまとめを作成中です。このままお待ちいただくと、まとめが完了したらお知らせします。\n移動してもお話の内容は保存されていますのでご安心ください。",
+    stayButton: "ここで待つ",
+    leaveButton: "移動する",
+    pendingBadge: "まとめ中...",
+    failedBadge: "まとめ失敗",
+  },
   buttons: {
     start: "お話しを始める",
     stop: "お話しを終える",
