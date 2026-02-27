@@ -21,7 +21,7 @@ import {
   WS_CLOSE_SESSION_TIMEOUT,
 } from "../lib/session-limits.js";
 import { db } from "../db/connection.js";
-import { noteLifecycle } from "../db/schema.js";
+import { noteLifecycle, users } from "../db/schema.js";
 
 import type { UpgradeWebSocket } from "hono/ws";
 import type { WebSocket as NodeWebSocket } from "ws";
@@ -103,6 +103,8 @@ export function createWsRoute(
       const clientIp = getClientIpFromHeaders(c.req.raw.headers);
       // Capture the Firebase UID set by the auth middleware
       const firebaseUid = c.get("firebaseUid") as string | undefined;
+      // Check if this is an onboarding session (skip quota/tracking)
+      const onboardingRequested = c.req.query("onboarding") === "true";
       let sessionKey: string | null = null;
 
       /** Clean up session tracking and relay on disconnect. */
@@ -119,7 +121,10 @@ export function createWsRoute(
 
       return {
         onOpen(_event, ws): void {
-          logger.info("WebSocket client connected", { ip: clientIp });
+          logger.info("WebSocket client connected", {
+            ip: clientIp,
+            onboarding: onboardingRequested,
+          });
           trackConnect(clientIp);
 
           // Async quota check and relay creation wrapped in IIFE.
@@ -129,18 +134,32 @@ export function createWsRoute(
             // --- User identification & quota check ---
             if (firebaseUid !== undefined) {
               const userId = await resolveUserId(firebaseUid);
-              const quota = await getSessionQuota(userId);
 
-              if (!quota.canStart) {
-                logger.warn("Daily session quota exceeded", {
-                  userId,
-                  usedToday: quota.usedToday,
+              // Verify onboarding eligibility: user name must be empty
+              let isOnboarding = false;
+              if (onboardingRequested) {
+                const userRow = await db.query.users.findFirst({
+                  where: eq(users.id, userId),
+                  columns: { name: true },
                 });
-                ws.close(
-                  WS_CLOSE_QUOTA_EXCEEDED,
-                  JSON.stringify({ code: "DAILY_QUOTA_EXCEEDED" }),
-                );
-                return;
+                isOnboarding = userRow !== undefined && userRow.name === "";
+              }
+
+              // Skip quota check for onboarding sessions
+              if (!isOnboarding) {
+                const quota = await getSessionQuota(userId);
+
+                if (!quota.canStart) {
+                  logger.warn("Daily session quota exceeded", {
+                    userId,
+                    usedToday: quota.usedToday,
+                  });
+                  ws.close(
+                    WS_CLOSE_QUOTA_EXCEEDED,
+                    JSON.stringify({ code: "DAILY_QUOTA_EXCEEDED" }),
+                  );
+                  return;
+                }
               }
 
               // --- Lifecycle status check ---
@@ -160,23 +179,26 @@ export function createWsRoute(
                 return;
               }
 
-              // --- Server-side session timeout ---
-              const totalTimeoutMs =
-                MAX_SESSION_DURATION_MS + SESSION_GRACE_PERIOD_MS;
-              const timeoutId = setTimeout(() => {
-                logger.info("Session timeout reached, force-closing relay", {
-                  userId,
-                  sessionKey,
-                });
-                ws.close(
-                  WS_CLOSE_SESSION_TIMEOUT,
-                  JSON.stringify({ code: "SESSION_TIMEOUT" }),
-                );
-                cleanupSession();
-              }, totalTimeoutMs);
+              // Skip session tracking and timeout for onboarding sessions
+              if (!isOnboarding) {
+                // --- Server-side session timeout ---
+                const totalTimeoutMs =
+                  MAX_SESSION_DURATION_MS + SESSION_GRACE_PERIOD_MS;
+                const timeoutId = setTimeout(() => {
+                  logger.info("Session timeout reached, force-closing relay", {
+                    userId,
+                    sessionKey,
+                  });
+                  ws.close(
+                    WS_CLOSE_SESSION_TIMEOUT,
+                    JSON.stringify({ code: "SESSION_TIMEOUT" }),
+                  );
+                  cleanupSession();
+                }, totalTimeoutMs);
 
-              // --- Track active session ---
-              sessionKey = trackSessionStart(userId, timeoutId);
+                // --- Track active session ---
+                sessionKey = trackSessionStart(userId, timeoutId);
+              }
             }
 
             // --- Create relay to OpenAI ---

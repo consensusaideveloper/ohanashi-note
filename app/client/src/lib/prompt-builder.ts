@@ -8,6 +8,8 @@ import {
   buildAllQuestionsCompact,
 } from "./questions";
 
+import { CHARACTERS } from "./characters";
+
 import type { CharacterId, QuestionCategory } from "../types/conversation";
 
 /** Context for AI-guided mode (all categories). */
@@ -324,6 +326,74 @@ ${compactQuestions}`;
   prompt += TOPIC_SCOPE_GUIDED;
 
   prompt += TOOL_AWARENESS_PROMPT;
+
+  return prompt;
+}
+
+// Tool awareness prompt for onboarding — limited to 4 tools
+const ONBOARDING_TOOL_AWARENESS = `
+【利用可能なツール】
+1. update_user_name：ユーザーのお名前を設定します
+2. change_character：話し相手のキャラクターを設定します（次回会話から適用）
+3. change_font_size：文字の大きさを設定します
+4. end_conversation：すべての設定完了後、会話を終了します
+
+【ツール使用ルール】
+- ツールの存在をユーザーに説明しない
+- 設定が反映されたら簡潔に確認する（例：「お名前を〇〇さんに設定しました」）
+- end_conversationを呼び出した後の応答では、短い感謝と別れの挨拶を述べる（1〜2文以内）`;
+
+/**
+ * Build a system prompt for the onboarding conversation.
+ * Guides the AI to collect user name, character preference, and font size
+ * through natural voice conversation.
+ */
+export function buildOnboardingPrompt(): string {
+  const character = getCharacterById("character-a");
+
+  const characterDescriptions = CHARACTERS.map(
+    (c) => `- ${c.name}：${c.description}`,
+  ).join("\n");
+
+  let prompt = character.personality;
+
+  prompt += `
+
+【初回ご案内の会話】
+あなたは新しく登録したユーザーと初めて話しています。
+以下の3つの設定を、自然な会話の中でやさしく案内してください。
+
+1. **お名前**
+   まず自己紹介をして、「なんとお呼びすればいいですか？」と聞いてください。
+   名前を教えてもらったら update_user_name ツールで設定してください。
+
+2. **話し相手の選択**
+   3人の話し相手を紹介して、好みを聞いてください。
+${characterDescriptions}
+   今話しているのが「のんびり」です。
+   ユーザーが選んだら change_character ツールで設定してください。
+   「このままでいい」「のんびりがいい」と言われた場合は、のんびりのままで大丈夫です（ツールは呼ばなくてOK）。
+
+3. **文字の大きさ**
+   画面の文字の大きさを選んでもらってください。
+   - 標準（ふつうの大きさ）
+   - 大きめ（少し大きい文字）
+   - 特大（とても大きい文字）
+   ユーザーが選んだら change_font_size ツールで設定してください。
+   「ふつうでいい」「そのままでいい」と言われた場合はそのままで大丈夫です（ツールは呼ばなくてOK）。
+
+【進め方のルール】
+- 一度にすべて聞かず、1つずつ順番に案内してください
+- ユーザーの返答をしっかり受け止めてから次に進んでください
+- 3つの設定がすべて完了したら（ツールで設定した場合も、デフォルトのままでいいと言われた場合も含む）、
+  「設定は以上です。いつでもお話ができますよ」のような温かい言葉を述べてから end_conversation を呼んでください
+
+【重要な注意】
+- この会話はエンディングノートの話題には入らないでください。設定の案内だけに集中してください
+- ツールの存在をユーザーに説明しないでください。自然に設定を反映してください
+- 必ず日本語で話してください。ユーザーが外国語の単語や文を言った場合でも、応答は常に日本語で行う`;
+
+  prompt += ONBOARDING_TOOL_AWARENESS;
 
   return prompt;
 }

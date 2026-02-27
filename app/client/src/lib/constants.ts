@@ -648,6 +648,27 @@ export const ONBOARDING_MESSAGES = {
   saveFailed: "保存できませんでした。もう一度お試しください。",
 } as const;
 
+// --- Onboarding conversation ---
+/** Tool names used during the onboarding conversation. */
+const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "update_user_name",
+  "change_character",
+  "change_font_size",
+  "end_conversation",
+]);
+
+/** Subset of REALTIME_TOOLS for the onboarding conversation. */
+export const ONBOARDING_TOOLS = REALTIME_TOOLS.filter((t) =>
+  ONBOARDING_TOOL_NAMES.has(t.name),
+);
+
+export const ONBOARDING_CONVERSATION_MESSAGES = {
+  title: "みどりさんがご案内します",
+  subtitle: "マイクを使って会話しながら設定を行います",
+  startButton: "会話をはじめる",
+  reconnectPrompt: "接続が切れました。もう一度お試しください。",
+} as const;
+
 // --- Settings screen messages (Japanese) ---
 export const SETTINGS_MESSAGES = {
   profile: {

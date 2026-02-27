@@ -16,9 +16,15 @@ import type { WebSocketStatus } from "../types/conversation";
 /** Handler invoked when a parsed ServerEvent is received. */
 type MessageHandler = (event: ServerEvent) => void;
 
+/** Options for `connect()`. */
+export interface ConnectOptions {
+  /** When true, appends `onboarding=true` to the WebSocket URL to skip session limits. */
+  onboarding?: boolean;
+}
+
 interface UseWebSocketReturn {
   /** Open the WebSocket connection. */
-  connect: () => void;
+  connect: (options?: ConnectOptions) => void;
   /** Close the WebSocket connection (no auto-reconnect). */
   disconnect: () => void;
   /** Send a client event to the server. */
@@ -52,6 +58,8 @@ export function useWebSocket(): UseWebSocketReturn {
   const intentionalCloseRef = useRef(false);
   // Prevent connecting while already connecting or connected
   const isConnectingRef = useRef(false);
+  // When true, appends onboarding=true to WebSocket URL
+  const onboardingRef = useRef(false);
 
   const clearReconnectTimer = useCallback((): void => {
     if (reconnectTimerRef.current !== null) {
@@ -182,18 +190,22 @@ export function useWebSocket(): UseWebSocketReturn {
     setLastError(null);
 
     // Get Firebase auth token and append to WebSocket URL for authentication
+    const onboardingSuffix = onboardingRef.current ? "&onboarding=true" : "";
     getIdToken()
       .then((token) => {
         if (!isConnectingRef.current) return;
         const url =
           token !== null
-            ? `${WS_URL}?token=${encodeURIComponent(token)}`
-            : WS_URL;
+            ? `${WS_URL}?token=${encodeURIComponent(token)}${onboardingSuffix}`
+            : `${WS_URL}${onboardingSuffix.replace("&", "?")}`;
         openWebSocket(url);
       })
       .catch(() => {
         if (!isConnectingRef.current) return;
-        openWebSocket(WS_URL);
+        const url = onboardingRef.current
+          ? `${WS_URL}?onboarding=true`
+          : WS_URL;
+        openWebSocket(url);
       });
   }, [clearReconnectTimer, openWebSocket]);
 
@@ -202,11 +214,15 @@ export function useWebSocket(): UseWebSocketReturn {
     connectInternalRef.current = connectInternal;
   }, [connectInternal]);
 
-  const connect = useCallback((): void => {
-    intentionalCloseRef.current = false;
-    reconnectAttemptRef.current = 0;
-    connectInternal();
-  }, [connectInternal]);
+  const connect = useCallback(
+    (options?: ConnectOptions): void => {
+      onboardingRef.current = options?.onboarding ?? false;
+      intentionalCloseRef.current = false;
+      reconnectAttemptRef.current = 0;
+      connectInternal();
+    },
+    [connectInternal],
+  );
 
   const disconnect = useCallback((): void => {
     intentionalCloseRef.current = true;

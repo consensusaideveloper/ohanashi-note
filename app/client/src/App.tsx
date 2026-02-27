@@ -24,7 +24,7 @@ import {
 } from "./lib/pendingInvite";
 import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
-import { NewUserOnboarding } from "./components/NewUserOnboarding";
+import { OnboardingConversation } from "./components/OnboardingConversation";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
 import { CreatorLifecycleBanner } from "./components/CreatorLifecycleBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
@@ -192,9 +192,9 @@ function AuthGate(): ReactNode {
     );
   }
 
-  // Show onboarding screen for new users
+  // Show onboarding conversation for new users
   if (needsOnboarding) {
-    return <NewUserOnboarding onComplete={handleOnboardingComplete} />;
+    return <OnboardingConversation onComplete={handleOnboardingComplete} />;
   }
 
   return (

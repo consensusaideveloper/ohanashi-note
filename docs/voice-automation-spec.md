@@ -387,9 +387,45 @@ AI: 「お金のことも気になりますよね。どんなことが心配で�
 - 1日最大5回の会話セッション
 - 1セッション最大20分
 - これらはサーバー側で強制（クライアント側はUX表示のみ）
+- オンボーディング会話はセッション上限にカウントされない（下記参照）
 
 ### セキュリティ
 
 - パスワード・暗証番号・カード番号・口座番号はAIが絶対に聞かない（プロンプトで制約）
 - 機密情報を言いそうになったらAIがやんわり止める
 - 全ツール呼び出しの結果は OpenAI に JSON で返却されるが、機密情報は含まれない
+
+## オンボーディング会話フロー
+
+新規ユーザー（`profile.name === ""`）に対して、フォーム入力ではなく音声会話でセットアップを行う。
+
+### 使用ツール
+
+| ツール | 用途 | Tier |
+|--------|------|------|
+| `update_user_name` | ユーザー名の設定 | Tier 1 |
+| `change_character` | キャラクター選択 | Tier 1 |
+| `change_font_size` | 文字サイズ選択 | Tier 1 |
+| `end_conversation` | 全設定完了後の会話終了 | Lifecycle |
+
+### フロー
+
+1. のんびり（character-a, voice: shimmer）がデフォルトキャラクターとして自己紹介
+2. お名前を聞いて `update_user_name` で設定
+3. 3キャラクター（のんびり/しっかり/にこにこ）を紹介し選択 → `change_character` で設定
+4. 文字サイズの好み（標準/大きめ/特大）を確認 → `change_font_size` で設定
+5. `end_conversation` で会話終了 → メインアプリへ遷移
+
+### セッション制限免除
+
+- オンボーディング会話はデイリーセッション上限にカウントされない
+- WebSocket接続時に `onboarding=true` クエリパラメータを付与
+- サーバー側でユーザーの `name === ""` を検証し、正規のオンボーディングのみ免除
+
+### 関連ファイル
+
+- `client/src/hooks/useOnboardingConversation.ts` — オンボーディング専用会話フック
+- `client/src/components/OnboardingConversation.tsx` — オンボーディングUI
+- `client/src/lib/prompt-builder.ts` — `buildOnboardingPrompt()` 関数
+- `client/src/lib/constants.ts` — `ONBOARDING_TOOLS`, `ONBOARDING_CONVERSATION_MESSAGES`
+- `server/src/routes/ws.ts` — オンボーディング接続のセッション制限免除
