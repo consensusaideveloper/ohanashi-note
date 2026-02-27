@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-import { UI_MESSAGES } from "../lib/constants";
+import { UI_MESSAGES, INVITE_SHARE_MESSAGES } from "../lib/constants";
 import { createInvitation } from "../lib/family-api";
 import { RelationshipPicker } from "./RelationshipPicker";
 
@@ -26,6 +26,7 @@ export function FamilyInviteDialog({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -48,6 +49,7 @@ export function FamilyInviteDialog({
       setIsCreating(false);
       setError("");
       setCopied(false);
+      setShared(false);
     }
   }, [isOpen]);
 
@@ -97,10 +99,28 @@ export function FamilyInviteDialog({
       });
   }, [relationship, relationshipLabel, isRepresentative, onInviteCreated]);
 
-  const handleCopy = useCallback((): void => {
-    void navigator.clipboard.writeText(inviteUrl).then(() => {
-      setCopied(true);
-    });
+  const handleShare = useCallback((): void => {
+    if (typeof navigator.share === "function") {
+      void navigator
+        .share({
+          title: INVITE_SHARE_MESSAGES.shareTitle,
+          text: INVITE_SHARE_MESSAGES.shareText,
+          url: inviteUrl,
+        })
+        .then(() => {
+          setShared(true);
+        })
+        .catch((err: unknown) => {
+          // User cancelled the share dialog — not an error
+          if (err instanceof Error && err.name === "AbortError") return;
+          console.error("Failed to share invitation:", { error: err });
+        });
+    } else {
+      // Fallback: copy to clipboard on desktop/unsupported browsers
+      void navigator.clipboard.writeText(inviteUrl).then(() => {
+        setCopied(true);
+      });
+    }
   }, [inviteUrl]);
 
   const handleClose = useCallback((): void => {
@@ -192,28 +212,70 @@ export function FamilyInviteDialog({
           </>
         ) : (
           <>
+            <div className="flex items-center gap-3 rounded-card bg-accent-secondary/10 p-4">
+              {/* Checkmark icon */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 flex-none text-accent-secondary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <p className="text-lg text-text-primary">
+                {INVITE_SHARE_MESSAGES.created}
+              </p>
+            </div>
+
             <p className="text-lg text-text-secondary">
-              以下のリンクをご家族に共有してください。
+              {INVITE_SHARE_MESSAGES.instruction}
             </p>
-            <div className="rounded-card border border-border-light bg-bg-primary p-3 break-all text-base text-text-primary">
-              {inviteUrl}
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary transition-colors active:bg-bg-surface-hover"
-                onClick={handleClose}
-              >
-                閉じる
-              </button>
-              <button
-                type="button"
-                className="flex-1 min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg transition-colors"
-                onClick={handleCopy}
-              >
-                {copied ? "コピーしました" : "コピー"}
-              </button>
-            </div>
+
+            {/* Primary action: Share or Copy */}
+            <button
+              type="button"
+              className="w-full min-h-12 rounded-full bg-accent-primary text-text-on-accent text-lg flex items-center justify-center gap-2 transition-colors active:opacity-90"
+              onClick={handleShare}
+            >
+              {shared ? (
+                INVITE_SHARE_MESSAGES.shared
+              ) : copied ? (
+                INVITE_SHARE_MESSAGES.copied
+              ) : (
+                <>
+                  {/* Share icon */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z"
+                    />
+                  </svg>
+                  {INVITE_SHARE_MESSAGES.shareButton}
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="w-full min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary transition-colors active:bg-bg-surface-hover"
+              onClick={handleClose}
+            >
+              {INVITE_SHARE_MESSAGES.closeButton}
+            </button>
           </>
         )}
       </div>
