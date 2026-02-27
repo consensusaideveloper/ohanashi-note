@@ -1,13 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { useAuthContext } from "../contexts/AuthContext";
 import { LOGIN_MESSAGES } from "../lib/constants";
+import { getInvitationPreview } from "../lib/family-api";
 
+import type { InvitationPreview } from "../lib/family-api";
 import type { ReactNode } from "react";
 
-export function LoginScreen(): ReactNode {
+interface LoginScreenProps {
+  inviteToken?: string | null;
+}
+
+export function LoginScreen({ inviteToken }: LoginScreenProps): ReactNode {
   const { handleSignIn, error } = useAuthContext();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [preview, setPreview] = useState<InvitationPreview | null>(null);
+
+  const isInviteMode = inviteToken !== null && inviteToken !== undefined;
+
+  useEffect(() => {
+    if (inviteToken !== null && inviteToken !== undefined) {
+      void getInvitationPreview(inviteToken).then(setPreview);
+    }
+  }, [inviteToken]);
 
   const handleClickSignIn = (): void => {
     setIsSigningIn(true);
@@ -41,9 +56,28 @@ export function LoginScreen(): ReactNode {
         <h1 className="text-2xl md:text-3xl font-bold text-text-primary">
           おはなし
         </h1>
-        <p className="text-lg text-text-secondary text-center leading-relaxed whitespace-pre-line">
-          {LOGIN_MESSAGES.subtitle}
-        </p>
+
+        {isInviteMode ? (
+          <>
+            <p className="text-xl text-text-primary text-center leading-relaxed whitespace-pre-line font-medium">
+              {preview?.valid === true &&
+              preview.creatorName !== undefined &&
+              preview.creatorName !== ""
+                ? `${preview.creatorName}${LOGIN_MESSAGES.inviteFrom}`
+                : LOGIN_MESSAGES.inviteGeneric}
+            </p>
+            <p className="text-lg text-text-secondary text-center leading-relaxed whitespace-pre-line">
+              {LOGIN_MESSAGES.inviteDescription}
+            </p>
+            <p className="text-lg text-accent-primary text-center font-medium">
+              {LOGIN_MESSAGES.inviteLoginPrompt}
+            </p>
+          </>
+        ) : (
+          <p className="text-lg text-text-secondary text-center leading-relaxed whitespace-pre-line">
+            {LOGIN_MESSAGES.subtitle}
+          </p>
+        )}
       </div>
 
       {/* Sign in button */}

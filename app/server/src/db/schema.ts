@@ -135,6 +135,7 @@ export const noteLifecycle = pgTable("note_lifecycle", {
   deathReportedBy: uuid("death_reported_by").references(() => users.id),
   consentInitiatedBy: uuid("consent_initiated_by").references(() => users.id),
   openedAt: timestamp("opened_at", tz),
+  deletionStatus: text("deletion_status"),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
 });
@@ -158,6 +159,31 @@ export const consentRecords = pgTable(
   (table) => [
     index("idx_consent_lifecycle").on(table.lifecycleId),
     unique("uq_consent_lifecycle_member").on(
+      table.lifecycleId,
+      table.familyMemberId,
+    ),
+  ],
+);
+
+// --- Deletion Consent Records ---
+
+export const deletionConsentRecords = pgTable(
+  "deletion_consent_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifecycleId: uuid("lifecycle_id")
+      .notNull()
+      .references(() => noteLifecycle.id, { onDelete: "cascade" }),
+    familyMemberId: uuid("family_member_id")
+      .notNull()
+      .references(() => familyMembers.id, { onDelete: "cascade" }),
+    consented: boolean("consented"),
+    consentedAt: timestamp("consented_at", tz),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_deletion_consent_lifecycle").on(table.lifecycleId),
+    unique("uq_deletion_consent_lifecycle_member").on(
       table.lifecycleId,
       table.familyMemberId,
     ),
@@ -256,5 +282,104 @@ export const categoryAccess = pgTable(
       table.familyMemberId,
       table.categoryId,
     ),
+  ],
+);
+
+// --- Todos ---
+
+export const todos = pgTable(
+  "todos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifecycleId: uuid("lifecycle_id")
+      .notNull()
+      .references(() => noteLifecycle.id, { onDelete: "cascade" }),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    sourceCategory: text("source_category"),
+    sourceQuestionId: text("source_question_id"),
+    sourceAnswer: text("source_answer"),
+    assigneeId: uuid("assignee_id").references(() => familyMembers.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("pending"),
+    priority: text("priority").notNull().default("medium"),
+    dueDate: timestamp("due_date", tz),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    completedAt: timestamp("completed_at", tz),
+    completedBy: uuid("completed_by").references(() => users.id),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_todos_lifecycle").on(table.lifecycleId),
+    index("idx_todos_creator").on(table.creatorId),
+    index("idx_todos_assignee").on(table.assigneeId),
+    index("idx_todos_status").on(table.status),
+  ],
+);
+
+// --- Todo Comments ---
+
+export const todoComments = pgTable(
+  "todo_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    todoId: uuid("todo_id")
+      .notNull()
+      .references(() => todos.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [index("idx_todo_comments_todo").on(table.todoId)],
+);
+
+// --- Todo History ---
+
+export const todoHistory = pgTable(
+  "todo_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    todoId: uuid("todo_id")
+      .notNull()
+      .references(() => todos.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    performedBy: uuid("performed_by")
+      .notNull()
+      .references(() => users.id),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [index("idx_todo_history_todo").on(table.todoId)],
+);
+
+// --- Todo Visibility (per-item hiding for specific members) ---
+
+export const todoVisibility = pgTable(
+  "todo_visibility",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    todoId: uuid("todo_id")
+      .notNull()
+      .references(() => todos.id, { onDelete: "cascade" }),
+    familyMemberId: uuid("family_member_id")
+      .notNull()
+      .references(() => familyMembers.id, { onDelete: "cascade" }),
+    hiddenBy: uuid("hidden_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_todo_visibility_todo").on(table.todoId),
+    unique("uq_todo_visibility").on(table.todoId, table.familyMemberId),
   ],
 );

@@ -25,3 +25,11 @@ const adminAuth: Auth = getAuth(adminApp);
 export async function verifyIdToken(idToken: string): Promise<DecodedIdToken> {
   return adminAuth.verifyIdToken(idToken);
 }
+
+/**
+ * Delete a Firebase Auth user by their UID.
+ * Used for account deletion cascade.
+ */
+export async function deleteFirebaseUser(uid: string): Promise<void> {
+  await adminAuth.deleteUser(uid);
+}

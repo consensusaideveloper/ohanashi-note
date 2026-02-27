@@ -368,3 +368,88 @@ export async function getAccessPresetRecommendations(
   );
   return response.json() as Promise<AccessPresetRecommendation[]>;
 }
+
+// --- Data Deletion Consent API ---
+
+export interface DeletionConsentRecord {
+  memberName: string;
+  consented: boolean | null;
+  consentedAt: string | null;
+}
+
+export interface DeletionConsentStatus {
+  deletionStatus: string | null;
+  records: DeletionConsentRecord[];
+  myConsent: {
+    consented: boolean | null;
+    consentedAt: string | null;
+  } | null;
+  totalCount: number;
+  consentedCount: number;
+  allConsented: boolean;
+}
+
+/** Initiate data deletion consent process (representative only). */
+export async function initiateDataDeletion(creatorId: string): Promise<void> {
+  await fetchWithAuth(`/api/lifecycle/${creatorId}/initiate-data-deletion`, {
+    method: "POST",
+  });
+}
+
+/** Submit deletion consent decision. */
+export async function submitDeletionConsent(
+  creatorId: string,
+  consented: boolean,
+): Promise<{ consented: boolean; deletionExecuted: boolean }> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/deletion-consent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consented }),
+    },
+  );
+  return response.json() as Promise<{
+    consented: boolean;
+    deletionExecuted: boolean;
+  }>;
+}
+
+/** Cancel data deletion process (representative only). */
+export async function cancelDataDeletion(creatorId: string): Promise<void> {
+  await fetchWithAuth(`/api/lifecycle/${creatorId}/cancel-data-deletion`, {
+    method: "POST",
+  });
+}
+
+/** Get deletion consent status. */
+export async function getDeletionConsentStatus(
+  creatorId: string,
+): Promise<DeletionConsentStatus> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/deletion-consent-status`,
+  );
+  return response.json() as Promise<DeletionConsentStatus>;
+}
+
+// --- Invitation Preview API (public, no auth) ---
+
+export interface InvitationPreview {
+  valid: boolean;
+  creatorName?: string;
+}
+
+/** Fetch invitation preview without authentication (public endpoint). */
+export async function getInvitationPreview(
+  token: string,
+): Promise<InvitationPreview> {
+  try {
+    const response = await fetch(`/api/public/invite/${token}/preview`);
+    if (!response.ok) {
+      return { valid: false };
+    }
+    return (await response.json()) as InvitationPreview;
+  } catch {
+    return { valid: false };
+  }
+}

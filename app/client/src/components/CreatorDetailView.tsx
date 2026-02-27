@@ -27,6 +27,7 @@ interface CreatorDetailViewProps {
   connection: FamilyConnection;
   onBack: () => void;
   onViewNote: (creatorId: string, creatorName: string) => void;
+  onViewTodos: (creatorId: string, creatorName: string) => void;
   onLeave: (creatorId: string) => void;
 }
 
@@ -34,6 +35,7 @@ export function CreatorDetailView({
   connection,
   onBack,
   onViewNote,
+  onViewTodos,
   onLeave,
 }: CreatorDetailViewProps): ReactNode {
   const [lifecycleStatus, setLifecycleStatus] = useState(
@@ -149,6 +151,11 @@ export function CreatorDetailView({
   const handleViewNote = useCallback((): void => {
     onViewNote(connection.creatorId, connection.creatorName);
   }, [onViewNote, connection.creatorId, connection.creatorName]);
+
+  // --- View todos handler ---
+  const handleViewTodos = useCallback((): void => {
+    onViewTodos(connection.creatorId, connection.creatorName);
+  }, [onViewTodos, connection.creatorId, connection.creatorName]);
 
   // --- Leave handlers ---
   const handleOpenLeave = useCallback((): void => {
@@ -303,7 +310,7 @@ export function CreatorDetailView({
                 </section>
               )}
 
-              {/* Opened: view note and access management */}
+              {/* Opened: view note, todos, and access management */}
               {isOpened && (
                 <section className="space-y-3">
                   <button
@@ -312,6 +319,13 @@ export function CreatorDetailView({
                     onClick={handleViewNote}
                   >
                     {UI_MESSAGES.family.viewNoteButton}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full min-h-11 rounded-full border border-accent-secondary text-accent-secondary bg-bg-surface text-lg transition-colors active:bg-success-light"
+                    onClick={handleViewTodos}
+                  >
+                    {UI_MESSAGES.todo.pageTitle}
                   </button>
                 </section>
               )}

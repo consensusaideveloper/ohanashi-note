@@ -4,6 +4,7 @@ import { db } from "../db/connection.js";
 import {
   familyMembers,
   lifecycleActionLog,
+  noteLifecycle,
   notifications,
   users,
 } from "../db/schema.js";
@@ -69,6 +70,37 @@ export async function notifyFamilyMembers(
   }));
 
   await db.insert(notifications).values(values);
+}
+
+// --- Lifecycle status helpers ---
+
+/** Lifecycle statuses that block data deletion and modification. */
+const DELETION_BLOCKED_STATUSES = new Set([
+  "death_reported",
+  "consent_gathering",
+  "opened",
+]);
+
+/**
+ * Retrieve the lifecycle status for a creator.
+ * Returns "active" when no lifecycle record exists (default state).
+ */
+export async function getCreatorLifecycleStatus(
+  creatorId: string,
+): Promise<string> {
+  const lifecycle = await db.query.noteLifecycle.findFirst({
+    where: eq(noteLifecycle.creatorId, creatorId),
+    columns: { status: true },
+  });
+  return lifecycle?.status ?? "active";
+}
+
+/**
+ * Returns true if the creator's data is protected from deletion/modification.
+ * Data is protected when status is "death_reported", "consent_gathering", or "opened".
+ */
+export function isDeletionBlocked(lifecycleStatus: string): boolean {
+  return DELETION_BLOCKED_STATUSES.has(lifecycleStatus);
 }
 
 // --- Audit logging ---

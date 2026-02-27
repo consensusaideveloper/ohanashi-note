@@ -6,6 +6,7 @@ import {
   exportAllData,
   importAllData,
   clearAllData,
+  deleteAccount,
 } from "../lib/storage";
 import { CHARACTERS } from "../lib/characters";
 import {
@@ -22,7 +23,13 @@ import { Toast } from "./Toast";
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
 import type { ReactNode } from "react";
 
-export function SettingsScreen(): ReactNode {
+interface SettingsScreenProps {
+  lifecycleStatus: string;
+}
+
+export function SettingsScreen({
+  lifecycleStatus,
+}: SettingsScreenProps): ReactNode {
   const { user, handleSignOut } = useAuthContext();
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
     useToast();
@@ -41,6 +48,8 @@ export function SettingsScreen(): ReactNode {
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showAccountDeleteFirst, setShowAccountDeleteFirst] = useState(false);
+  const [showAccountDeleteSecond, setShowAccountDeleteSecond] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -183,6 +192,35 @@ export function SettingsScreen(): ReactNode {
 
   const handleLogoutCancel = useCallback((): void => {
     setShowLogoutConfirm(false);
+  }, []);
+
+  const handleAccountDelete = useCallback((): void => {
+    setShowAccountDeleteFirst(true);
+  }, []);
+
+  const handleAccountDeleteFirstConfirm = useCallback((): void => {
+    setShowAccountDeleteFirst(false);
+    setShowAccountDeleteSecond(true);
+  }, []);
+
+  const handleAccountDeleteFirstCancel = useCallback((): void => {
+    setShowAccountDeleteFirst(false);
+  }, []);
+
+  const handleAccountDeleteSecondConfirm = useCallback((): void => {
+    setShowAccountDeleteSecond(false);
+    void deleteAccount()
+      .then(() => {
+        void handleSignOut();
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to delete account:", { error });
+        showToast(UI_MESSAGES.error.saveFailed, "error");
+      });
+  }, [handleSignOut, showToast]);
+
+  const handleAccountDeleteSecondCancel = useCallback((): void => {
+    setShowAccountDeleteSecond(false);
   }, []);
 
   const handleNameChange = useCallback(
@@ -356,26 +394,36 @@ export function SettingsScreen(): ReactNode {
           >
             {exportStatus !== "" ? exportStatus : "データを書き出す"}
           </button>
-          <button
-            type="button"
-            className="bg-bg-surface text-text-primary border border-border-light rounded-full min-h-11 px-6 text-lg w-full"
-            onClick={handleImportClick}
-          >
-            データを読み込む
-          </button>
-          <p className="text-lg text-text-secondary">
-            {SETTINGS_MESSAGES.backup.importDescription}
-          </p>
-          <input
-            type="file"
-            accept=".json"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-          />
-          {importMessage !== "" && (
-            <p className={importError ? "text-error" : "text-accent-primary"}>
-              {importMessage}
+          {lifecycleStatus === "active" ? (
+            <>
+              <button
+                type="button"
+                className="bg-bg-surface text-text-primary border border-border-light rounded-full min-h-11 px-6 text-lg w-full"
+                onClick={handleImportClick}
+              >
+                データを読み込む
+              </button>
+              <p className="text-lg text-text-secondary">
+                {SETTINGS_MESSAGES.backup.importDescription}
+              </p>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+              {importMessage !== "" && (
+                <p
+                  className={importError ? "text-error" : "text-accent-primary"}
+                >
+                  {importMessage}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-lg text-text-secondary leading-relaxed">
+              {SETTINGS_MESSAGES.deletion.importBlocked}
             </p>
           )}
         </section>
@@ -415,18 +463,84 @@ export function SettingsScreen(): ReactNode {
             </svg>
           </summary>
           <div className="pt-3 space-y-3">
-            <p className="text-lg text-text-secondary leading-relaxed">
-              {SETTINGS_MESSAGES.deletion.description}
-            </p>
-            <button
-              type="button"
-              className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
-              onClick={handleClearAll}
+            {lifecycleStatus === "active" ? (
+              <>
+                <p className="text-lg text-text-secondary leading-relaxed">
+                  {SETTINGS_MESSAGES.deletion.description}
+                </p>
+                <button
+                  type="button"
+                  className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
+                  onClick={handleClearAll}
+                >
+                  すべてのデータを削除する
+                </button>
+                {deleteMessage !== "" && (
+                  <p className="text-accent-primary">{deleteMessage}</p>
+                )}
+              </>
+            ) : (
+              <div className="bg-bg-surface rounded-card border border-border-light p-4">
+                <p className="text-lg text-text-secondary leading-relaxed">
+                  {SETTINGS_MESSAGES.deletion.blocked}
+                </p>
+              </div>
+            )}
+          </div>
+        </details>
+
+        {/* Section 6: Account Deletion (most critical — collapsed) */}
+        <details className="group">
+          <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 text-error flex-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              すべてのデータを削除する
-            </button>
-            {deleteMessage !== "" && (
-              <p className="text-accent-primary">{deleteMessage}</p>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+              />
+            </svg>
+            アカウントの削除
+            <svg
+              className="h-4 w-4 text-text-secondary flex-none ml-auto transition-transform details-chevron"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m19.5 8.25-7.5 7.5-7.5-7.5"
+              />
+            </svg>
+          </summary>
+          <div className="pt-3 space-y-3">
+            {lifecycleStatus === "active" ? (
+              <>
+                <p className="text-lg text-text-secondary leading-relaxed">
+                  {SETTINGS_MESSAGES.accountDeletion.description}
+                </p>
+                <button
+                  type="button"
+                  className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
+                  onClick={handleAccountDelete}
+                >
+                  アカウントを削除する
+                </button>
+              </>
+            ) : (
+              <div className="bg-bg-surface rounded-card border border-border-light p-4">
+                <p className="text-lg text-text-secondary leading-relaxed">
+                  {SETTINGS_MESSAGES.accountDeletion.blocked}
+                </p>
+              </div>
             )}
           </div>
         </details>
@@ -459,6 +573,26 @@ export function SettingsScreen(): ReactNode {
         cancelLabel="やめる"
         onConfirm={handleLogoutConfirm}
         onCancel={handleLogoutCancel}
+      />
+      <ConfirmDialog
+        isOpen={showAccountDeleteFirst}
+        title="アカウントの削除"
+        message={SETTINGS_MESSAGES.accountDeletion.firstConfirm}
+        confirmLabel="次へ"
+        cancelLabel="やめる"
+        variant="danger"
+        onConfirm={handleAccountDeleteFirstConfirm}
+        onCancel={handleAccountDeleteFirstCancel}
+      />
+      <ConfirmDialog
+        isOpen={showAccountDeleteSecond}
+        title="最終確認"
+        message={SETTINGS_MESSAGES.accountDeletion.secondConfirm}
+        confirmLabel="アカウントを削除する"
+        cancelLabel="やめる"
+        variant="danger"
+        onConfirm={handleAccountDeleteSecondConfirm}
+        onCancel={handleAccountDeleteSecondCancel}
       />
       <Toast
         message={toastMessage}

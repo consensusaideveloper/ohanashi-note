@@ -13,6 +13,7 @@ Thumbs.db
 .claude/plans/
 .claude/projects/
 .claude/memory/
+.claude/worktrees/
 .claude/settings.json
 .claude/todos.json
 

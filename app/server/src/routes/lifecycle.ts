@@ -6,7 +6,9 @@ import {
   noteLifecycle,
   familyMembers,
   consentRecords,
+  deletionConsentRecords,
   users,
+  conversations,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
@@ -18,6 +20,7 @@ import {
   notifyFamilyMembers,
   logLifecycleAction,
 } from "../lib/lifecycle-helpers.js";
+import { deleteUserAudioFiles } from "../lib/r2-cleanup.js";
 
 import type { Context } from "hono";
 
@@ -858,6 +861,532 @@ lifecycleRoute.post(
         {
           error: "同意のリセットに失敗しました",
           code: "RESET_CONSENT_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+// =============================================================================
+// Data Deletion Consent Flow (post-opening, unanimous consent required)
+// =============================================================================
+
+/** POST /api/lifecycle/:creatorId/initiate-data-deletion — Start data deletion consent (representative only). */
+lifecycleRoute.post(
+  "/api/lifecycle/:creatorId/initiate-data-deletion",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+
+      // Auth: representative only
+      const role = await getUserRole(userId, creatorId);
+      if (role !== "representative") {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      // Check lifecycle status is "opened" and no deletion already in progress
+      const lifecycle = await db.query.noteLifecycle.findFirst({
+        where: eq(noteLifecycle.creatorId, creatorId),
+      });
+
+      if (!lifecycle || lifecycle.status !== "opened") {
+        return c.json(
+          {
+            error: "ノートが開封されていないため、この操作を行えません",
+            code: "INVALID_STATUS",
+          },
+          409,
+        );
+      }
+
+      if (lifecycle.deletionStatus === "deletion_consent_gathering") {
+        return c.json(
+          {
+            error: "データ削除の同意収集はすでに開始されています",
+            code: "ALREADY_IN_PROGRESS",
+          },
+          409,
+        );
+      }
+
+      // Get all active family members
+      const members = await getActiveFamilyMembers(creatorId);
+      if (members.length === 0) {
+        return c.json(
+          {
+            error: "家族メンバーが登録されていません",
+            code: "NO_FAMILY_MEMBERS",
+          },
+          400,
+        );
+      }
+
+      // Create deletion consent records and update status in a transaction
+      await db.transaction(async (tx) => {
+        await tx
+          .update(noteLifecycle)
+          .set({
+            deletionStatus: "deletion_consent_gathering",
+            updatedAt: new Date(),
+          })
+          .where(eq(noteLifecycle.id, lifecycle.id));
+
+        const consentValues = members.map((m) => ({
+          lifecycleId: lifecycle.id,
+          familyMemberId: m.familyMemberId,
+        }));
+
+        await tx.insert(deletionConsentRecords).values(consentValues);
+      });
+
+      // Log and notify
+      await logLifecycleAction(
+        lifecycle.id,
+        "data_deletion_initiated",
+        userId,
+        { memberCount: members.length },
+      );
+
+      const creatorName = await getCreatorName(creatorId);
+      const memberUserIds = members.map((m) => m.memberId);
+      await notifyFamilyMembers(
+        memberUserIds,
+        "deletion_consent_requested",
+        "データ削除への同意のお願い",
+        `${creatorName}さんのノートデータの削除について、同意のお願いが届いています`,
+        creatorId,
+      );
+
+      return c.json({
+        success: true,
+        deletionStatus: "deletion_consent_gathering",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to initiate data deletion", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+      });
+      return c.json(
+        {
+          error: "データ削除の開始に失敗しました",
+          code: "INITIATE_DELETION_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** POST /api/lifecycle/:creatorId/deletion-consent — Submit deletion consent decision (any family member). */
+lifecycleRoute.post(
+  "/api/lifecycle/:creatorId/deletion-consent",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+
+      // Auth: any family member
+      const role = await getUserRole(userId, creatorId);
+      if (role !== "representative" && role !== "member") {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      // Check lifecycle and deletion status
+      const lifecycle = await db.query.noteLifecycle.findFirst({
+        where: eq(noteLifecycle.creatorId, creatorId),
+      });
+
+      if (
+        !lifecycle ||
+        lifecycle.status !== "opened" ||
+        lifecycle.deletionStatus !== "deletion_consent_gathering"
+      ) {
+        return c.json(
+          {
+            error: "現在のステータスではこの操作を行えません",
+            code: "INVALID_STATUS",
+          },
+          409,
+        );
+      }
+
+      // Parse request body
+      const body = await c.req.json<Record<string, unknown>>();
+      const consented = body["consented"];
+
+      if (typeof consented !== "boolean") {
+        return c.json(
+          {
+            error: "consented は true または false を指定してください",
+            code: "INVALID_BODY",
+          },
+          400,
+        );
+      }
+
+      // Find the caller's family member record
+      const membership = await db.query.familyMembers.findFirst({
+        where: and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.memberId, userId),
+          eq(familyMembers.isActive, true),
+        ),
+        columns: { id: true },
+      });
+
+      if (!membership) {
+        return c.json(
+          { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+          404,
+        );
+      }
+
+      const now = new Date();
+
+      // If consented = false, reset the deletion process
+      if (!consented) {
+        await db
+          .update(deletionConsentRecords)
+          .set({ consented: false, consentedAt: now })
+          .where(
+            and(
+              eq(deletionConsentRecords.lifecycleId, lifecycle.id),
+              eq(deletionConsentRecords.familyMemberId, membership.id),
+            ),
+          );
+
+        // Reset deletion status since someone declined
+        await db
+          .update(noteLifecycle)
+          .set({ deletionStatus: null, updatedAt: now })
+          .where(eq(noteLifecycle.id, lifecycle.id));
+
+        // Clean up all deletion consent records
+        await db
+          .delete(deletionConsentRecords)
+          .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
+
+        await logLifecycleAction(
+          lifecycle.id,
+          "deletion_consent_declined",
+          userId,
+        );
+
+        // Notify all family members
+        const creatorName = await getCreatorName(creatorId);
+        const members = await getActiveFamilyMembers(creatorId);
+        const memberUserIds = members.map((m) => m.memberId);
+        await notifyFamilyMembers(
+          memberUserIds,
+          "deletion_consent_declined",
+          "データ削除が中止されました",
+          `${creatorName}さんのデータ削除は、家族メンバーの判断により中止されました`,
+          creatorId,
+        );
+
+        return c.json({ consented: false, deletionExecuted: false });
+      }
+
+      // Consent = true: update and check for unanimous consent
+      const txResult = await db.transaction(async (tx) => {
+        const [updatedConsent] = await tx
+          .update(deletionConsentRecords)
+          .set({ consented: true, consentedAt: now })
+          .where(
+            and(
+              eq(deletionConsentRecords.lifecycleId, lifecycle.id),
+              eq(deletionConsentRecords.familyMemberId, membership.id),
+            ),
+          )
+          .returning();
+
+        if (!updatedConsent) {
+          return { type: "not_found" as const };
+        }
+
+        // Check if ALL records have consented=true
+        const allRecords = await tx
+          .select({ consented: deletionConsentRecords.consented })
+          .from(deletionConsentRecords)
+          .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
+
+        const allConsented =
+          allRecords.length > 0 &&
+          allRecords.every((r) => r.consented === true);
+
+        return { type: "success" as const, allConsented };
+      });
+
+      if (txResult.type === "not_found") {
+        return c.json(
+          {
+            error: "同意記録が見つかりません",
+            code: "CONSENT_RECORD_NOT_FOUND",
+          },
+          404,
+        );
+      }
+
+      await logLifecycleAction(
+        lifecycle.id,
+        "deletion_consent_submitted",
+        userId,
+        { consented: true },
+      );
+
+      if (txResult.allConsented) {
+        // All consented: execute data deletion
+        await logLifecycleAction(
+          lifecycle.id,
+          "data_deletion_executed",
+          userId,
+        );
+
+        // Notify before deletion (notifications will be cascade-deleted)
+        const creatorName = await getCreatorName(creatorId);
+        const members = await getActiveFamilyMembers(creatorId);
+        const memberUserIds = members.map((m) => m.memberId);
+        await notifyFamilyMembers(
+          memberUserIds,
+          "data_deleted",
+          "ノートデータが削除されました",
+          `${creatorName}さんのノートデータは、全員の同意により削除されました`,
+          creatorId,
+        );
+
+        // Clean up R2 audio files (best-effort)
+        await deleteUserAudioFiles(creatorId);
+
+        // Delete all conversations for the creator
+        await db
+          .delete(conversations)
+          .where(eq(conversations.userId, creatorId));
+
+        // Clean up lifecycle-related records and reset
+        await db
+          .delete(deletionConsentRecords)
+          .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
+
+        await db
+          .delete(consentRecords)
+          .where(eq(consentRecords.lifecycleId, lifecycle.id));
+
+        await db
+          .delete(noteLifecycle)
+          .where(eq(noteLifecycle.id, lifecycle.id));
+
+        return c.json({ consented: true, deletionExecuted: true });
+      }
+
+      return c.json({ consented: true, deletionExecuted: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to process deletion consent", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+      });
+      return c.json(
+        {
+          error: "削除同意の処理に失敗しました",
+          code: "DELETION_CONSENT_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** POST /api/lifecycle/:creatorId/cancel-data-deletion — Cancel data deletion process (representative only). */
+lifecycleRoute.post(
+  "/api/lifecycle/:creatorId/cancel-data-deletion",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+
+      // Auth: representative only
+      const role = await getUserRole(userId, creatorId);
+      if (role !== "representative") {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      // Check lifecycle and deletion status
+      const lifecycle = await db.query.noteLifecycle.findFirst({
+        where: eq(noteLifecycle.creatorId, creatorId),
+      });
+
+      if (
+        !lifecycle ||
+        lifecycle.deletionStatus !== "deletion_consent_gathering"
+      ) {
+        return c.json(
+          {
+            error: "データ削除の同意収集が行われていません",
+            code: "INVALID_STATUS",
+          },
+          409,
+        );
+      }
+
+      // Delete all deletion consent records and reset status
+      await db
+        .delete(deletionConsentRecords)
+        .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
+
+      await db
+        .update(noteLifecycle)
+        .set({ deletionStatus: null, updatedAt: new Date() })
+        .where(eq(noteLifecycle.id, lifecycle.id));
+
+      await logLifecycleAction(lifecycle.id, "data_deletion_cancelled", userId);
+
+      // Notify family members
+      const creatorName = await getCreatorName(creatorId);
+      const members = await getActiveFamilyMembers(creatorId);
+      const memberUserIds = members.map((m) => m.memberId);
+      await notifyFamilyMembers(
+        memberUserIds,
+        "deletion_consent_cancelled",
+        "データ削除が取り消されました",
+        `${creatorName}さんのデータ削除プロセスが代表者により取り消されました`,
+        creatorId,
+      );
+
+      return c.json({ success: true, deletionStatus: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to cancel data deletion", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+      });
+      return c.json(
+        {
+          error: "データ削除の取り消しに失敗しました",
+          code: "CANCEL_DELETION_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** GET /api/lifecycle/:creatorId/deletion-consent-status — Get deletion consent progress. */
+lifecycleRoute.get(
+  "/api/lifecycle/:creatorId/deletion-consent-status",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+
+      // Auth: any family member
+      const role = await getUserRole(userId, creatorId);
+      if (role !== "representative" && role !== "member") {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      const lifecycle = await db.query.noteLifecycle.findFirst({
+        where: eq(noteLifecycle.creatorId, creatorId),
+        columns: { id: true, deletionStatus: true },
+      });
+
+      if (!lifecycle || lifecycle.deletionStatus === null) {
+        return c.json({
+          deletionStatus: null,
+          records: [],
+          totalCount: 0,
+          consentedCount: 0,
+          allConsented: false,
+        });
+      }
+
+      // Get deletion consent records with member names
+      const records = await db
+        .select({
+          familyMemberId: deletionConsentRecords.familyMemberId,
+          consented: deletionConsentRecords.consented,
+          consentedAt: deletionConsentRecords.consentedAt,
+          memberName: users.name,
+        })
+        .from(deletionConsentRecords)
+        .innerJoin(
+          familyMembers,
+          eq(deletionConsentRecords.familyMemberId, familyMembers.id),
+        )
+        .innerJoin(users, eq(familyMembers.memberId, users.id))
+        .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
+
+      const totalCount = records.length;
+      const consentedCount = records.filter((r) => r.consented === true).length;
+      const allConsented = totalCount > 0 && consentedCount === totalCount;
+
+      // For regular members, only show their own record
+      const visibleRecords =
+        role === "representative"
+          ? records.map((r) => ({
+              memberName: r.memberName,
+              consented: r.consented,
+              consentedAt: r.consentedAt ? r.consentedAt.toISOString() : null,
+            }))
+          : [];
+
+      // Find the caller's own consent status
+      const membership = await db.query.familyMembers.findFirst({
+        where: and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.memberId, userId),
+          eq(familyMembers.isActive, true),
+        ),
+        columns: { id: true },
+      });
+
+      const myRecord = membership
+        ? records.find((r) => r.familyMemberId === membership.id)
+        : undefined;
+
+      return c.json({
+        deletionStatus: lifecycle.deletionStatus,
+        records: visibleRecords,
+        myConsent: myRecord
+          ? {
+              consented: myRecord.consented,
+              consentedAt: myRecord.consentedAt
+                ? myRecord.consentedAt.toISOString()
+                : null,
+            }
+          : null,
+        totalCount,
+        consentedCount,
+        allConsented,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to get deletion consent status", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+      });
+      return c.json(
+        {
+          error: "削除同意の状態取得に失敗しました",
+          code: "GET_DELETION_STATUS_FAILED",
         },
         500,
       );

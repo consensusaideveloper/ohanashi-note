@@ -17,6 +17,8 @@ import { audioUploadRoute } from "./routes/audio-upload.js";
 import { enhancedSummarizeRoute } from "./routes/enhanced-summarize.js";
 import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { accessPresetsRoute } from "./routes/access-presets.js";
+import { accountRoute } from "./routes/account.js";
+import { todoRoute } from "./routes/todos.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
@@ -130,6 +132,9 @@ app.use("/api/notifications", authMiddleware);
 app.use("/api/access/*", authMiddleware);
 app.use("/api/access-presets/*", authMiddleware);
 app.use("/api/access-presets", authMiddleware);
+app.use("/api/account", authMiddleware);
+app.use("/api/todos/*", authMiddleware);
+app.use("/api/todos", authMiddleware);
 
 // --- Routes ---
 
@@ -145,6 +150,8 @@ app.route("/", audioUploadRoute);
 app.route("/", enhancedSummarizeRoute);
 app.route("/", sessionQuotaRoute);
 app.route("/", accessPresetsRoute);
+app.route("/", accountRoute);
+app.route("/", todoRoute);
 
 // WebSocket route via relay
 const wsRoute = createWsRoute(upgradeWebSocket);

@@ -17,9 +17,14 @@ import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
 import { createInvitation, getLifecycleState } from "./lib/family-api";
 import { getInviteTokenFromUrl } from "./lib/inviteUrl";
-import { getPendingInviteToken } from "./lib/pendingInvite";
+import {
+  getPendingInviteToken,
+  savePendingInviteToken,
+  clearPendingInviteToken,
+} from "./lib/pendingInvite";
 import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
+import { NewUserOnboarding } from "./components/NewUserOnboarding";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
 import { CreatorLifecycleBanner } from "./components/CreatorLifecycleBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
@@ -32,6 +37,8 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FamilyScreen } from "./components/FamilyScreen";
 import { FamilyNoteView } from "./components/FamilyNoteView";
 import { CreatorDetailView } from "./components/CreatorDetailView";
+import { TodoListScreen } from "./components/TodoListScreen";
+import { TodoDetailScreen } from "./components/TodoDetailScreen";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type { QuestionCategory } from "./types/conversation";
@@ -45,7 +52,9 @@ type AppScreen =
   | "settings"
   | "family-dashboard"
   | "family-creator-detail"
-  | "family-note";
+  | "family-note"
+  | "family-todos"
+  | "family-todo-detail";
 
 /** Pending voice action that requires UI confirmation before executing. */
 interface VoiceConfirmAction {
@@ -102,10 +111,52 @@ function AuthGate(): ReactNode {
   const [inviteToken, setInviteToken] = useState<string | null>(
     () => getInviteTokenFromUrl() ?? getPendingInviteToken(),
   );
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Save invite token to localStorage immediately so it survives OAuth redirects
+  useEffect(() => {
+    if (inviteToken !== null && user === null) {
+      savePendingInviteToken(inviteToken);
+    }
+  }, [inviteToken, user]);
+
+  // Check if authenticated user needs onboarding (new user with empty name)
+  useEffect(() => {
+    if (user !== null && inviteToken === null && !onboardingChecked) {
+      void getUserProfile()
+        .then((profile) => {
+          if (profile !== null && profile.name === "") {
+            setNeedsOnboarding(true);
+          }
+          setOnboardingChecked(true);
+        })
+        .catch(() => {
+          // Skip onboarding if profile check fails — user can set name in Settings
+          setOnboardingChecked(true);
+        });
+    }
+  }, [user, inviteToken, onboardingChecked]);
 
   const handleInviteComplete = useCallback((): void => {
     window.history.replaceState(null, "", "/");
     setInviteToken(null);
+    clearPendingInviteToken();
+    // Check if the user who just accepted needs onboarding
+    void getUserProfile()
+      .then((profile) => {
+        if (profile !== null && profile.name === "") {
+          setNeedsOnboarding(true);
+        }
+        setOnboardingChecked(true);
+      })
+      .catch(() => {
+        setOnboardingChecked(true);
+      });
+  }, []);
+
+  const handleOnboardingComplete = useCallback((): void => {
+    setNeedsOnboarding(false);
   }, []);
 
   // Show loading spinner while auth state is being determined
@@ -119,7 +170,7 @@ function AuthGate(): ReactNode {
 
   // Show login screen when not authenticated
   if (user === null) {
-    return <LoginScreen />;
+    return <LoginScreen inviteToken={inviteToken} />;
   }
 
   // Show invitation acceptance screen when URL has /invite/{token}
@@ -130,6 +181,20 @@ function AuthGate(): ReactNode {
         onComplete={handleInviteComplete}
       />
     );
+  }
+
+  // Show loading spinner while checking if onboarding is needed
+  if (!onboardingChecked) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-bg-primary">
+        <div className="w-10 h-10 border-4 border-accent-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show onboarding screen for new users
+  if (needsOnboarding) {
+    return <NewUserOnboarding onComplete={handleOnboardingComplete} />;
   }
 
   return (
@@ -147,6 +212,7 @@ function AppContent(): ReactNode {
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
+  const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
 
   // Track which screen to return to when leaving the detail view
   const [detailReturnScreen, setDetailReturnScreen] = useState<
@@ -345,6 +411,33 @@ function AppContent(): ReactNode {
       setScreen("family-dashboard");
     }
   }, [selectedConnection]);
+
+  const handleViewTodosFromDetail = useCallback(
+    (creatorId: string, creatorName: string): void => {
+      setSelectedCreatorId(creatorId);
+      setSelectedCreatorName(creatorName);
+      setScreen("family-todos");
+    },
+    [],
+  );
+
+  const handleSelectTodo = useCallback((todoId: string): void => {
+    setSelectedTodoId(todoId);
+    setScreen("family-todo-detail");
+  }, []);
+
+  const handleBackFromTodos = useCallback((): void => {
+    if (selectedConnection !== null) {
+      setScreen("family-creator-detail");
+    } else {
+      setScreen("family-dashboard");
+    }
+  }, [selectedConnection]);
+
+  const handleBackFromTodoDetail = useCallback((): void => {
+    setSelectedTodoId(null);
+    setScreen("family-todos");
+  }, []);
 
   // --- Voice action callbacks registration ---
   const voiceActionRef = useVoiceActionRef();
@@ -546,7 +639,7 @@ function AppContent(): ReactNode {
           />
         );
       case "settings":
-        return <SettingsScreen />;
+        return <SettingsScreen lifecycleStatus={myLifecycleStatus} />;
       case "family-dashboard":
         return <FamilyScreen onSelectCreator={handleSelectCreatorDetail} />;
       case "family-creator-detail":
@@ -559,6 +652,7 @@ function AppContent(): ReactNode {
             connection={selectedConnection}
             onBack={handleBackFromCreatorDetail}
             onViewNote={handleViewNoteFromDetail}
+            onViewTodos={handleViewTodosFromDetail}
             onLeave={handleLeaveFamily}
           />
         );
@@ -575,6 +669,33 @@ function AppContent(): ReactNode {
             onBack={handleBackFromFamilyNote}
           />
         );
+      case "family-todos":
+        if (selectedCreatorId === null) {
+          setScreen("family-dashboard");
+          return null;
+        }
+        return (
+          <TodoListScreen
+            creatorId={selectedCreatorId}
+            creatorName={selectedCreatorName}
+            isRepresentative={selectedConnection?.role === "representative"}
+            onBack={handleBackFromTodos}
+            onSelectTodo={handleSelectTodo}
+          />
+        );
+      case "family-todo-detail":
+        if (selectedCreatorId === null || selectedTodoId === null) {
+          setScreen("family-todos");
+          return null;
+        }
+        return (
+          <TodoDetailScreen
+            creatorId={selectedCreatorId}
+            todoId={selectedTodoId}
+            isRepresentative={selectedConnection?.role === "representative"}
+            onBack={handleBackFromTodoDetail}
+          />
+        );
       default:
         return (
           <ConversationScreen
@@ -587,11 +708,16 @@ function AppContent(): ReactNode {
     }
   };
 
-  const isTabHidden = screen === "detail" || screen === "family-creator-detail";
+  const isTabHidden =
+    screen === "detail" ||
+    screen === "family-creator-detail" ||
+    screen === "family-todo-detail";
   const isFamilyScreen =
     screen === "family-dashboard" ||
     screen === "family-creator-detail" ||
-    screen === "family-note";
+    screen === "family-note" ||
+    screen === "family-todos" ||
+    screen === "family-todo-detail";
 
   const showConversationBanner =
     isConversationActive &&

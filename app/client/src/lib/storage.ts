@@ -333,7 +333,23 @@ export async function importAllData(json: string): Promise<void> {
   }
 }
 
+/** Check whether conversation deletion is blocked by lifecycle status. */
+export async function checkDeletionBlocked(): Promise<boolean> {
+  const response = await fetchWithAuth("/api/conversations/deletion-status");
+  const data = (await response.json()) as {
+    blocked: boolean;
+    lifecycleStatus: string;
+  };
+  return data.blocked;
+}
+
 export async function clearAllData(): Promise<void> {
+  // Pre-check: verify deletion is allowed by lifecycle status
+  const blocked = await checkDeletionBlocked();
+  if (blocked) {
+    throw new Error("ノートが保護されているため、データを削除できません");
+  }
+
   const allConversations = await listConversations();
   const failures: string[] = [];
   for (const record of allConversations) {
@@ -352,4 +368,9 @@ export async function clearAllData(): Promise<void> {
       `Failed to delete ${String(failures.length)} of ${String(allConversations.length)} conversations`,
     );
   }
+}
+
+/** Delete the authenticated user's account and all associated data. */
+export async function deleteAccount(): Promise<void> {
+  await fetchWithAuth("/api/account", { method: "DELETE" });
 }

@@ -34,6 +34,43 @@ const MAX_REPRESENTATIVES = 3;
 
 const familyRoute = new Hono();
 
+/** GET /api/public/invite/:token/preview — Public invitation preview (no auth). */
+familyRoute.get("/api/public/invite/:token/preview", async (c: Context) => {
+  try {
+    const token = c.req.param("token");
+
+    const rows = await db
+      .select({
+        creatorName: users.name,
+        expiresAt: familyInvitations.expiresAt,
+        acceptedAt: familyInvitations.acceptedAt,
+      })
+      .from(familyInvitations)
+      .innerJoin(users, eq(users.id, familyInvitations.creatorId))
+      .where(eq(familyInvitations.token, token));
+
+    const invitation = rows[0];
+
+    if (!invitation) {
+      return c.json({ valid: false });
+    }
+
+    if (invitation.acceptedAt) {
+      return c.json({ valid: false });
+    }
+
+    if (invitation.expiresAt.getTime() < Date.now()) {
+      return c.json({ valid: false });
+    }
+
+    return c.json({ valid: true, creatorName: invitation.creatorName });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to preview invitation", { error: message });
+    return c.json({ valid: false });
+  }
+});
+
 /** GET /api/family — List creator's family members (creator only). */
 familyRoute.get("/api/family", async (c: Context) => {
   try {

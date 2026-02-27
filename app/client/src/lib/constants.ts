@@ -341,6 +341,7 @@ export const UI_MESSAGES = {
       "お話のまとめを作れませんでした。会話の内容は保存されていますのでご安心ください。",
     noteLoadFailed: "ノートの内容を読み込めませんでした。",
     historyLoadFailed: "会話の記録を読み込めませんでした。",
+    loadFailed: "データの読み込みに失敗しました。もう一度お試しください。",
   },
   family: {
     pageTitle: "家族",
@@ -454,6 +455,70 @@ export const UI_MESSAGES = {
       "この方の家族から脱退してもよろしいですか？\n脱退すると、ノートへのアクセス権が取り消されます。",
     memberLeft: "家族から脱退しました",
   },
+  todo: {
+    pageTitle: "やることリスト",
+    noTodos: "まだやることが登録されていません",
+    createButton: "やることを追加",
+    generateButton: "AIで自動作成",
+    generateConfirmTitle: "やることリストを自動作成",
+    generateConfirmMessage:
+      "ノートの内容をもとに、やるべきことを自動で作成します。作成後に編集・削除ができます。",
+    statusPending: "未着手",
+    statusInProgress: "対応中",
+    statusCompleted: "完了",
+    priorityHigh: "優先",
+    priorityMedium: "普通",
+    priorityLow: "あとで",
+    assignButton: "担当を決める",
+    volunteerButton: "自分がやる",
+    unassigned: "担当者なし",
+    commentPlaceholder: "メモを追加...",
+    commentSubmit: "送信",
+    sourceNote: "もとの記録",
+    dueDateLabel: "期限",
+    progressLabel: "完了",
+    deleteConfirmTitle: "やることを削除",
+    deleteConfirmMessage: "このやることを削除してもよろしいですか？",
+    updated: "更新しました",
+    created: "やることを追加しました",
+    deleted: "削除しました",
+    commentAdded: "メモを追加しました",
+    generated: "やることリストを作成しました",
+    volunteered: "担当に名乗り出ました",
+    statusChanged: "ステータスを変更しました",
+    assigned: "担当者を設定しました",
+    visibilityTitle: "表示設定",
+    visibilityDescription:
+      "メンバーごとにこのやることの表示/非表示を切り替えます",
+    hidden: "非表示",
+    visible: "表示",
+    titleLabel: "タイトル",
+    descriptionLabel: "詳細",
+    categoryLabel: "カテゴリ",
+    priorityLabel: "優先度",
+    assigneeLabel: "担当者",
+    statusLabel: "ステータス",
+    historyTitle: "履歴",
+    commentsTitle: "メモ",
+    detailTitle: "やることの詳細",
+    filterAll: "すべて",
+    createDialogTitle: "やることを追加",
+    noAssignee: "未定",
+    startButton: "着手する",
+    completeButton: "完了にする",
+    reopenButton: "未着手に戻す",
+  },
+  todoError: {
+    loadFailed: "やることリストの読み込みに失敗しました",
+    createFailed: "やることの追加に失敗しました",
+    updateFailed: "やることの更新に失敗しました",
+    deleteFailed: "やることの削除に失敗しました",
+    commentFailed: "メモの追加に失敗しました",
+    generateFailed: "やることリストの自動作成に失敗しました",
+    volunteerFailed: "担当の登録に失敗しました",
+    detailLoadFailed: "やることの詳細の読み込みに失敗しました",
+    visibilityFailed: "表示設定の変更に失敗しました",
+  },
   creatorLifecycle: {
     bannerDeathReported:
       "ご家族から逝去の報告がありました。誤りの場合は代表者の方にご連絡ください。",
@@ -563,6 +628,23 @@ export const LOGIN_MESSAGES = {
   signInButton: "Googleでログイン",
   error: "ログインできませんでした。もう一度お試しください。",
   footer: "Googleアカウントで安全にログインできます",
+  inviteFrom: "さんから\nご家族の招待が届いています",
+  inviteGeneric: "ご家族から招待が届いています",
+  inviteDescription:
+    "「おはなし」は会話をしながら\n大切な想いをノートにまとめるアプリです",
+  inviteLoginPrompt: "はじめるにはログインしてください",
+} as const;
+
+export const ONBOARDING_MESSAGES = {
+  title: "ようこそ！",
+  nameLabel: "お名前",
+  nameHelp: "会話のときにお呼びする名前です",
+  namePlaceholder: "例：太郎",
+  characterLabel: "話し相手",
+  characterHelp: "あとからいつでも変更できます",
+  startButton: "はじめる",
+  saving: "準備しています...",
+  saveFailed: "保存できませんでした。もう一度お試しください。",
 } as const;
 
 // --- Settings screen messages (Japanese) ---
@@ -587,6 +669,18 @@ export const SETTINGS_MESSAGES = {
       "これまでの会話やノートの記録がすべて完全に削除されます。この操作は取り消すことができません。",
     confirm:
       "会話の記録、ノートの内容、プロフィールがすべて削除されます。削除したデータは元に戻せません。本当に削除しますか？",
+    blocked:
+      "ノートが開封済み（または手続き中）のため、データの削除はできません。ご家族がノートを閲覧できる状態です。",
+    importBlocked:
+      "ノートが保護されている状態では、データの読み込み（上書き）はできません。",
+  },
+  accountDeletion: {
+    description:
+      "アカウントを完全に削除します。すべてのデータ、家族登録、ノートが消去されます。",
+    firstConfirm:
+      "アカウントを削除すると、以下のすべてが完全に消去されます：\n\n・会話の記録とノート\n・家族の登録情報\n・プロフィール設定\n\n削除したデータは元に戻すことができません。",
+    secondConfirm: "最後の確認です。本当にアカウントを削除してよろしいですか？",
+    blocked: "ノートが保護されている状態ではアカウントを削除できません。",
   },
 } as const;
 

@@ -6,6 +6,10 @@ import { conversations } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
+import {
+  getCreatorLifecycleStatus,
+  isDeletionBlocked,
+} from "../lib/lifecycle-helpers.js";
 
 import type { Context } from "hono";
 
@@ -107,6 +111,27 @@ conversationsRoute.get("/api/conversations", async (c: Context) => {
   }
 });
 
+/** GET /api/conversations/deletion-status — Check if conversation deletion is allowed. */
+conversationsRoute.get(
+  "/api/conversations/deletion-status",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+      const blocked = isDeletionBlocked(lifecycleStatus);
+      return c.json({ blocked, lifecycleStatus });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to check deletion status", { error: message });
+      return c.json(
+        { error: "削除可否の確認に失敗しました", code: "CHECK_FAILED" },
+        500,
+      );
+    }
+  },
+);
+
 /** GET /api/conversations/:id — Get a single conversation. */
 conversationsRoute.get("/api/conversations/:id", async (c: Context) => {
   try {
@@ -141,6 +166,18 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
   try {
     const firebaseUid = getFirebaseUid(c);
     const userId = await resolveUserId(firebaseUid);
+
+    // Block data modification when lifecycle is not active
+    const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+    if (isDeletionBlocked(lifecycleStatus)) {
+      return c.json(
+        {
+          error: "ノートが保護されているため、この操作は実行できません",
+          code: "MODIFICATION_BLOCKED_BY_LIFECYCLE",
+        },
+        403,
+      );
+    }
 
     const body = await c.req.json<Record<string, unknown>>();
     const id = body["id"];
@@ -221,6 +258,18 @@ conversationsRoute.patch("/api/conversations/:id", async (c: Context) => {
     const firebaseUid = getFirebaseUid(c);
     const userId = await resolveUserId(firebaseUid);
     const conversationId = c.req.param("id");
+
+    // Block data modification when lifecycle is not active
+    const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+    if (isDeletionBlocked(lifecycleStatus)) {
+      return c.json(
+        {
+          error: "ノートが保護されているため、この操作は実行できません",
+          code: "MODIFICATION_BLOCKED_BY_LIFECYCLE",
+        },
+        403,
+      );
+    }
 
     // Verify ownership
     const existing = await db.query.conversations.findFirst({
@@ -316,6 +365,18 @@ conversationsRoute.delete("/api/conversations/:id", async (c: Context) => {
     const firebaseUid = getFirebaseUid(c);
     const userId = await resolveUserId(firebaseUid);
     const conversationId = c.req.param("id");
+
+    // Block deletion when lifecycle is not active
+    const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+    if (isDeletionBlocked(lifecycleStatus)) {
+      return c.json(
+        {
+          error: "ノートが保護されているため、会話を削除できません",
+          code: "DELETION_BLOCKED_BY_LIFECYCLE",
+        },
+        403,
+      );
+    }
 
     const result = await db
       .delete(conversations)
