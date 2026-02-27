@@ -287,6 +287,17 @@ export const REALTIME_TOOLS = [
       required: ["relationship", "relationship_label"],
     },
   },
+  // --- Lifecycle tools ---
+  {
+    type: "function" as const,
+    name: "end_conversation",
+    description:
+      "会話を終了してデータを保存します。ユーザーが「もう疲れた」「また今度」「今日はここまで」「もう大丈夫」「ありがとう、終わりにしよう」など、会話を終えたい意思を表現した場合に使用してください。特定のキーワードではなく、文脈からユーザーの終了意図を判断してください。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
 ] as const;
 
 /** Japanese labels for font size levels. */
@@ -332,9 +343,16 @@ export const UI_MESSAGES = {
     historyLoadFailed: "会話の記録を読み込めませんでした。",
   },
   family: {
-    sectionTitle: "家族の登録",
-    sectionDescription:
+    pageTitle: "家族",
+    pageDescription: "ご家族の登録やノートの確認ができます",
+    membersSectionTitle: "登録した家族",
+    membersSectionDescription:
       "ご家族を登録しておくと、将来ノートを届けることができます。",
+    connectionsSectionTitle: "家族のノート",
+    noMembers:
+      "まだ家族が登録されていません。\n下のボタンからご家族を招待できます。",
+    noConnections:
+      "まだ紐付いている家族がいません。\nご家族から招待を受けると、ここに表示されます。",
     inviteButton: "家族を招待する",
     inviteDialogTitle: "家族を招待",
     representativeLabel: "代表者",
@@ -370,7 +388,6 @@ export const UI_MESSAGES = {
     consentDeclined: "同意しませんでした",
     consentPending: "未回答",
     noteOpened: "ノートが開封されました",
-    dashboardTitle: "家族のノート",
     dashboardDescription: "紐付いている方のノートを確認できます",
     noteViewTitle: "ノートの閲覧",
     accessManagerTitle: "アクセス管理",
@@ -525,6 +542,20 @@ export const INVITATION_MESSAGES = {
     "招待の確認中にエラーが発生しました。しばらくしてからもう一度お試しください。",
   retryButton: "もう一度試す",
   backToAppButton: "アプリに戻る",
+} as const;
+
+// --- Invitation share dialog ---
+export const INVITE_SHARE_MESSAGES = {
+  created: "招待リンクを作成しました",
+  instruction:
+    "下のボタンからご家族にリンクを送ってください。LINEやメールで簡単に共有できます。",
+  shareButton: "家族に送る",
+  shared: "送信しました",
+  copied: "コピーしました",
+  closeButton: "閉じる",
+  shareTitle: "おはなしノートへの招待",
+  shareText:
+    "おはなしノートの家族に登録してください。下のリンクを開いてログインすると登録できます。",
 } as const;
 
 // --- Text display ---

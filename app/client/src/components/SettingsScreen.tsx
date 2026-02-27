@@ -17,7 +17,6 @@ import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { FamilyManagementSection } from "./FamilyManagementSection";
 import { Toast } from "./Toast";
 
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
@@ -312,10 +311,7 @@ export function SettingsScreen(): ReactNode {
           </button>
         </section>
 
-        {/* Section 3: Family Management */}
-        <FamilyManagementSection />
-
-        {/* Section 4: Account (low risk, reversible) */}
+        {/* Section 3: Account (low risk, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             アカウント
@@ -344,7 +340,7 @@ export function SettingsScreen(): ReactNode {
           <div className="flex-1 border-t border-border" />
         </div>
 
-        {/* Section 4: Data Backup (medium risk - import overwrites) */}
+        {/* Section 4: Data Backup (medium risk — import overwrites) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             データのバックアップ
@@ -384,7 +380,7 @@ export function SettingsScreen(): ReactNode {
           )}
         </section>
 
-        {/* Section 5: Data Deletion (critical, irreversible, collapsed) */}
+        {/* Section 5: Data Deletion (critical, irreversible — collapsed) */}
         <details className="group">
           <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
             {/* Warning triangle icon */}

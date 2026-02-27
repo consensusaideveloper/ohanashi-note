@@ -26,7 +26,7 @@ import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ConfirmDialog } from "./components/ConfirmDialog";
-import { FamilyDashboardScreen } from "./components/FamilyDashboardScreen";
+import { FamilyScreen } from "./components/FamilyScreen";
 import { FamilyNoteView } from "./components/FamilyNoteView";
 
 import type { ReactNode, ErrorInfo } from "react";
@@ -484,7 +484,7 @@ function AppContent(): ReactNode {
       case "settings":
         return <SettingsScreen />;
       case "family-dashboard":
-        return <FamilyDashboardScreen onSelectCreator={handleSelectCreator} />;
+        return <FamilyScreen onSelectCreator={handleSelectCreator} />;
       case "family-note":
         if (selectedCreatorId === null) {
           // Safety fallback: go back to family dashboard if no creator is selected
