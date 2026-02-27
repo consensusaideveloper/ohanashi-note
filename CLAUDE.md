@@ -139,6 +139,19 @@ Every data-fetching hook/component must follow this pattern:
 - WebSocket connections must validate Origin header
 - Never expose HTTP status codes, API response bodies, or stack traces in user-facing UI. Use `ApiError` class to keep technical details in developer-only properties.
 
+## Voice Tools (AI Function Calling)
+
+- Voice tool definitions live in `client/src/lib/constants.ts` (`REALTIME_TOOLS` array).
+- The AI system prompt references tools in `client/src/lib/prompt-builder.ts` (`TOOL_AWARENESS_PROMPT`).
+- Tool execution logic is in `client/src/hooks/useConversation.ts` (`handleFunctionCall`, `dispatchVoiceAction`).
+- Voice action callbacks are defined in `client/src/contexts/VoiceActionContext.tsx` and implemented in `App.tsx`.
+- **Documentation**: All voice tools are documented in `docs/voice-automation-spec.md`. When adding, removing, or modifying a voice tool, **all of the following must be updated together**:
+  1. Tool definition in `REALTIME_TOOLS` (`constants.ts`)
+  2. Tool awareness prompt (`TOOL_AWARENESS_PROMPT` in `prompt-builder.ts`)
+  3. Handler in `handleFunctionCall` / `dispatchVoiceAction` (`useConversation.ts`)
+  4. Callback interface and implementation (`VoiceActionContext.tsx`, `App.tsx`) — if the tool dispatches via voice actions
+  5. Documentation in `docs/voice-automation-spec.md` (tool table, parameters, scenario, tier classification)
+
 ## Session Limits
 
 - Session limits (daily count, duration) are enforced **server-side** (`server/src/lib/session-limits.ts`). Client-side limits in `client/src/lib/constants.ts` are for UX only and must be kept in sync with the server values.

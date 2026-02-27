@@ -58,6 +58,12 @@ import type {
   VoiceActionResult,
 } from "../types/conversation";
 
+// --- End-conversation flow ---
+/** Delay (ms) after farewell response.done before calling stop(), allowing audio playback to complete. */
+const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
+/** Number of response.done events to expect after end_conversation: 1 for function call, 1 for farewell. */
+const END_CONVERSATION_RESPONSE_COUNT = 2;
+
 // --- State machine ---
 
 type SummaryStatus = "idle" | "pending" | "completed" | "failed";
@@ -330,6 +336,10 @@ export function useConversation(): UseConversationReturn {
   // Stable ref for stop so the session timer can call it without stale closures
   const stopRef = useRef<() => void>(() => {});
 
+  // End-conversation countdown: tracks how many response.done events remain
+  // before the farewell is complete. null = not in end-conversation flow.
+  const endConversationCountdownRef = useRef<number | null>(null);
+
   // Keep transcript ref in sync with reducer state
   useEffect(() => {
     transcriptRef.current = state.transcript;
@@ -356,6 +366,8 @@ export function useConversation(): UseConversationReturn {
             bargeInCountRef.current = 0;
             clearCooldownTimer();
             audioOutput.stopPlayback();
+            // Cancel pending end-conversation flow if user barges in
+            endConversationCountdownRef.current = null;
             ws.send({ type: "input_audio_buffer.clear" });
             // Fall through to send this chunk
           } else {
@@ -393,6 +405,17 @@ export function useConversation(): UseConversationReturn {
       };
 
       try {
+        if (functionName === "end_conversation") {
+          endConversationCountdownRef.current = END_CONVERSATION_RESPONSE_COUNT;
+          sendResult(
+            JSON.stringify({
+              success: true,
+              message: "会話を終了します。短い別れの挨拶をしてください。",
+            }),
+          );
+          return;
+        }
+
         let result: string;
 
         if (functionName === "search_past_conversations") {
@@ -537,8 +560,22 @@ export function useConversation(): UseConversationReturn {
           break;
         }
 
-        case "response.done":
+        case "response.done": {
           dispatch({ type: "AI_DONE" });
+
+          // End-conversation flow: count down response.done events
+          if (endConversationCountdownRef.current !== null) {
+            endConversationCountdownRef.current -= 1;
+            if (endConversationCountdownRef.current <= 0) {
+              endConversationCountdownRef.current = null;
+              // Farewell response complete — delay for audio playback, then stop
+              setTimeout(() => {
+                stopRef.current();
+              }, END_CONVERSATION_FAREWELL_DELAY_MS);
+              break;
+            }
+          }
+
           // Start post-speech cooldown: keep audio gated briefly
           // to prevent residual echo from triggering a new response
           clearCooldownTimer();
@@ -547,6 +584,7 @@ export function useConversation(): UseConversationReturn {
             cooldownTimerRef.current = null;
           }, POST_SPEECH_COOLDOWN_MS);
           break;
+        }
 
         case "input_audio_buffer.speech_started":
           // User started speaking — stop any AI audio that's playing
@@ -736,6 +774,9 @@ export function useConversation(): UseConversationReturn {
     clearCooldownTimer();
     audioGatedRef.current = false;
     bargeInCountRef.current = 0;
+
+    // Reset end-conversation state
+    endConversationCountdownRef.current = null;
 
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
