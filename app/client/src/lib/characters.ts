@@ -128,7 +128,7 @@ export const CHARACTERS: readonly CharacterDefinition[] = [
     id: "character-c",
     name: "にこにこ",
     description: "明るく楽しい、元気がもらえる話し相手",
-    voice: "nova",
+    voice: "coral",
     accentColorClass: "accent-primary",
     personality: buildPersonality(
       `あなたは終活ノートのお手伝いをする「にこにこ」というキャラクターです。

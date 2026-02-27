@@ -42,11 +42,17 @@ export type CharacterId = "character-a" | "character-b" | "character-c";
 
 export type OpenAIVoice =
   | "alloy"
+  | "ash"
+  | "ballad"
+  | "coral"
   | "echo"
   | "fable"
   | "onyx"
-  | "nova"
-  | "shimmer";
+  | "sage"
+  | "shimmer"
+  | "verse"
+  | "marin"
+  | "cedar";
 
 export interface CharacterDefinition {
   id: CharacterId;
