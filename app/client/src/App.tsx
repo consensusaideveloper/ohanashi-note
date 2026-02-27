@@ -1,20 +1,51 @@
-import { Component, useState, useCallback } from "react";
+import { Component, useState, useCallback, useEffect, useRef } from "react";
 
-import { FontSizeProvider } from "./contexts/FontSizeContext";
+import { FontSizeProvider, useFontSize } from "./contexts/FontSizeContext";
 import { AuthProvider, useAuthContext } from "./contexts/AuthContext";
-import { UI_MESSAGES } from "./lib/constants";
+import {
+  VoiceActionProvider,
+  useVoiceActionRef,
+} from "./contexts/VoiceActionContext";
+import { useConversation } from "./hooks/useConversation";
+import { CHARACTERS, getCharacterById } from "./lib/characters";
+import {
+  UI_MESSAGES,
+  VOICE_SCREEN_MAP,
+  FONT_SIZE_LABELS,
+} from "./lib/constants";
+import { QUESTION_CATEGORIES } from "./lib/questions";
+import { getUserProfile, saveUserProfile } from "./lib/storage";
+import { createInvitation } from "./lib/family-api";
 import { LoginScreen } from "./components/LoginScreen";
+import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
 import { ConversationHistory } from "./components/ConversationHistory";
 import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { FamilyDashboardScreen } from "./components/FamilyDashboardScreen";
+import { FamilyNoteView } from "./components/FamilyNoteView";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type { QuestionCategory } from "./types/conversation";
 
-type AppScreen = "conversation" | "history" | "detail" | "note" | "settings";
+type AppScreen =
+  | "conversation"
+  | "history"
+  | "detail"
+  | "note"
+  | "settings"
+  | "family-dashboard"
+  | "family-note";
+
+/** Pending voice action that requires UI confirmation before executing. */
+interface VoiceConfirmAction {
+  title: string;
+  message: string;
+  actionType: "start_conversation" | "create_invitation";
+  actionData: Record<string, string>;
+}
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -75,10 +106,17 @@ function AuthGate(): ReactNode {
     return <LoginScreen />;
   }
 
-  return <AppContent />;
+  return (
+    <VoiceActionProvider>
+      <AppContent />
+    </VoiceActionProvider>
+  );
 }
 
 function AppContent(): ReactNode {
+  const conversation = useConversation();
+  const { setFontSize } = useFontSize();
+
   const [screen, setScreen] = useState<AppScreen>("conversation");
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -88,6 +126,12 @@ function AppContent(): ReactNode {
   const [detailReturnScreen, setDetailReturnScreen] = useState<
     "history" | "note"
   >("history");
+
+  // Family mode state
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
+    null,
+  );
+  const [selectedCreatorName, setSelectedCreatorName] = useState("");
 
   const handleSelectConversation = useCallback((id: string): void => {
     setSelectedConversationId(id);
@@ -133,15 +177,49 @@ function AppContent(): ReactNode {
     setPendingNavTarget(null);
   }, [pendingNavTarget]);
 
-  const handleCancelNavigation = useCallback((): void => {
-    setShowNavWarning(false);
-    setPendingNavTarget(null);
-  }, []);
-
   // Pending category for focused mode (from EndingNote "このテーマで話す")
   const [pendingCategory, setPendingCategory] = useState<
     QuestionCategory | undefined
   >(undefined);
+
+  // Voice action confirmation state (Tier 2)
+  const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmAction | null>(
+    null,
+  );
+
+  const handleVoiceConfirm = useCallback((): void => {
+    if (voiceConfirm === null) return;
+    if (voiceConfirm.actionType === "start_conversation") {
+      conversation.stop();
+      const category = voiceConfirm.actionData["category"];
+      if (category !== undefined) {
+        setPendingCategory(category as QuestionCategory);
+      }
+      setScreen("conversation");
+    } else {
+      // actionType === "create_invitation"
+      const relationship = voiceConfirm.actionData["relationship"] ?? "";
+      const relationshipLabel =
+        voiceConfirm.actionData["relationshipLabel"] ?? "";
+      createInvitation({ relationship, relationshipLabel })
+        .then(() => {
+          setScreen("family-dashboard");
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to create family invitation:", { error });
+        });
+    }
+    setVoiceConfirm(null);
+  }, [voiceConfirm, conversation]);
+
+  const handleVoiceCancelConfirm = useCallback((): void => {
+    setVoiceConfirm(null);
+  }, []);
+
+  const handleCancelNavigation = useCallback((): void => {
+    setShowNavWarning(false);
+    setPendingNavTarget(null);
+  }, []);
 
   // Navigate from EndingNoteView to conversation screen for a specific category
   const handleStartFromNote = useCallback(
@@ -172,6 +250,181 @@ function AppContent(): ReactNode {
     navigateWithGuard("settings");
   }, [navigateWithGuard]);
 
+  const handleNavigateFamily = useCallback((): void => {
+    navigateWithGuard("family-dashboard");
+  }, [navigateWithGuard]);
+
+  // Family mode navigation handlers
+  const handleSelectCreator = useCallback(
+    (creatorId: string, creatorName: string): void => {
+      setSelectedCreatorId(creatorId);
+      setSelectedCreatorName(creatorName);
+      setScreen("family-note");
+    },
+    [],
+  );
+
+  const handleBackFromFamilyNote = useCallback((): void => {
+    setSelectedCreatorId(null);
+    setSelectedCreatorName("");
+    setScreen("family-dashboard");
+  }, []);
+
+  // --- Voice action callbacks registration ---
+  const voiceActionRef = useVoiceActionRef();
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+
+  // Use refs so callbacks always access the latest values without re-creating
+  const navigateWithGuardRef = useRef(navigateWithGuard);
+  navigateWithGuardRef.current = navigateWithGuard;
+  const setFontSizeRef = useRef(setFontSize);
+  setFontSizeRef.current = setFontSize;
+
+  useEffect(() => {
+    voiceActionRef.current = {
+      // Tier 0: Navigation
+      navigateToScreen: (target: string) => {
+        const entry = VOICE_SCREEN_MAP[target];
+        if (entry === undefined) {
+          return { success: false, message: "その画面は見つかりません" };
+        }
+        navigateWithGuardRef.current(entry.screen as AppScreen);
+        return {
+          success: true,
+          message: `${entry.label}の画面に移動しました`,
+        };
+      },
+      viewNoteCategory: (category: string) => {
+        const categoryInfo = QUESTION_CATEGORIES.find((c) => c.id === category);
+        navigateWithGuardRef.current("note");
+        return {
+          success: true,
+          message: categoryInfo
+            ? `ノートの画面に移動しました。${categoryInfo.label}の記録をご覧ください`
+            : "ノートの画面に移動しました",
+        };
+      },
+      filterHistory: () => {
+        navigateWithGuardRef.current("history");
+        return {
+          success: true,
+          message: "会話の履歴画面に移動しました",
+        };
+      },
+      // Tier 1: Settings
+      changeFontSize: (level: string) => {
+        const label = FONT_SIZE_LABELS[level];
+        if (label === undefined) {
+          return { success: false, message: "そのサイズは選べません" };
+        }
+        setFontSizeRef.current(level as "standard" | "large" | "x-large");
+        return {
+          success: true,
+          message: `文字の大きさを${label}に変更しました`,
+        };
+      },
+      changeCharacter: async (characterName: string) => {
+        const character = CHARACTERS.find((c) => c.name === characterName);
+        if (character === undefined) {
+          return {
+            success: false,
+            message: "そのキャラクターは見つかりません",
+          };
+        }
+        try {
+          const profile = await getUserProfile();
+          await saveUserProfile({
+            name: profile?.name ?? "",
+            characterId: character.id,
+            updatedAt: Date.now(),
+          });
+          return {
+            success: true,
+            message: `次回の会話から${character.name}がお相手します`,
+          };
+        } catch {
+          return {
+            success: false,
+            message: "キャラクターの変更に失敗しました",
+          };
+        }
+      },
+      updateUserName: async (name: string) => {
+        const trimmed = name.trim();
+        if (trimmed === "") {
+          return { success: false, message: "名前を教えてください" };
+        }
+        try {
+          const profile = await getUserProfile();
+          await saveUserProfile({
+            name: trimmed,
+            characterId: profile?.characterId,
+            updatedAt: Date.now(),
+          });
+          return {
+            success: true,
+            message: `お名前を${trimmed}に変更しました`,
+          };
+        } catch {
+          return {
+            success: false,
+            message: "名前の変更に失敗しました",
+          };
+        }
+      },
+      // Tier 2: Confirmation-required
+      requestStartConversation: (category: string) => {
+        const categoryInfo = QUESTION_CATEGORIES.find((c) => c.id === category);
+        if (categoryInfo === undefined) {
+          return { success: false, message: "そのテーマは見つかりません" };
+        }
+        setVoiceConfirm({
+          title: "テーマを変更",
+          message: `「${categoryInfo.label}」のテーマで新しい会話を始めますか？\n現在の会話は保存されます。`,
+          actionType: "start_conversation",
+          actionData: { category },
+        });
+        return {
+          success: true,
+          message:
+            "確認画面を表示しました。よろしければ画面の「はい」を押してください",
+        };
+      },
+      requestCreateInvitation: (params: {
+        relationship: string;
+        relationshipLabel: string;
+      }) => {
+        setVoiceConfirm({
+          title: "家族の招待",
+          message: `${params.relationshipLabel}として家族を招待しますか？`,
+          actionType: "create_invitation",
+          actionData: {
+            relationship: params.relationship,
+            relationshipLabel: params.relationshipLabel,
+          },
+        });
+        return {
+          success: true,
+          message:
+            "確認画面を表示しました。よろしければ画面の「はい」を押してください",
+        };
+      },
+      getCurrentScreen: () => screenRef.current,
+    };
+    return () => {
+      voiceActionRef.current = null;
+    };
+  }, [voiceActionRef]);
+
+  // Active conversation banner state
+  const isConversationActive =
+    conversation.state !== "idle" && conversation.state !== "error";
+  const activeCharacterName =
+    conversation.characterId !== null
+      ? getCharacterById(conversation.characterId).name
+      : null;
+
   const renderScreen = (): ReactNode => {
     switch (screen) {
       case "conversation":
@@ -180,6 +433,7 @@ function AppContent(): ReactNode {
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
             onSummarizingChange={setIsSummarizing}
+            conversation={conversation}
           />
         );
       case "history":
@@ -209,23 +463,58 @@ function AppContent(): ReactNode {
         );
       case "settings":
         return <SettingsScreen />;
+      case "family-dashboard":
+        return <FamilyDashboardScreen onSelectCreator={handleSelectCreator} />;
+      case "family-note":
+        if (selectedCreatorId === null) {
+          // Safety fallback: go back to family dashboard if no creator is selected
+          setScreen("family-dashboard");
+          return null;
+        }
+        return (
+          <FamilyNoteView
+            creatorId={selectedCreatorId}
+            creatorName={selectedCreatorName}
+            onBack={handleBackFromFamilyNote}
+          />
+        );
       default:
         return (
           <ConversationScreen
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
             onSummarizingChange={setIsSummarizing}
+            conversation={conversation}
           />
         );
     }
   };
 
   const isTabHidden = screen === "detail";
+  const isFamilyScreen =
+    screen === "family-dashboard" || screen === "family-note";
+
+  const showConversationBanner =
+    isConversationActive &&
+    screen !== "conversation" &&
+    activeCharacterName !== null;
 
   return (
     <div className="min-h-dvh flex flex-col bg-bg-primary">
+      {/* Active conversation banner on non-conversation screens */}
+      {showConversationBanner && (
+        <ActiveConversationBanner
+          characterName={activeCharacterName}
+          onReturn={handleNavigateConversation}
+        />
+      )}
+
       {/* Main content area */}
-      <div className="flex-1 flex flex-col pb-[72px]">{renderScreen()}</div>
+      <div
+        className={`flex-1 flex flex-col pb-[72px] ${showConversationBanner ? "pt-12" : ""}`}
+      >
+        {renderScreen()}
+      </div>
 
       {/* Navigation guard dialog during summarization */}
       <ConfirmDialog
@@ -236,6 +525,15 @@ function AppContent(): ReactNode {
         cancelLabel={UI_MESSAGES.summarizing.stayButton}
         onConfirm={handleConfirmNavigation}
         onCancel={handleCancelNavigation}
+      />
+
+      {/* Voice action confirmation dialog (Tier 2) */}
+      <ConfirmDialog
+        isOpen={voiceConfirm !== null}
+        title={voiceConfirm?.title ?? ""}
+        message={voiceConfirm?.message ?? ""}
+        onConfirm={handleVoiceConfirm}
+        onCancel={handleVoiceCancelConfirm}
       />
 
       {/* Tab bar - hidden when in detail view */}
@@ -320,6 +618,33 @@ function AppContent(): ReactNode {
               />
             </svg>
             <span className="text-lg leading-tight">履歴</span>
+          </button>
+
+          <button
+            type="button"
+            className={`flex-1 min-h-[64px] flex flex-col items-center justify-center gap-1 transition-colors ${
+              isFamilyScreen
+                ? "text-accent-primary"
+                : "text-text-secondary active:text-text-primary"
+            }`}
+            onClick={handleNavigateFamily}
+          >
+            {/* Users/people icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+              />
+            </svg>
+            <span className="text-lg leading-tight">家族</span>
           </button>
 
           <button

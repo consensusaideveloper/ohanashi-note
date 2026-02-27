@@ -1,0 +1,304 @@
+import { fetchWithAuth } from "./api";
+
+export interface FamilyMember {
+  id: string;
+  memberId: string;
+  name: string;
+  relationship: string;
+  relationshipLabel: string;
+  role: "representative" | "member";
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FamilyInvitation {
+  id: string;
+  token: string;
+  relationship: string;
+  relationshipLabel: string;
+  role: "representative" | "member";
+  expiresAt: string;
+}
+
+export interface InvitationInfo {
+  creatorName: string;
+  relationship: string;
+  relationshipLabel: string;
+  role: "representative" | "member";
+  expiresAt: string;
+}
+
+export interface FamilyConnection {
+  id: string;
+  creatorId: string;
+  creatorName: string;
+  relationship: string;
+  relationshipLabel: string;
+  role: "representative" | "member";
+  lifecycleStatus: string;
+}
+
+export async function listFamilyMembers(): Promise<FamilyMember[]> {
+  const response = await fetchWithAuth("/api/family");
+  return response.json() as Promise<FamilyMember[]>;
+}
+
+export async function createInvitation(data: {
+  relationship: string;
+  relationshipLabel: string;
+  role?: "representative" | "member";
+}): Promise<FamilyInvitation> {
+  const response = await fetchWithAuth("/api/family/invite", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return response.json() as Promise<FamilyInvitation>;
+}
+
+export async function getInvitationInfo(
+  token: string,
+): Promise<InvitationInfo> {
+  const response = await fetchWithAuth(`/api/family/invite/${token}`);
+  return response.json() as Promise<InvitationInfo>;
+}
+
+export async function acceptInvitation(token: string): Promise<{
+  id: string;
+  creatorId: string;
+  relationship: string;
+  role: string;
+}> {
+  const response = await fetchWithAuth(`/api/family/invite/${token}/accept`, {
+    method: "POST",
+  });
+  return response.json() as Promise<{
+    id: string;
+    creatorId: string;
+    relationship: string;
+    role: string;
+  }>;
+}
+
+export async function updateFamilyMember(
+  id: string,
+  data: {
+    relationship?: string;
+    relationshipLabel?: string;
+    role?: "representative" | "member";
+  },
+): Promise<FamilyMember> {
+  const response = await fetchWithAuth(`/api/family/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+  return response.json() as Promise<FamilyMember>;
+}
+
+export async function deleteFamilyMember(id: string): Promise<void> {
+  await fetchWithAuth(`/api/family/${id}`, { method: "DELETE" });
+}
+
+export async function listMyConnections(): Promise<FamilyConnection[]> {
+  const response = await fetchWithAuth("/api/family/my-connections");
+  return response.json() as Promise<FamilyConnection[]>;
+}
+
+// --- Lifecycle API ---
+
+export interface LifecycleState {
+  id?: string;
+  status: "active" | "death_reported" | "consent_gathering" | "opened";
+  deathReportedAt: string | null;
+  openedAt: string | null;
+  createdAt?: string;
+}
+
+export async function getLifecycleState(
+  creatorId: string,
+): Promise<LifecycleState> {
+  const response = await fetchWithAuth(`/api/lifecycle/${creatorId}`);
+  return response.json() as Promise<LifecycleState>;
+}
+
+export async function reportDeath(creatorId: string): Promise<LifecycleState> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/report-death`,
+    { method: "POST" },
+  );
+  return response.json() as Promise<LifecycleState>;
+}
+
+export async function cancelDeathReport(
+  creatorId: string,
+): Promise<LifecycleState> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/cancel-death-report`,
+    { method: "POST" },
+  );
+  return response.json() as Promise<LifecycleState>;
+}
+
+export interface ConsentRecord {
+  id: string;
+  familyMemberId: string;
+  memberName: string;
+  consented: boolean | null;
+  consentedAt: string | null;
+}
+
+export interface ConsentStatus {
+  lifecycleStatus: string;
+  myConsent?: { consented: boolean | null; consentedAt: string | null };
+  records?: ConsentRecord[];
+  totalCount: number;
+  consentedCount: number;
+  allConsented: boolean;
+}
+
+export async function initiateConsent(
+  creatorId: string,
+): Promise<{ lifecycle: LifecycleState; consentCount: number }> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/initiate-consent`,
+    { method: "POST" },
+  );
+  return response.json() as Promise<{
+    lifecycle: LifecycleState;
+    consentCount: number;
+  }>;
+}
+
+export async function submitConsent(
+  creatorId: string,
+  consented: boolean,
+): Promise<ConsentStatus> {
+  const response = await fetchWithAuth(`/api/lifecycle/${creatorId}/consent`, {
+    method: "POST",
+    body: JSON.stringify({ consented }),
+  });
+  return response.json() as Promise<ConsentStatus>;
+}
+
+export async function getConsentStatus(
+  creatorId: string,
+): Promise<ConsentStatus> {
+  const response = await fetchWithAuth(
+    `/api/lifecycle/${creatorId}/consent-status`,
+  );
+  return response.json() as Promise<ConsentStatus>;
+}
+
+// --- Notifications API ---
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  relatedCreatorId: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export async function listNotifications(): Promise<Notification[]> {
+  const response = await fetchWithAuth("/api/notifications");
+  return response.json() as Promise<Notification[]>;
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await fetchWithAuth(`/api/notifications/${id}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await fetchWithAuth("/api/notifications/read-all", { method: "POST" });
+}
+
+// --- Category Access API ---
+
+export interface CategoryAccessInfo {
+  categories: string[];
+  isRepresentative: boolean;
+}
+
+export interface AccessMatrixMember {
+  memberId: string;
+  familyMemberId: string;
+  name: string;
+  role: string;
+  categories: string[];
+}
+
+export interface AccessMatrix {
+  members: AccessMatrixMember[];
+}
+
+export interface FamilyConversation {
+  id: string;
+  category: string | null;
+  startedAt: number;
+  summary: string | null;
+  oneLinerSummary: string | null;
+  noteEntries: unknown[];
+  coveredQuestionIds: string[];
+  keyPoints: unknown;
+}
+
+export interface CategoryNoteData {
+  categoryId: string;
+  conversations: FamilyConversation[];
+}
+
+export async function getAccessibleCategories(
+  creatorId: string,
+): Promise<CategoryAccessInfo> {
+  const response = await fetchWithAuth(`/api/access/${creatorId}/categories`);
+  return response.json() as Promise<CategoryAccessInfo>;
+}
+
+export async function grantCategoryAccess(
+  creatorId: string,
+  familyMemberId: string,
+  categoryId: string,
+): Promise<void> {
+  await fetchWithAuth(`/api/access/${creatorId}/grant`, {
+    method: "POST",
+    body: JSON.stringify({ familyMemberId, categoryId }),
+  });
+}
+
+export async function revokeCategoryAccess(
+  creatorId: string,
+  familyMemberId: string,
+  categoryId: string,
+): Promise<void> {
+  await fetchWithAuth(`/api/access/${creatorId}/revoke`, {
+    method: "DELETE",
+    body: JSON.stringify({ familyMemberId, categoryId }),
+  });
+}
+
+export async function getCategoryNote(
+  creatorId: string,
+  categoryId: string,
+): Promise<CategoryNoteData> {
+  const response = await fetchWithAuth(
+    `/api/access/${creatorId}/note/${categoryId}`,
+  );
+  return response.json() as Promise<CategoryNoteData>;
+}
+
+export async function getFamilyConversations(
+  creatorId: string,
+): Promise<FamilyConversation[]> {
+  const response = await fetchWithAuth(
+    `/api/access/${creatorId}/conversations`,
+  );
+  return response.json() as Promise<FamilyConversation[]>;
+}
+
+export async function getAccessMatrix(
+  creatorId: string,
+): Promise<AccessMatrix> {
+  const response = await fetchWithAuth(`/api/access/${creatorId}/matrix`);
+  return response.json() as Promise<AccessMatrix>;
+}

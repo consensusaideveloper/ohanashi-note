@@ -113,6 +113,12 @@ export interface AudioRecording {
   createdAt: number;
 }
 
+export interface VoiceActionResult {
+  success: boolean;
+  /** Japanese message for the AI to read aloud. */
+  message: string;
+}
+
 export type IntegrityStatus = "verified" | "tampered" | "no-hash";
 
 export interface IntegrityVerificationResult {

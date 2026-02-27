@@ -17,6 +17,7 @@ import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FamilyManagementSection } from "./FamilyManagementSection";
 import { Toast } from "./Toast";
 
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
@@ -311,7 +312,10 @@ export function SettingsScreen(): ReactNode {
           </button>
         </section>
 
-        {/* Section 3: Account (low risk, reversible) */}
+        {/* Section 3: Family Management */}
+        <FamilyManagementSection />
+
+        {/* Section 4: Account (low risk, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             アカウント

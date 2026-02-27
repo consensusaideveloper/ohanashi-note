@@ -12,11 +12,17 @@ import { logger } from "./logger.js";
 const UPLOAD_URL_EXPIRY_SECONDS = 900;
 const DOWNLOAD_URL_EXPIRY_SECONDS = 3600;
 
+interface DownloadResult {
+  data: Buffer;
+  contentType: string;
+}
+
 interface R2Client {
   generateUploadUrl: (key: string, mimeType: string) => Promise<string>;
   generateDownloadUrl: (key: string) => Promise<string>;
   deleteObject: (key: string) => Promise<void>;
   uploadObject: (key: string, data: Buffer, mimeType: string) => Promise<void>;
+  downloadObject: (key: string) => Promise<DownloadResult>;
 }
 
 function createR2Client(): R2Client | null {
@@ -88,6 +94,25 @@ function createR2Client(): R2Client | null {
         ContentType: mimeType,
       });
       await s3.send(command);
+    },
+
+    async downloadObject(key: string): Promise<DownloadResult> {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+      const response = await s3.send(command);
+      const stream = response.Body;
+      if (stream === undefined) {
+        throw new Error(
+          "R2オブジェクトの取得に失敗しました: レスポンスが空です",
+        );
+      }
+      const bytes = await stream.transformToByteArray();
+      return {
+        data: Buffer.from(bytes),
+        contentType: response.ContentType ?? "application/octet-stream",
+      };
     },
   };
 }

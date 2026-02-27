@@ -106,7 +106,207 @@ export const REALTIME_TOOLS = [
       required: ["category"],
     },
   },
+  // --- Tier 0: Navigation tools ---
+  {
+    type: "function" as const,
+    name: "navigate_to_screen",
+    description:
+      "アプリの画面を切り替えます。ユーザーが「ノートを見せて」「設定を開いて」「履歴を見たい」などと言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        screen: {
+          type: "string",
+          enum: ["conversation", "note", "history", "settings", "family"],
+          description:
+            "移動先の画面（conversation=会話、note=ノート、history=履歴、settings=設定、family=家族）",
+        },
+      },
+      required: ["screen"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "view_note_category",
+    description:
+      "エンディングノートの画面を開きます。ユーザーが「思い出の記録を見せて」「医療のノートを見たい」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: [
+            "memories",
+            "people",
+            "house",
+            "medical",
+            "funeral",
+            "money",
+            "work",
+            "digital",
+            "legal",
+            "trust",
+            "support",
+          ],
+          description: "表示するカテゴリ",
+        },
+      },
+      required: ["category"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "filter_conversation_history",
+    description:
+      "会話の履歴画面を開きます。ユーザーが「前の会話を見せて」「履歴を確認したい」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: [
+            "memories",
+            "people",
+            "house",
+            "medical",
+            "funeral",
+            "money",
+            "work",
+            "digital",
+            "legal",
+            "trust",
+            "support",
+          ],
+          description: "カテゴリで絞り込み（省略可）",
+        },
+      },
+    },
+  },
+  // --- Tier 1: Settings tools ---
+  {
+    type: "function" as const,
+    name: "change_font_size",
+    description:
+      "文字の大きさを変更します。ユーザーが「文字を大きくして」「もっと大きく」「元のサイズに戻して」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        level: {
+          type: "string",
+          enum: ["standard", "large", "x-large"],
+          description:
+            "文字の大きさ（standard=標準、large=大きめ、x-large=特大）",
+        },
+      },
+      required: ["level"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "change_character",
+    description:
+      "話し相手のキャラクターを変更します（次回の会話から適用）。ユーザーが「話し相手を変えたい」「のんびりに変えて」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        character_name: {
+          type: "string",
+          enum: ["のんびり", "しっかり", "にこにこ"],
+          description:
+            "キャラクター名（のんびり=穏やかな話し相手、しっかり=頼れる相談相手、にこにこ=明るい話し相手）",
+        },
+      },
+      required: ["character_name"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "update_user_name",
+    description:
+      "ユーザーの表示名を変更します。ユーザーが「名前を変えたい」「〇〇と呼んで」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "新しい名前",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  // --- Tier 2: Confirmation-required tools ---
+  {
+    type: "function" as const,
+    name: "start_focused_conversation",
+    description:
+      "指定テーマで新しい会話を始めます。現在の会話を終了して選択テーマの会話を開始します。ユーザーが「お金のことで話したい」「医療について相談したい」など特定テーマの会話を希望した場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: [
+            "memories",
+            "people",
+            "house",
+            "medical",
+            "funeral",
+            "money",
+            "work",
+            "digital",
+            "legal",
+            "trust",
+            "support",
+          ],
+          description: "会話のテーマ",
+        },
+      },
+      required: ["category"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "create_family_invitation",
+    description:
+      "家族の招待リンクを作成します。ユーザーが「妻を招待して」「家族を追加したい」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        relationship: {
+          type: "string",
+          enum: ["spouse", "child", "sibling", "grandchild", "other"],
+          description:
+            "関係性（spouse=配偶者、child=子、sibling=兄弟姉妹、grandchild=孫、other=その他）",
+        },
+        relationship_label: {
+          type: "string",
+          description: "表示用の関係名（例：「妻」「長男」「義母」）",
+        },
+      },
+      required: ["relationship", "relationship_label"],
+    },
+  },
 ] as const;
+
+/** Japanese labels for font size levels. */
+export const FONT_SIZE_LABELS: Record<string, string> = {
+  standard: "標準",
+  large: "大きめ",
+  "x-large": "特大",
+};
+
+/** Screen names the voice AI can navigate to, mapped to AppScreen values and Japanese labels. */
+export const VOICE_SCREEN_MAP: Record<
+  string,
+  { screen: string; label: string }
+> = {
+  conversation: { screen: "conversation", label: "会話" },
+  note: { screen: "note", label: "ノート" },
+  history: { screen: "history", label: "履歴" },
+  settings: { screen: "settings", label: "設定" },
+  family: { screen: "family-dashboard", label: "家族" },
+};
 
 // User-facing messages (Japanese)
 export const UI_MESSAGES = {
@@ -131,6 +331,77 @@ export const UI_MESSAGES = {
     noteLoadFailed: "ノートの内容を読み込めませんでした。",
     historyLoadFailed: "会話の記録を読み込めませんでした。",
   },
+  family: {
+    sectionTitle: "家族の登録",
+    sectionDescription:
+      "ご家族を登録しておくと、将来ノートを届けることができます。",
+    inviteButton: "家族を招待する",
+    inviteDialogTitle: "家族を招待",
+    representativeLabel: "代表者",
+    memberLabel: "家族",
+    representativeHelp:
+      "代表者とは、ノートを開封した後に情報の管理を任せる方です。",
+    setRepresentative: "代表者に指定する",
+    removeConfirmTitle: "家族を削除",
+    removeConfirmMessage: "この方を家族から削除してもよろしいですか？",
+    inviteLinkCopied: "招待リンクをコピーしました",
+    inviteCreated: "招待リンクを作成しました",
+    memberRemoved: "家族を削除しました",
+    representativeChanged: "代表者を変更しました",
+    noFamilyMembers: "まだ家族が登録されていません",
+    inviteExpired: "この招待リンクは期限切れです",
+    inviteAccepted: "家族として登録されました",
+    alreadyRepresentative: "すでに代表者が指定されています",
+    deathReportDialogTitle: "逝去のご報告",
+    deathReportConfirmMessage:
+      "この方の逝去を報告します。よろしいですか？\n（代表者が取り消すことができます）",
+    deathReportSecondConfirmMessage:
+      "この操作は家族全員に通知されます。本当に報告しますか？",
+    cancelDeathReportConfirmMessage:
+      "逝去報告を取り消しますか？ステータスが「活動中」に戻ります。",
+    initiateConsentMessage:
+      "ノート開封のための同意収集を開始します。全家族に通知が送信されます。",
+    consentDialogTitle: "ノート開封への同意",
+    consentExplanation:
+      "ご家族のノートを開封するためには、全員の同意が必要です。",
+    consentAgreeButton: "同意する",
+    consentDeclineButton: "同意しない",
+    consentGiven: "同意しました",
+    consentDeclined: "同意しませんでした",
+    consentPending: "未回答",
+    noteOpened: "ノートが開封されました",
+    dashboardTitle: "家族のノート",
+    dashboardDescription: "紐付いている方のノートを確認できます",
+    noteViewTitle: "ノートの閲覧",
+    accessManagerTitle: "アクセス管理",
+    accessManagerDescription:
+      "家族ごとにノートのカテゴリへのアクセス権を管理します",
+    categoryGranted: "アクセスを許可しました",
+    categoryRevoked: "アクセスを取り消しました",
+    noAccessibleCategories: "閲覧可能なカテゴリがありません",
+    noteNotOpened: "ノートはまだ開封されていません",
+    backToCreatorList: "一覧に戻る",
+    lifecycleActive: "活動中",
+    lifecycleDeath: "逝去報告済み",
+    lifecycleConsent: "同意収集中",
+    lifecycleOpened: "開封済み",
+  },
+  familyError: {
+    loadFailed: "家族情報の読み込みに失敗しました。",
+    inviteFailed: "招待リンクの作成に失敗しました。",
+    removeFailed: "家族の削除に失敗しました。",
+    updateFailed: "家族情報の更新に失敗しました。",
+    acceptFailed: "招待の受け入れに失敗しました。",
+    reportDeathFailed: "逝去報告に失敗しました。",
+    cancelDeathFailed: "逝去報告の取り消しに失敗しました。",
+    consentFailed: "同意の送信に失敗しました。",
+    consentStatusFailed: "同意状況の取得に失敗しました。",
+    notificationsFailed: "通知の取得に失敗しました。",
+    accessCategoriesFailed: "アクセス可能なカテゴリの取得に失敗しました。",
+    grantAccessFailed: "アクセス権の付与に失敗しました。",
+    revokeAccessFailed: "アクセス権の取り消しに失敗しました。",
+    noteFetchFailed: "ノートの取得に失敗しました。",
+  },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
   dailyLimitReached:
@@ -138,7 +409,7 @@ export const UI_MESSAGES = {
   summarizing: {
     dialogTitle: "まとめ作成中です",
     navigationWarning:
-      "お話のまとめを作成中です。このままお待ちいただくと、まとめが完了したらお知らせします。\n移動してもお話の内容は保存されていますのでご安心ください。",
+      "お話のまとめを作成中です。ここでお待ちいただくと、完了後に自動で表示されます。\n移動してもお話の内容は保存されていますのでご安心ください。",
     stayButton: "ここで待つ",
     leaveButton: "移動する",
     pendingBadge: "まとめ中...",

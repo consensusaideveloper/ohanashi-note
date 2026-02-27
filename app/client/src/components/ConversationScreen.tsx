@@ -9,14 +9,13 @@ import {
   getRemainingSessionCount,
 } from "../lib/usage-tracker";
 import { getSessionQuota } from "../lib/api";
-import { useConversation } from "../hooks/useConversation";
-
-import type { SessionQuota } from "../lib/api";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiOrb } from "./AiOrb";
 import { ErrorDisplay } from "./ErrorDisplay";
 
 import type { ReactNode } from "react";
+import type { UseConversationReturn } from "../hooks/useConversation";
+import type { SessionQuota } from "../lib/api";
 import type { CharacterId, QuestionCategory } from "../types/conversation";
 
 /** Format remaining milliseconds as "mm:ss". */
@@ -42,12 +41,15 @@ interface ConversationScreenProps {
   onCategoryConsumed?: () => void;
   /** Called when summarization status changes so parent can guard navigation. */
   onSummarizingChange?: (isSummarizing: boolean) => void;
+  /** Conversation hook values lifted from AppContent. */
+  conversation: UseConversationReturn;
 }
 
 export function ConversationScreen({
   initialCategory,
   onCategoryConsumed,
   onSummarizingChange,
+  conversation,
 }: ConversationScreenProps): ReactNode {
   const {
     state,
@@ -55,20 +57,18 @@ export function ConversationScreen({
     transcript,
     pendingAssistantText,
     audioLevel,
+    characterId: activeCharacterId,
     summaryStatus,
     remainingMs,
     sessionWarningShown,
     start,
     stop,
     retry,
-  } = useConversation();
+  } = conversation;
 
   const [isStarting, setIsStarting] = useState(false);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [serverQuota, setServerQuota] = useState<SessionQuota | null>(null);
-
-  // Track active character during conversation
-  const activeCharacterRef = useRef<CharacterId | null>(null);
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
@@ -137,11 +137,9 @@ export function ConversationScreen({
     getUserProfile()
       .then((profile) => {
         const characterId: CharacterId = profile?.characterId ?? "character-a";
-        activeCharacterRef.current = characterId;
         start(characterId, category);
       })
       .catch(() => {
-        activeCharacterRef.current = "character-a";
         start("character-a", category);
       })
       .finally(() => {
@@ -165,7 +163,6 @@ export function ConversationScreen({
 
   const handleStop = useCallback((): void => {
     stop();
-    activeCharacterRef.current = null;
   }, [stop]);
 
   const handleButtonClick = useCallback((): void => {
@@ -289,8 +286,8 @@ export function ConversationScreen({
 
   // Conversation UI
   const characterName =
-    activeCharacterRef.current !== null
-      ? getCharacterById(activeCharacterRef.current).name
+    activeCharacterId !== null
+      ? getCharacterById(activeCharacterId).name
       : "アシスタント";
   const gradient = STATE_GRADIENTS[state] ?? STATE_GRADIENTS["idle"];
 

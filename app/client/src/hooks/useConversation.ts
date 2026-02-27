@@ -30,11 +30,14 @@ import {
 } from "../lib/storage";
 import { computeContentHash, computeBlobHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
-import { requestSummarize } from "../lib/api";
+import { requestSummarize, requestEnhancedSummarize } from "../lib/api";
 import {
   searchPastConversations,
   getNoteEntriesForAI,
 } from "../lib/conversation-search";
+import { useVoiceActionRef } from "../contexts/VoiceActionContext";
+
+import type { VoiceActionCallbacks } from "../contexts/VoiceActionContext";
 import { useWebSocket } from "./useWebSocket";
 import { useAudioInput } from "./useAudioInput";
 import { useAudioOutput } from "./useAudioOutput";
@@ -52,6 +55,7 @@ import type {
   NoteEntry,
   QuestionCategory,
   TranscriptEntry,
+  VoiceActionResult,
 } from "../types/conversation";
 
 // --- State machine ---
@@ -179,7 +183,7 @@ function reducer(state: State, action: Action): State {
 
 // --- Hook ---
 
-interface UseConversationReturn {
+export interface UseConversationReturn {
   state: ConversationState;
   errorType: ErrorType | null;
   transcript: TranscriptEntry[];
@@ -226,11 +230,70 @@ function collectCurrentNoteEntries(
   return Array.from(entryMap.values());
 }
 
+/**
+ * Try to dispatch a function call to voice action callbacks.
+ * Returns null if the function name is not a recognized voice action.
+ */
+function dispatchVoiceAction(
+  callbacks: VoiceActionCallbacks,
+  functionName: string,
+  argsJson: string,
+): VoiceActionResult | Promise<VoiceActionResult> | null {
+  switch (functionName) {
+    // Tier 0: Navigation
+    case "navigate_to_screen": {
+      const args = JSON.parse(argsJson) as { screen: string };
+      return callbacks.navigateToScreen(args.screen);
+    }
+    case "view_note_category": {
+      const args = JSON.parse(argsJson) as { category: string };
+      return callbacks.viewNoteCategory(args.category);
+    }
+    case "filter_conversation_history": {
+      const args = JSON.parse(argsJson) as {
+        category?: string;
+      };
+      return callbacks.filterHistory({ category: args.category });
+    }
+    // Tier 1: Settings
+    case "change_font_size": {
+      const args = JSON.parse(argsJson) as { level: string };
+      return callbacks.changeFontSize(args.level);
+    }
+    case "change_character": {
+      const args = JSON.parse(argsJson) as { character_name: string };
+      return callbacks.changeCharacter(args.character_name);
+    }
+    case "update_user_name": {
+      const args = JSON.parse(argsJson) as { name: string };
+      return callbacks.updateUserName(args.name);
+    }
+    // Tier 2: Confirmation-required
+    case "start_focused_conversation": {
+      const args = JSON.parse(argsJson) as { category: string };
+      return callbacks.requestStartConversation(args.category);
+    }
+    case "create_family_invitation": {
+      const args = JSON.parse(argsJson) as {
+        relationship: string;
+        relationship_label: string;
+      };
+      return callbacks.requestCreateInvitation({
+        relationship: args.relationship,
+        relationshipLabel: args.relationship_label,
+      });
+    }
+    default:
+      return null;
+  }
+}
+
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const ws = useWebSocket();
   const audioOutput = useAudioOutput();
+  const voiceActionRef = useVoiceActionRef();
 
   // Track whether we've sent the session.update to avoid sending it twice
   const sessionConfigSentRef = useRef(false);
@@ -316,6 +379,19 @@ export function useConversation(): UseConversationReturn {
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
     (callId: string, functionName: string, argsJson: string): void => {
+      /** Send function call output back to the Realtime API and trigger a response. */
+      const sendResult = (output: string): void => {
+        ws.send({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output,
+          },
+        });
+        ws.send({ type: "response.create" });
+      };
+
       try {
         let result: string;
 
@@ -337,33 +413,44 @@ export function useConversation(): UseConversationReturn {
           );
           result = JSON.stringify(noteResult);
         } else {
-          result = JSON.stringify({ error: "Unknown function" });
+          // Delegate to voice action callbacks (tools added in Phase B-D)
+          const callbacks = voiceActionRef.current;
+          if (callbacks !== null) {
+            const voiceResult = dispatchVoiceAction(
+              callbacks,
+              functionName,
+              argsJson,
+            );
+            if (voiceResult !== null) {
+              if (voiceResult instanceof Promise) {
+                voiceResult
+                  .then((r) => {
+                    sendResult(JSON.stringify(r));
+                  })
+                  .catch(() => {
+                    sendResult(
+                      JSON.stringify({
+                        error: "操作中にエラーが発生しました",
+                      }),
+                    );
+                  });
+                return;
+              }
+              result = JSON.stringify(voiceResult);
+            } else {
+              result = JSON.stringify({ error: "Unknown function" });
+            }
+          } else {
+            result = JSON.stringify({ error: "Unknown function" });
+          }
         }
 
-        ws.send({
-          type: "conversation.item.create",
-          item: {
-            type: "function_call_output",
-            call_id: callId,
-            output: result,
-          },
-        });
-        ws.send({ type: "response.create" });
+        sendResult(result);
       } catch {
-        ws.send({
-          type: "conversation.item.create",
-          item: {
-            type: "function_call_output",
-            call_id: callId,
-            output: JSON.stringify({
-              error: "検索中にエラーが発生しました",
-            }),
-          },
-        });
-        ws.send({ type: "response.create" });
+        sendResult(JSON.stringify({ error: "検索中にエラーが発生しました" }));
       }
     },
-    [ws],
+    [ws, voiceActionRef],
   );
 
   // Handle incoming server events
@@ -709,8 +796,22 @@ export function useConversation(): UseConversationReturn {
           });
         })
         .then(() => {
-          // Request summarization after conversation and audio are saved
-          return requestSummarize(category, record.transcript, previousEntries)
+          // Request enhanced summarization (re-transcription + summarize on server).
+          // Falls back to client-side summarize if enhanced endpoint fails.
+          const summarizePromise = requestEnhancedSummarize(
+            convId,
+            category,
+            previousEntries,
+          ).catch(() => {
+            // Fallback: use original realtime transcript for summarization
+            return requestSummarize(
+              category,
+              record.transcript,
+              previousEntries,
+            );
+          });
+
+          return summarizePromise
             .then((result) => {
               // Auto-save extracted user name to profile
               if (
@@ -729,7 +830,7 @@ export function useConversation(): UseConversationReturn {
                   .catch(() => {});
               }
 
-              // Use atomic update to avoid overwriting audioAvailable
+              // Update local IndexedDB with summary results
               return updateConversation(convId, {
                 summary: result.summary,
                 coveredQuestionIds: result.coveredQuestionIds,

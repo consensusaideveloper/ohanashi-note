@@ -122,3 +122,26 @@ export async function requestSummarize(
 
   return response.json() as Promise<SummarizeResult>;
 }
+
+// --- Enhanced Summarize (with re-transcription) ---
+
+export async function requestEnhancedSummarize(
+  conversationId: string,
+  category: QuestionCategory | null,
+  previousNoteEntries?: NoteEntry[],
+): Promise<SummarizeResult> {
+  const payload: Record<string, unknown> = { category };
+  if (previousNoteEntries !== undefined && previousNoteEntries.length > 0) {
+    payload["previousNoteEntries"] = previousNoteEntries;
+  }
+
+  const response = await fetchWithAuth(
+    `/api/conversations/${conversationId}/enhanced-summarize`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return response.json() as Promise<SummarizeResult>;
+}

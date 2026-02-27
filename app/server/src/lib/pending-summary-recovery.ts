@@ -10,6 +10,10 @@ import { eq, and, lt } from "drizzle-orm";
 import { db } from "../db/connection.js";
 import { conversations } from "../db/schema.js";
 import { summarizeConversation } from "../services/summarizer.js";
+import {
+  transcribeFromR2,
+  buildHybridTranscript,
+} from "../services/transcriber.js";
 import { logger } from "./logger.js";
 
 import type { QuestionCategory } from "../types/conversation.js";
@@ -77,8 +81,27 @@ async function recoverPendingSummaries(): Promise<void> {
           continue;
         }
 
-        const typedTranscript = transcript as TranscriptEntry[];
+        let typedTranscript = transcript as TranscriptEntry[];
         const category = row.category as QuestionCategory | null;
+        let transcriptionModel: string | null = null;
+
+        // Attempt re-transcription if audio is available
+        if (row.audioAvailable && row.audioStorageKey !== null) {
+          const retranscription = await transcribeFromR2(row.audioStorageKey);
+          if (
+            retranscription !== null &&
+            retranscription.text.trim().length > 0
+          ) {
+            typedTranscript = buildHybridTranscript(
+              typedTranscript,
+              retranscription,
+            );
+            transcriptionModel = "gpt-4o-mini-transcribe";
+            logger.info("Recovery: using re-transcribed audio", {
+              conversationId: row.id,
+            });
+          }
+        }
 
         const result = await summarizeConversation({
           category,
@@ -89,20 +112,27 @@ async function recoverPendingSummaries(): Promise<void> {
         });
 
         // Only update if still pending (avoid overwriting a concurrent client update)
+        const updateData: Record<string, unknown> = {
+          summary: result.summary,
+          summaryStatus: "completed",
+          coveredQuestionIds: result.coveredQuestionIds,
+          noteEntries: result.noteEntries,
+          oneLinerSummary: result.oneLinerSummary,
+          emotionAnalysis: result.emotionAnalysis,
+          discussedCategories: result.discussedCategories,
+          keyPoints: result.keyPoints,
+          topicAdherence: result.topicAdherence,
+          offTopicSummary: result.offTopicSummary,
+        };
+
+        if (transcriptionModel !== null) {
+          updateData["improvedTranscript"] = typedTranscript;
+          updateData["transcriptionModel"] = transcriptionModel;
+        }
+
         await db
           .update(conversations)
-          .set({
-            summary: result.summary,
-            summaryStatus: "completed",
-            coveredQuestionIds: result.coveredQuestionIds,
-            noteEntries: result.noteEntries,
-            oneLinerSummary: result.oneLinerSummary,
-            emotionAnalysis: result.emotionAnalysis,
-            discussedCategories: result.discussedCategories,
-            keyPoints: result.keyPoints,
-            topicAdherence: result.topicAdherence,
-            offTopicSummary: result.offTopicSummary,
-          })
+          .set(updateData)
           .where(
             and(
               eq(conversations.id, row.id),
@@ -112,6 +142,7 @@ async function recoverPendingSummaries(): Promise<void> {
 
         logger.info("Recovered pending summary", {
           conversationId: row.id,
+          transcriptionModel: transcriptionModel ?? "whisper-1 (original)",
         });
       } catch (error: unknown) {
         const message =
