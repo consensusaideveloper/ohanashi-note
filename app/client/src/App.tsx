@@ -33,6 +33,7 @@ import { ConversationBlockedScreen } from "./components/ConversationBlockedScree
 import { ConversationHistory } from "./components/ConversationHistory";
 import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
+import { PrintableEndingNote } from "./components/PrintableEndingNote";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FamilyScreen } from "./components/FamilyScreen";
@@ -234,6 +235,9 @@ function AppContent(): ReactNode {
     "history" | "note"
   >("history");
 
+  // Print view overlay
+  const [showPrintView, setShowPrintView] = useState(false);
+
   // Creator lifecycle status (for the logged-in user as a creator)
   const [myLifecycleStatus, setMyLifecycleStatus] = useState("active");
 
@@ -277,6 +281,14 @@ function AppContent(): ReactNode {
     setSelectedConversationId(null);
     setScreen(detailReturnScreen);
   }, [detailReturnScreen]);
+
+  const handleOpenPrintNote = useCallback((): void => {
+    setShowPrintView(true);
+  }, []);
+
+  const handleClosePrintNote = useCallback((): void => {
+    setShowPrintView(false);
+  }, []);
 
   // Summarization guard state
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -651,6 +663,7 @@ function AppContent(): ReactNode {
           <EndingNoteView
             onStartConversation={handleStartFromNote}
             onViewConversation={handleViewConversationFromNote}
+            onPrintNote={handleOpenPrintNote}
           />
         );
       case "settings":
@@ -928,6 +941,8 @@ function AppContent(): ReactNode {
           </button>
         </nav>
       )}
+
+      {showPrintView && <PrintableEndingNote onClose={handleClosePrintNote} />}
     </div>
   );
 }

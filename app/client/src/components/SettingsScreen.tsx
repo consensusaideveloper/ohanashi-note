@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import {
   getUserProfile,
   saveUserProfile,
-  exportAllData,
-  importAllData,
   clearAllData,
   deleteAccount,
 } from "../lib/storage";
@@ -18,6 +16,7 @@ import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { PrintableEndingNote } from "./PrintableEndingNote";
 import { Toast } from "./Toast";
 
 import type { CharacterId, FontSizeLevel } from "../types/conversation";
@@ -36,21 +35,15 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("character-a");
-  const [exportStatus, setExportStatus] = useState("");
-  const [importMessage, setImportMessage] = useState("");
-  const [importError, setImportError] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPrintView, setShowPrintView] = useState(false);
 
   // Dialog state
   const { fontSize, setFontSize } = useFontSize();
-
-  const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAccountDeleteFirst, setShowAccountDeleteFirst] = useState(false);
   const [showAccountDeleteSecond, setShowAccountDeleteSecond] = useState(false);
-  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
   useEffect(() => {
     void getUserProfile().then((profile) => {
@@ -82,82 +75,12 @@ export function SettingsScreen({
       });
   }, [name, selectedCharacterId, showToast]);
 
-  const handleExport = useCallback((): void => {
-    setExportStatus("書き出し中...");
-    void exportAllData()
-      .then((json) => {
-        const blob = new Blob([json], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const now = new Date();
-        const yyyy = now.getFullYear();
-        const mm = String(now.getMonth() + 1).padStart(2, "0");
-        const dd = String(now.getDate()).padStart(2, "0");
-        const fileName = `ohanashi-ending-note-backup-${yyyy}${mm}${dd}.json`;
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setExportStatus("");
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to export data:", { error });
-        setExportStatus("");
-        showToast(UI_MESSAGES.error.exportFailed, "error");
-      });
-  }, [showToast]);
-
-  const handleImportClick = useCallback((): void => {
-    fileInputRef.current?.click();
+  const handleOpenPrint = useCallback((): void => {
+    setShowPrintView(true);
   }, []);
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>): void => {
-      const file = e.target.files?.[0];
-      if (file === undefined) {
-        return;
-      }
-      setPendingImportFile(file);
-      setShowImportConfirm(true);
-    },
-    [],
-  );
-
-  const handleImportConfirm = useCallback((): void => {
-    setShowImportConfirm(false);
-    if (pendingImportFile === null) {
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (): void => {
-      const json = reader.result as string;
-      importAllData(json)
-        .then(() => {
-          setImportError(false);
-          setImportMessage("データを読み込みました");
-        })
-        .catch(() => {
-          setImportError(true);
-          setImportMessage("データの読み込みに失敗しました");
-        })
-        .finally(() => {
-          if (fileInputRef.current !== null) {
-            fileInputRef.current.value = "";
-          }
-          setPendingImportFile(null);
-        });
-    };
-    reader.readAsText(pendingImportFile);
-  }, [pendingImportFile]);
-
-  const handleImportCancel = useCallback((): void => {
-    setShowImportConfirm(false);
-    setPendingImportFile(null);
-    if (fileInputRef.current !== null) {
-      fileInputRef.current.value = "";
-    }
+  const handleClosePrint = useCallback((): void => {
+    setShowPrintView(false);
   }, []);
 
   const handleClearAll = useCallback((): void => {
@@ -378,54 +301,21 @@ export function SettingsScreen({
           <div className="flex-1 border-t border-border" />
         </div>
 
-        {/* Section 4: Data Backup (medium risk — import overwrites) */}
+        {/* Section 4: Note Printing */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
-            データのバックアップ
+            {SETTINGS_MESSAGES.print.sectionTitle}
           </h2>
           <p className="text-lg text-text-secondary">
-            大切なデータを守るため、定期的にバックアップをお取りください。
+            {SETTINGS_MESSAGES.print.sectionDescription}
           </p>
           <button
             type="button"
             className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg w-full"
-            onClick={handleExport}
-            disabled={exportStatus !== ""}
+            onClick={handleOpenPrint}
           >
-            {exportStatus !== "" ? exportStatus : "データを書き出す"}
+            {SETTINGS_MESSAGES.print.buttonLabel}
           </button>
-          {lifecycleStatus === "active" ? (
-            <>
-              <button
-                type="button"
-                className="bg-bg-surface text-text-primary border border-border-light rounded-full min-h-11 px-6 text-lg w-full"
-                onClick={handleImportClick}
-              >
-                データを読み込む
-              </button>
-              <p className="text-lg text-text-secondary">
-                {SETTINGS_MESSAGES.backup.importDescription}
-              </p>
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-              {importMessage !== "" && (
-                <p
-                  className={importError ? "text-error" : "text-accent-primary"}
-                >
-                  {importMessage}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-lg text-text-secondary leading-relaxed">
-              {SETTINGS_MESSAGES.deletion.importBlocked}
-            </p>
-          )}
         </section>
 
         {/* Section 5: Data Deletion (critical, irreversible — collapsed) */}
@@ -547,15 +437,6 @@ export function SettingsScreen({
       </div>
 
       <ConfirmDialog
-        isOpen={showImportConfirm}
-        title="データの上書き"
-        message={SETTINGS_MESSAGES.backup.importConfirm}
-        confirmLabel="上書きする"
-        cancelLabel="やめる"
-        onConfirm={handleImportConfirm}
-        onCancel={handleImportCancel}
-      />
-      <ConfirmDialog
         isOpen={showDeleteConfirm}
         title="データの削除"
         message={SETTINGS_MESSAGES.deletion.confirm}
@@ -600,6 +481,7 @@ export function SettingsScreen({
         isVisible={isToastVisible}
         onDismiss={hideToast}
       />
+      {showPrintView && <PrintableEndingNote onClose={handleClosePrint} />}
     </div>
   );
 }

@@ -335,7 +335,8 @@ export const UI_MESSAGES = {
       "本日の会話回数の上限に達しました。また明日お話ししましょう。",
     unknown: "うまくいきませんでした。もう一度お試しください。",
     saveFailed: "保存できませんでした。もう一度お試しください。",
-    exportFailed: "データの書き出しに失敗しました。もう一度お試しください。",
+    printLoadFailed:
+      "印刷用のデータを読み込めませんでした。もう一度お試しください。",
     deleteFailed: "削除できませんでした。もう一度お試しください。",
     summaryFailed:
       "お話のまとめを作れませんでした。会話の内容は保存されていますのでご安心ください。",
@@ -696,11 +697,20 @@ export const SETTINGS_MESSAGES = {
     logoutConfirm:
       "ログアウトしてもよろしいですか？データは保存されたままです。同じアカウントで再度ログインできます。",
   },
-  backup: {
-    importDescription:
-      "バックアップファイルからデータを復元します。現在のデータは上書きされます。",
-    importConfirm:
-      "現在の会話やノートの記録がバックアップファイルの内容で上書きされます。よろしいですか？",
+  print: {
+    title: "わたしのエンディングノート",
+    subtitle: "大切な想いの記録",
+    generatedAt: "作成日",
+    printButton: "印刷する",
+    closeButton: "戻る",
+    noEntries:
+      "まだ記録がありません。みどりさんとお話しして、ノートを作りましょう。",
+    footer: "おはなしエンディングノートで作成",
+    disclaimer: "この文書は記録として保管用です。法的効力はありません。",
+    sectionTitle: "ノートの印刷",
+    sectionDescription:
+      "記録した内容をきれいな形式で印刷できます。「PDFに保存」もできます。",
+    buttonLabel: "ノートを印刷する",
   },
   deletion: {
     description:
@@ -709,8 +719,6 @@ export const SETTINGS_MESSAGES = {
       "会話の記録、ノートの内容、プロフィールがすべて削除されます。削除したデータは元に戻せません。本当に削除しますか？",
     blocked:
       "ノートが開封済み（または手続き中）のため、データの削除はできません。ご家族がノートを閲覧できる状態です。",
-    importBlocked:
-      "ノートが保護されている状態では、データの読み込み（上書き）はできません。",
   },
   accountDeletion: {
     description:

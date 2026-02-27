@@ -305,6 +305,36 @@ details[open] > summary .details-chevron {
   transform: rotate(180deg);
 }
 
+/* --- Print Styles --- */
+
+@media print {
+  .print-hidden {
+    display: none !important;
+  }
+
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+
+  .print-content {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .print-page-break {
+    break-before: page;
+  }
+
+  .print-no-break {
+    break-inside: avoid;
+  }
+}
+
 /* --- Focus Visible --- */
 
 button:focus-visible,
