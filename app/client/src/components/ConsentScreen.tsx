@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
+import { ApiError } from "../lib/api";
 import { getConsentStatus, submitConsent } from "../lib/family-api";
 
 import type { ReactNode } from "react";
@@ -9,11 +10,13 @@ import type { ConsentStatus } from "../lib/family-api";
 interface ConsentScreenProps {
   creatorId: string;
   creatorName: string;
+  onLifecycleChanged?: () => void;
 }
 
 export function ConsentScreen({
   creatorId,
   creatorName,
+  onLifecycleChanged,
 }: ConsentScreenProps): ReactNode {
   const [consentStatus, setConsentStatus] = useState<ConsentStatus | null>(
     null,
@@ -28,6 +31,9 @@ export function ConsentScreen({
     void getConsentStatus(creatorId)
       .then((data) => {
         setConsentStatus(data);
+        if (data.status !== "consent_gathering") {
+          onLifecycleChanged?.();
+        }
       })
       .catch((err: unknown) => {
         console.error("Failed to load consent status:", {
@@ -39,7 +45,7 @@ export function ConsentScreen({
       .finally(() => {
         setIsLoading(false);
       });
-  }, [creatorId]);
+  }, [creatorId, onLifecycleChanged]);
 
   useEffect(() => {
     loadConsentStatus();
@@ -52,6 +58,9 @@ export function ConsentScreen({
         .then(() => getConsentStatus(creatorId))
         .then((data) => {
           setConsentStatus(data);
+          if (data.status !== "consent_gathering") {
+            onLifecycleChanged?.();
+          }
         })
         .catch((err: unknown) => {
           console.error("Failed to submit consent:", {
@@ -59,13 +68,17 @@ export function ConsentScreen({
             creatorId,
             consented,
           });
-          setError(true);
+          if (err instanceof ApiError && err.status === 409) {
+            onLifecycleChanged?.();
+          } else {
+            setError(true);
+          }
         })
         .finally(() => {
           setIsSubmitting(false);
         });
     },
-    [creatorId],
+    [creatorId, onLifecycleChanged],
   );
 
   const handleAgree = useCallback((): void => {
@@ -105,8 +118,8 @@ export function ConsentScreen({
     );
   }
 
-  const myConsent = consentStatus?.myConsent ?? null;
-  const hasResponded = myConsent !== null && myConsent.consented !== null;
+  const myRecord = consentStatus?.consentRecords?.[0] ?? null;
+  const hasResponded = myRecord !== null && myRecord.consented !== null;
 
   return (
     <div className="rounded-card border border-border-light bg-bg-surface p-6 space-y-4">
@@ -126,7 +139,7 @@ export function ConsentScreen({
 
       {hasResponded ? (
         <div className="rounded-card border border-border-light bg-bg-primary p-4 flex items-center gap-3">
-          {myConsent.consented === true ? (
+          {myRecord.consented === true ? (
             <>
               <svg
                 className="w-6 h-6 text-success flex-none"

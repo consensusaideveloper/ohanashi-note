@@ -303,6 +303,7 @@ export function CreatorDetailView({
                   <ConsentScreen
                     creatorId={connection.creatorId}
                     creatorName={connection.creatorName}
+                    onLifecycleChanged={refreshLifecycle}
                   />
                   {isRepresentative && (
                     <ConsentProgressTracker creatorId={connection.creatorId} />

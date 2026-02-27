@@ -8,6 +8,7 @@ import {
   notifications,
   users,
 } from "../db/schema.js";
+import { logger } from "./logger.js";
 
 // --- Creator name lookup ---
 
@@ -51,6 +52,8 @@ export async function getActiveFamilyMembers(
 
 /**
  * Create a notification for each specified user.
+ * Best-effort: logs errors but does not throw — notifications should never
+ * block critical lifecycle operations.
  */
 export async function notifyFamilyMembers(
   memberUserIds: string[],
@@ -69,7 +72,17 @@ export async function notifyFamilyMembers(
     relatedCreatorId,
   }));
 
-  await db.insert(notifications).values(values);
+  try {
+    await db.insert(notifications).values(values);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to insert notifications", {
+      type,
+      relatedCreatorId,
+      memberCount: memberUserIds.length,
+      error: msg,
+    });
+  }
 }
 
 // --- Lifecycle status helpers ---

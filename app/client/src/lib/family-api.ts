@@ -151,18 +151,17 @@ export async function cancelDeathReport(
 export interface ConsentRecord {
   id: string;
   familyMemberId: string;
-  memberName: string;
+  memberName?: string;
   consented: boolean | null;
   consentedAt: string | null;
 }
 
 export interface ConsentStatus {
-  lifecycleStatus: string;
-  myConsent?: { consented: boolean | null; consentedAt: string | null };
-  records?: ConsentRecord[];
+  status: string;
+  consentRecords: ConsentRecord[];
   totalCount: number;
   consentedCount: number;
-  allConsented: boolean;
+  pendingCount: number;
 }
 
 export async function initiateConsent(

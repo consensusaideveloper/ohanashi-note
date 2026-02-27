@@ -142,7 +142,8 @@ export function ConsentProgressTracker({
     return null;
   }
 
-  const { records, totalCount, consentedCount, allConsented } = consentStatus;
+  const { consentRecords, totalCount, consentedCount } = consentStatus;
+  const allConsented = totalCount > 0 && consentedCount === totalCount;
 
   return (
     <div className="rounded-card border border-border-light bg-bg-surface p-6 space-y-4">
@@ -166,9 +167,9 @@ export function ConsentProgressTracker({
       </div>
 
       {/* Member list */}
-      {records !== undefined && records.length > 0 && (
+      {consentRecords.length > 0 && (
         <ul className="space-y-3">
-          {records.map((record: ConsentRecord) => (
+          {consentRecords.map((record: ConsentRecord) => (
             <li
               key={record.id}
               className="flex items-center justify-between gap-3 py-2 border-b border-border-light last:border-b-0"

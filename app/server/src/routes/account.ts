@@ -115,28 +115,37 @@ accountRoute.delete("/api/account", async (c: Context) => {
       );
     }
 
-    // Notify family members before deletion
+    // Notify family members before deletion (best-effort)
     const members = await getActiveFamilyMembers(userId);
     if (members.length > 0) {
-      const creatorName = await getCreatorName(userId);
-      const memberUserIds = members.map((m) => m.memberId);
-      await notifyFamilyMembers(
-        memberUserIds,
-        "creator_account_deleted",
-        "アカウント削除のお知らせ",
-        `${creatorName}さんがアカウントを削除しました。関連するノートデータはすべて削除されました。`,
-        userId,
-      );
+      try {
+        const creatorName = await getCreatorName(userId);
+        const memberUserIds = members.map((m) => m.memberId);
+        await notifyFamilyMembers(
+          memberUserIds,
+          "creator_account_deleted",
+          "アカウント削除のお知らせ",
+          `${creatorName}さんがアカウントを削除しました。関連するノートデータはすべて削除されました。`,
+          userId,
+        );
+      } catch (notifyError: unknown) {
+        const msg =
+          notifyError instanceof Error ? notifyError.message : "Unknown error";
+        logger.error(
+          "Failed to notify family members during account deletion",
+          { userId, error: msg },
+        );
+      }
     }
 
     // Clean up R2 audio files (best-effort)
     await deleteUserAudioFiles(userId);
 
+    // Delete Firebase Auth user FIRST — if this fails, no data is lost and the user can retry
+    await deleteFirebaseUser(firebaseUid);
+
     // Delete from DB (cascades clean up everything)
     await db.delete(users).where(eq(users.id, userId));
-
-    // Delete from Firebase Auth
-    await deleteFirebaseUser(firebaseUid);
 
     logger.info("Account deleted", { userId, firebaseUid });
 
