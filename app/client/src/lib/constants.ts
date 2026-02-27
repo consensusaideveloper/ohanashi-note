@@ -669,6 +669,16 @@ export const ONBOARDING_CONVERSATION_MESSAGES = {
   reconnectPrompt: "接続が切れました。もう一度お試しください。",
 } as const;
 
+export const ONBOARDING_COMPLETE_MESSAGES = {
+  title: "準備ができました！",
+  nameLabel: "お名前",
+  characterLabel: "話し相手",
+  fontSizeLabel: "文字の大きさ",
+  description:
+    "みどりさんとお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
+  startButton: "はじめる",
+} as const;
+
 // --- Settings screen messages (Japanese) ---
 export const SETTINGS_MESSAGES = {
   profile: {

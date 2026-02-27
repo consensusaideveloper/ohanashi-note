@@ -25,6 +25,7 @@ import {
 import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { OnboardingConversation } from "./components/OnboardingConversation";
+import { OnboardingComplete } from "./components/OnboardingComplete";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
 import { CreatorLifecycleBanner } from "./components/CreatorLifecycleBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
@@ -106,12 +107,15 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+type OnboardingPhase = "none" | "conversation" | "complete";
+
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
   const [inviteToken, setInviteToken] = useState<string | null>(
     () => getInviteTokenFromUrl() ?? getPendingInviteToken(),
   );
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingPhase, setOnboardingPhase] =
+    useState<OnboardingPhase>("none");
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   // Save invite token to localStorage immediately so it survives OAuth redirects
@@ -127,7 +131,7 @@ function AuthGate(): ReactNode {
       void getUserProfile()
         .then((profile) => {
           if (profile !== null && profile.name === "") {
-            setNeedsOnboarding(true);
+            setOnboardingPhase("conversation");
           }
           setOnboardingChecked(true);
         })
@@ -146,7 +150,7 @@ function AuthGate(): ReactNode {
     void getUserProfile()
       .then((profile) => {
         if (profile !== null && profile.name === "") {
-          setNeedsOnboarding(true);
+          setOnboardingPhase("conversation");
         }
         setOnboardingChecked(true);
       })
@@ -155,8 +159,12 @@ function AuthGate(): ReactNode {
       });
   }, []);
 
-  const handleOnboardingComplete = useCallback((): void => {
-    setNeedsOnboarding(false);
+  const handleOnboardingConversationDone = useCallback((): void => {
+    setOnboardingPhase("complete");
+  }, []);
+
+  const handleOnboardingFinished = useCallback((): void => {
+    setOnboardingPhase("none");
   }, []);
 
   // Show loading spinner while auth state is being determined
@@ -193,8 +201,15 @@ function AuthGate(): ReactNode {
   }
 
   // Show onboarding conversation for new users
-  if (needsOnboarding) {
-    return <OnboardingConversation onComplete={handleOnboardingComplete} />;
+  if (onboardingPhase === "conversation") {
+    return (
+      <OnboardingConversation onComplete={handleOnboardingConversationDone} />
+    );
+  }
+
+  // Show completion screen after onboarding conversation
+  if (onboardingPhase === "complete") {
+    return <OnboardingComplete onStart={handleOnboardingFinished} />;
   }
 
   return (
