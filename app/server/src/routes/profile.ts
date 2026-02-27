@@ -15,6 +15,9 @@ interface ClientProfile {
   name: string;
   characterId: string | null;
   fontSize: string;
+  speakingSpeed: string;
+  silenceDuration: string;
+  confirmationLevel: string;
   updatedAt: number;
 }
 
@@ -42,6 +45,9 @@ profileRoute.get("/api/profile", async (c: Context) => {
       name: row.name,
       characterId: row.characterId,
       fontSize: row.fontSize,
+      speakingSpeed: row.speakingSpeed,
+      silenceDuration: row.silenceDuration,
+      confirmationLevel: row.confirmationLevel,
       updatedAt: row.updatedAt.getTime(),
     };
 
@@ -77,6 +83,21 @@ profileRoute.put("/api/profile", async (c: Context) => {
     if ("fontSize" in body && typeof body["fontSize"] === "string") {
       updates["fontSize"] = body["fontSize"];
     }
+    if ("speakingSpeed" in body && typeof body["speakingSpeed"] === "string") {
+      updates["speakingSpeed"] = body["speakingSpeed"];
+    }
+    if (
+      "silenceDuration" in body &&
+      typeof body["silenceDuration"] === "string"
+    ) {
+      updates["silenceDuration"] = body["silenceDuration"];
+    }
+    if (
+      "confirmationLevel" in body &&
+      typeof body["confirmationLevel"] === "string"
+    ) {
+      updates["confirmationLevel"] = body["confirmationLevel"];
+    }
 
     await db.update(users).set(updates).where(eq(users.id, userId));
 
@@ -97,6 +118,9 @@ profileRoute.put("/api/profile", async (c: Context) => {
       name: row.name,
       characterId: row.characterId,
       fontSize: row.fontSize,
+      speakingSpeed: row.speakingSpeed,
+      silenceDuration: row.silenceDuration,
+      confirmationLevel: row.confirmationLevel,
       updatedAt: row.updatedAt.getTime(),
     };
 

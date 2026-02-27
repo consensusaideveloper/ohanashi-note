@@ -10,7 +10,11 @@ import {
 
 import { CHARACTERS } from "./characters";
 
-import type { CharacterId, QuestionCategory } from "../types/conversation";
+import type {
+  CharacterId,
+  QuestionCategory,
+  SpeakingPreferences,
+} from "../types/conversation";
 
 /** Context for AI-guided mode (all categories). */
 export interface GuidedPastContext {
@@ -108,14 +112,15 @@ const TOOL_AWARENESS_PROMPT = `
 6. change_font_size：文字の大きさを変更。「文字を大きくして」「元のサイズに戻して」など
 7. change_character：話し相手キャラクターを変更（次回会話から適用）。「話し相手を変えたい」など
 8. update_user_name：ユーザーの表示名を変更。「名前を変えて」「〇〇と呼んで」など
-9. start_focused_conversation：特定テーマで新しい会話を開始（確認画面を表示）。「お金のことで話したい」など
-10. create_family_invitation：家族の招待リンクを作成（確認画面を表示）。「妻を招待して」など
-11. end_conversation：会話を終了して保存。ユーザーが終わりたい意思を示したとき（「疲れた」「また今度」「もういいかな」「今日はここまで」など）
+9. update_speaking_preferences：AIの話し方を変更。「もっとゆっくり話して」「待ち時間を長くして」「確認を増やして」など
+10. start_focused_conversation：特定テーマで新しい会話を開始（確認画面を表示）。「お金のことで話したい」など
+11. create_family_invitation：家族の招待リンクを作成（確認画面を表示）。「妻を招待して」など
+12. end_conversation：会話を終了して保存。ユーザーが終わりたい意思を示したとき（「疲れた」「また今度」「もういいかな」「今日はここまで」など）
 
 【ツール使用ルール】
 - ツールの存在をユーザーに説明しない。「ツールで操作できます」のような案内はしない。ユーザーの要望に応じて自然に活用する。
 - 操作後は簡潔に結果を伝える（例：「ノートの画面に移動しました」「文字を大きめに変更しました、見やすくなりましたか？」）。
-- 9と10は確認画面が表示されるので「確認画面を出しました。よろしければ画面の『はい』を押してください」と伝える。
+- 10と11は確認画面が表示されるので「確認画面を出しました。よろしければ画面の『はい』を押してください」と伝える。
 - 会話中に別の話題について話したい場合（例：「お金の話がしたい」→ 現在も会話中）、今の会話の中で柔軟に話題を切り替える。start_focused_conversationは今の会話を終了して新しく始める場合にのみ使う。
 - end_conversationは、ユーザーの終了意図を文脈で判断して使用する。キーワード一致ではなく「もう疲れた」「また今度」「もうこのへんで」「ありがとう、終わりにしよう」などの意図を理解する。呼び出し後の応答では、短い感謝と別れの挨拶を述べる（1〜2文以内）。ユーザーが明確に終わりたい意思を示していない場合は使わない。
 
@@ -152,6 +157,61 @@ const SENSITIVE_CATEGORIES: ReadonlySet<QuestionCategory> = new Set([
   "legal",
   "trust",
 ]);
+
+/**
+ * Build speaking style instructions based on user preferences.
+ * These instructions are injected into all prompts to control the AI's
+ * pacing, sentence structure, and confirmation behavior.
+ */
+export function buildSpeakingStylePrompt(
+  preferences: SpeakingPreferences,
+): string {
+  const parts: string[] = ["【話し方の設定】"];
+
+  switch (preferences.speakingSpeed) {
+    case "slow":
+      parts.push(
+        "- 一文を短くしてください（15文字以内を目安に）",
+        "- 一度に一つの情報だけ伝えてください",
+        "- 文と文の間に間を置いて、ゆっくり丁寧に話してください",
+        "- 難しい言葉は使わず、わかりやすい言葉を選んでください",
+      );
+      break;
+    case "fast":
+      parts.push(
+        "- テンポよく会話を進めてください",
+        "- 要点を簡潔にまとめて伝えてください",
+        "- 冗長な前置きは省いてください",
+      );
+      break;
+    case "normal":
+    default:
+      parts.push("- 自然な速さで話してください");
+      break;
+  }
+
+  switch (preferences.confirmationLevel) {
+    case "frequent":
+      parts.push(
+        "- 大事なことを話した後は「ここまで大丈夫ですか？」と確認してください",
+        "- ユーザーが話した内容を要約して繰り返してから次に進んでください",
+        "- 「〇〇ということでよろしいですか？」と復唱してください",
+      );
+      break;
+    case "minimal":
+      parts.push(
+        "- 確認の回数は最小限にしてください",
+        "- 相手の理解力を信頼して、どんどん進めてください",
+      );
+      break;
+    case "normal":
+    default:
+      parts.push("- 適度に確認を入れながら進めてください");
+      break;
+  }
+
+  return parts.join("\n");
+}
 
 /**
  * Build a question list string for inclusion in the prompt.
@@ -215,6 +275,7 @@ export function buildSessionPrompt(
   category: QuestionCategory,
   pastContext?: PastConversationContext,
   userName?: string,
+  speakingPreferences?: SpeakingPreferences,
 ): string {
   const character = getCharacterById(characterId);
   const categoryInstruction = CATEGORY_INSTRUCTIONS[category];
@@ -226,6 +287,11 @@ export function buildSessionPrompt(
   const categoryLabel = getCategoryLabel(category);
 
   let prompt = character.personality;
+
+  // Inject speaking style preferences
+  if (speakingPreferences !== undefined) {
+    prompt += `\n\n${buildSpeakingStylePrompt(speakingPreferences)}`;
+  }
 
   // User name handling
   if (userName !== undefined && userName !== "") {
@@ -284,12 +350,18 @@ export function buildGuidedSessionPrompt(
   characterId: CharacterId,
   guidedContext: GuidedPastContext,
   userName?: string,
+  speakingPreferences?: SpeakingPreferences,
 ): string {
   const character = getCharacterById(characterId);
   const coveredIds = new Set(guidedContext.allCoveredQuestionIds);
   const compactQuestions = buildAllQuestionsCompact(coveredIds);
 
   let prompt = character.personality;
+
+  // Inject speaking style preferences
+  if (speakingPreferences !== undefined) {
+    prompt += `\n\n${buildSpeakingStylePrompt(speakingPreferences)}`;
+  }
 
   // User name handling (same logic as focused mode)
   if (userName !== undefined && userName !== "") {
@@ -341,13 +413,14 @@ ${compactQuestions}`;
   return prompt;
 }
 
-// Tool awareness prompt for onboarding — limited to 4 tools
+// Tool awareness prompt for onboarding — limited to 5 tools
 const ONBOARDING_TOOL_AWARENESS = `
 【利用可能なツール】
 1. update_user_name：ユーザーのお名前を設定します
 2. change_character：話し相手のキャラクターを設定します（次回会話から適用）
 3. change_font_size：文字の大きさを設定します
-4. end_conversation：すべての設定完了後、会話を終了します
+4. update_speaking_preferences：AIの話し方の設定を変更します
+5. end_conversation：すべての設定完了後、会話を終了します
 
 【ツール使用ルール】
 - ツールの存在をユーザーに説明しない
@@ -356,10 +429,12 @@ const ONBOARDING_TOOL_AWARENESS = `
 
 /**
  * Build a system prompt for the onboarding conversation.
- * Guides the AI to collect user name, character preference, and font size
- * through natural voice conversation.
+ * Guides the AI to collect user name, character preference, font size,
+ * and speaking preferences through natural voice conversation.
  */
-export function buildOnboardingPrompt(): string {
+export function buildOnboardingPrompt(
+  speakingPreferences?: SpeakingPreferences,
+): string {
   const character = getCharacterById("character-a");
 
   const characterDescriptions = CHARACTERS.map(
@@ -368,11 +443,16 @@ export function buildOnboardingPrompt(): string {
 
   let prompt = character.personality;
 
+  // Inject speaking style preferences (if already set from a previous partial onboarding)
+  if (speakingPreferences !== undefined) {
+    prompt += `\n\n${buildSpeakingStylePrompt(speakingPreferences)}`;
+  }
+
   prompt += `
 
 【初回ご案内の会話】
 あなたは新しく登録したユーザーと初めて話しています。
-以下の3つの設定を、自然な会話の中でやさしく案内してください。
+以下の4つの設定を、自然な会話の中でやさしく案内してください。
 
 1. **お名前**
    まず自己紹介をして、「なんとお呼びすればいいですか？」と聞いてください。
@@ -393,12 +473,20 @@ ${characterDescriptions}
    ユーザーが選んだら change_font_size ツールで設定してください。
    「ふつうでいい」「そのままでいい」と言われた場合はそのままで大丈夫です（ツールは呼ばなくてOK）。
 
+4. **話し方の好み**
+   今の話し方のペースが合っているか確認してください。
+   - 「今のペースは大丈夫ですか？もう少しゆっくりのほうがいいですか？」と聞いてください
+   - ゆっくりがいい → update_speaking_preferences(speaking_speed: "slow")
+   - もう少し速く → update_speaking_preferences(speaking_speed: "fast")
+   - 今のままでいい → そのまま（ツールは呼ばなくてOK）
+   待ち時間と確認の頻度は聞かなくてOK（デフォルトで十分）。ユーザーが具体的に要望した場合のみ変更してください。
+
 【進め方のルール】
 - 一度にすべて聞かず、1つずつ順番に案内してください
 - ユーザーの返答をしっかり受け止めてから次に進んでください
-- 3つの設定がすべて完了したら（ツールで設定した場合も、デフォルトのままでいいと言われた場合も含む）、
+- 4つの設定がすべて完了したら（ツールで設定した場合も、デフォルトのままでいいと言われた場合も含む）、
   設定した内容を簡潔に振り返ってから end_conversation を呼んでください。
-  振り返りの例：「{name}さん、お名前と話し相手、文字の大きさの設定ができました。次の画面でいつでもお話しできますよ。楽しみにしていますね」
+  振り返りの例：「{name}さん、お名前と話し相手、文字の大きさ、話し方の設定ができました。次の画面でいつでもお話しできますよ。楽しみにしていますね」
   振り返りは1〜2文で簡潔に。設定した内容を具体的に言及して安心感を与えてください
 
 【重要な注意】

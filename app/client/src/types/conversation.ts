@@ -135,10 +135,23 @@ export interface IntegrityVerificationResult {
 
 export type FontSizeLevel = "standard" | "large" | "x-large";
 
+export type SpeakingSpeed = "slow" | "normal" | "fast";
+export type SilenceDuration = "short" | "normal" | "long";
+export type ConfirmationLevel = "frequent" | "normal" | "minimal";
+
+export interface SpeakingPreferences {
+  speakingSpeed: SpeakingSpeed;
+  silenceDuration: SilenceDuration;
+  confirmationLevel: ConfirmationLevel;
+}
+
 export interface UserProfile {
   id?: string;
   name: string;
   characterId?: CharacterId | null;
   fontSize?: FontSizeLevel;
+  speakingSpeed?: SpeakingSpeed;
+  silenceDuration?: SilenceDuration;
+  confirmationLevel?: ConfirmationLevel;
   updatedAt: number;
 }

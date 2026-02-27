@@ -12,6 +12,9 @@ import {
   UI_MESSAGES,
   VOICE_SCREEN_MAP,
   FONT_SIZE_LABELS,
+  SPEAKING_SPEED_LABELS,
+  SILENCE_DURATION_LABELS,
+  CONFIRMATION_LEVEL_LABELS,
 } from "./lib/constants";
 import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
@@ -43,7 +46,13 @@ import { TodoListScreen } from "./components/TodoListScreen";
 import { TodoDetailScreen } from "./components/TodoDetailScreen";
 
 import type { ReactNode, ErrorInfo } from "react";
-import type { QuestionCategory } from "./types/conversation";
+import type {
+  ConfirmationLevel,
+  QuestionCategory,
+  SilenceDuration,
+  SpeakingPreferences,
+  SpeakingSpeed,
+} from "./types/conversation";
 import type { FamilyConnection } from "./lib/family-api";
 
 type AppScreen =
@@ -476,6 +485,8 @@ function AppContent(): ReactNode {
   navigateWithGuardRef.current = navigateWithGuard;
   const setFontSizeRef = useRef(setFontSize);
   setFontSizeRef.current = setFontSize;
+  const updateSessionConfigRef = useRef(conversation.updateSessionConfig);
+  updateSessionConfigRef.current = conversation.updateSessionConfig;
 
   useEffect(() => {
     voiceActionRef.current = {
@@ -566,6 +577,86 @@ function AppContent(): ReactNode {
           return {
             success: false,
             message: "名前の変更に失敗しました",
+          };
+        }
+      },
+      updateSpeakingPreferences: async (params: {
+        speakingSpeed?: string;
+        silenceDuration?: string;
+        confirmationLevel?: string;
+      }) => {
+        try {
+          const profile = await getUserProfile();
+          const profileSpeed = profile?.speakingSpeed;
+          const profileSilence = profile?.silenceDuration;
+          const profileConfirmation = profile?.confirmationLevel;
+          const currentPrefs: SpeakingPreferences = {
+            speakingSpeed: profileSpeed !== undefined ? profileSpeed : "normal",
+            silenceDuration:
+              profileSilence !== undefined ? profileSilence : "normal",
+            confirmationLevel:
+              profileConfirmation !== undefined
+                ? profileConfirmation
+                : "normal",
+          };
+
+          // Merge only provided values
+          const updatedPrefs: SpeakingPreferences = {
+            speakingSpeed:
+              params.speakingSpeed !== undefined
+                ? (params.speakingSpeed as SpeakingSpeed)
+                : currentPrefs.speakingSpeed,
+            silenceDuration:
+              params.silenceDuration !== undefined
+                ? (params.silenceDuration as SilenceDuration)
+                : currentPrefs.silenceDuration,
+            confirmationLevel:
+              params.confirmationLevel !== undefined
+                ? (params.confirmationLevel as ConfirmationLevel)
+                : currentPrefs.confirmationLevel,
+          };
+
+          // Save to server
+          await saveUserProfile({
+            name: profile?.name ?? "",
+            characterId: profile?.characterId,
+            speakingSpeed: updatedPrefs.speakingSpeed,
+            silenceDuration: updatedPrefs.silenceDuration,
+            confirmationLevel: updatedPrefs.confirmationLevel,
+            updatedAt: Date.now(),
+          });
+
+          // Apply to current session
+          updateSessionConfigRef.current(updatedPrefs);
+
+          // Build Japanese confirmation message
+          const changedParts: string[] = [];
+          if (params.speakingSpeed !== undefined) {
+            changedParts.push(
+              `話す速さを「${SPEAKING_SPEED_LABELS[params.speakingSpeed as SpeakingSpeed]}」`,
+            );
+          }
+          if (params.silenceDuration !== undefined) {
+            changedParts.push(
+              `待ち時間を「${SILENCE_DURATION_LABELS[params.silenceDuration as SilenceDuration]}」`,
+            );
+          }
+          if (params.confirmationLevel !== undefined) {
+            changedParts.push(
+              `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[params.confirmationLevel as ConfirmationLevel]}」`,
+            );
+          }
+
+          const message =
+            changedParts.length > 0
+              ? `${changedParts.join("、")}に変更しました`
+              : "話し方の設定を更新しました";
+
+          return { success: true, message };
+        } catch {
+          return {
+            success: false,
+            message: "話し方の設定の変更に失敗しました",
           };
         }
       },

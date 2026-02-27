@@ -12,6 +12,9 @@ import {
   BARGE_IN_RMS_THRESHOLD,
   BARGE_IN_CONSECUTIVE_CHUNKS,
   FONT_SIZE_LABELS,
+  SPEAKING_SPEED_LABELS,
+  SILENCE_DURATION_LABELS,
+  CONFIRMATION_LEVEL_LABELS,
 } from "../lib/constants";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
@@ -22,9 +25,12 @@ import { useAudioOutput } from "./useAudioOutput";
 
 import type { ServerEvent } from "../lib/websocket-protocol";
 import type {
+  ConfirmationLevel,
   ConversationState,
   ErrorType,
   FontSizeLevel,
+  SilenceDuration,
+  SpeakingSpeed,
   TranscriptEntry,
 } from "../types/conversation";
 
@@ -304,6 +310,66 @@ export function useOnboardingConversation({
               message: `文字の大きさを「${label}」に変更しました`,
             }),
           );
+          return;
+        }
+
+        if (functionName === "update_speaking_preferences") {
+          const args = JSON.parse(argsJson) as {
+            speaking_speed?: string;
+            silence_duration?: string;
+            confirmation_level?: string;
+          };
+          void getUserProfile()
+            .then((existingProfile) => {
+              const profile = existingProfile ?? {
+                name: "",
+                updatedAt: Date.now(),
+              };
+              return saveUserProfile({
+                ...profile,
+                ...(args.speaking_speed !== undefined && {
+                  speakingSpeed: args.speaking_speed as SpeakingSpeed,
+                }),
+                ...(args.silence_duration !== undefined && {
+                  silenceDuration: args.silence_duration as SilenceDuration,
+                }),
+                ...(args.confirmation_level !== undefined && {
+                  confirmationLevel: args.confirmation_level as
+                    | "frequent"
+                    | "normal"
+                    | "minimal",
+                }),
+                updatedAt: Date.now(),
+              });
+            })
+            .then(() => {
+              const changedParts: string[] = [];
+              if (args.speaking_speed !== undefined) {
+                changedParts.push(
+                  `話す速さを「${SPEAKING_SPEED_LABELS[args.speaking_speed as SpeakingSpeed]}」`,
+                );
+              }
+              if (args.silence_duration !== undefined) {
+                changedParts.push(
+                  `待ち時間を「${SILENCE_DURATION_LABELS[args.silence_duration as SilenceDuration]}」`,
+                );
+              }
+              if (args.confirmation_level !== undefined) {
+                changedParts.push(
+                  `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[args.confirmation_level as ConfirmationLevel]}」`,
+                );
+              }
+              const msg =
+                changedParts.length > 0
+                  ? `${changedParts.join("、")}に変更しました`
+                  : "話し方の設定を更新しました";
+              sendResult(JSON.stringify({ success: true, message: msg }));
+            })
+            .catch(() => {
+              sendResult(
+                JSON.stringify({ error: "操作中にエラーが発生しました" }),
+              );
+            });
           return;
         }
 

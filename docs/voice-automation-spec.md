@@ -29,7 +29,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 | `contexts/VoiceActionContext.tsx` | アクションコールバックのRefを保持するContext |
 | `hooks/useConversation.ts` | OpenAI接続・function call処理（AppContentレベルで呼び出し） |
 | `App.tsx` | コールバックの実装を登録、確認ダイアログ管理 |
-| `lib/constants.ts` | REALTIME_TOOLS定義（全11ツール） |
+| `lib/constants.ts` | REALTIME_TOOLS定義（全12ツール） |
 | `lib/prompt-builder.ts` | AIへの指示プロンプト（ツール使用ルール含む） |
 | `components/ActiveConversationBanner.tsx` | 他画面での「会話中」バナー表示 |
 
@@ -109,6 +109,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 | 6 | `change_font_size` | 文字サイズ変更 | 「文字を大きくして」 | 「文字を大きめに変更しました、見やすくなりましたか？」 |
 | 7 | `change_character` | キャラクター変更 | 「話し相手を変えたい」 | 「次回の会話からのんびりがお相手します」 |
 | 8 | `update_user_name` | 表示名変更 | 「太郎と呼んで」 | 「お名前を太郎に変更しました」 |
+| 9 | `update_speaking_preferences` | 話し方設定変更 | 「もっとゆっくり話して」 | 「話す速さをゆっくりに変更しました」 |
 
 #### change_font_size パラメータ
 
@@ -134,6 +135,24 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 |-----------|------|------|------|
 | `name` | string | はい | 新しい名前（空文字はエラー） |
 
+#### update_speaking_preferences パラメータ
+
+すべてのパラメータはオプション。指定されたフィールドのみ更新される。
+
+| パラメータ | 型 | 必須 | 値 | 説明 |
+|-----------|------|------|-----|------|
+| `speaking_speed` | string | いいえ | `slow` | ゆっくり（一文15字以内、一度に一つの情報） |
+| | | | `normal` | ふつう（デフォルト） |
+| | | | `fast` | テンポよく（要点を簡潔に） |
+| `silence_duration` | string | いいえ | `short` | 短め（VAD 800ms — すぐ応答） |
+| | | | `normal` | ふつう（VAD 1200ms — デフォルト） |
+| | | | `long` | 長め（VAD 2000ms — ゆっくり待つ） |
+| `confirmation_level` | string | いいえ | `frequent` | 多め（復唱・要約確認あり） |
+| | | | `normal` | ふつう（デフォルト） |
+| | | | `minimal` | 少なめ（確認最小限） |
+
+**動作**: 設定変更はプロフィールに永続化され、現在の会話セッションにも即時反映される（`session.update` 再送信による prompt + VAD 更新）。
+
 ---
 
 ### Tier 2: 重要操作（UI確認ダイアログ必須）
@@ -143,8 +162,8 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 
 | # | ツール名 | 説明 | 発話例 |
 |---|---------|------|--------|
-| 9 | `start_focused_conversation` | テーマ指定で新しい会話開始 | 「お金のことで話したい」 |
-| 10 | `create_family_invitation` | 家族招待リンク作成 | 「妻を招待して」 |
+| 10 | `start_focused_conversation` | テーマ指定で新しい会話開始 | 「お金のことで話したい」 |
+| 11 | `create_family_invitation` | 家族招待リンク作成 | 「妻を招待して」 |
 
 #### 確認フロー
 
@@ -200,7 +219,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 
 | # | ツール名 | 説明 | 発話例 |
 |---|---------|------|--------|
-| 11 | `end_conversation` | 会話を終了してデータを保存 | 「もう疲れた」「また今度」「今日はここまで」 |
+| 12 | `end_conversation` | 会話を終了してデータを保存 | 「もう疲れた」「また今度」「今日はここまで」 |
 
 #### end_conversation の動作
 
@@ -308,7 +327,23 @@ AI: update_user_name({name: "太郎"})
 AI: 「お名前を太郎に変更しました」
 ```
 
-### シナリオ6: テーマ指定会話開始（確認あり）
+### シナリオ6: 話し方変更
+
+```
+ユーザー: 「もう少しゆっくり話してくれる？」
+AI: update_speaking_preferences({speaking_speed: "slow"})
+→ プロフィール保存 + 現セッションに即時反映（prompt + VAD更新）
+AI: 「話す速さをゆっくりに変更しました。このペースでいいですか？」
+```
+
+```
+ユーザー: 「返事をもう少し待ってほしい」
+AI: update_speaking_preferences({silence_duration: "long"})
+→ VAD silence_duration_ms が 2000ms に変更
+AI: 「待ち時間を長めに変更しました。ゆっくりお考えくださいね」
+```
+
+### シナリオ7: テーマ指定会話開始（確認あり）
 
 ```
 ユーザー: 「お金のことで相談したいんだけど」
@@ -318,7 +353,7 @@ AI: 「確認画面を出しました。よろしければ画面の『はい』�
 → ユーザーが「はい」タップ → 現在の会話終了 → お金テーマの新規会話開始
 ```
 
-### シナリオ7: 家族招待（確認あり）
+### シナリオ8: 家族招待（確認あり）
 
 ```
 ユーザー: 「妻を招待したい」
@@ -328,7 +363,7 @@ AI: 「確認画面を出しました。よろしければ画面の『はい』�
 → ユーザーが「はい」タップ → 招待リンク作成 → 家族ダッシュボードに移動
 ```
 
-### シナリオ8: 禁止操作（画面案内）
+### シナリオ9: 禁止操作（画面案内）
 
 ```
 ユーザー: 「全部消して」
@@ -339,7 +374,7 @@ AI: navigate_to_screen({screen: "settings"})
 AI: 「設定画面に移動しました」
 ```
 
-### シナリオ9: 過去会話検索
+### シナリオ10: 過去会話検索
 
 ```
 ユーザー: 「前に旅行の話したよね？何て言ったか覚えてる？」
@@ -348,7 +383,7 @@ AI: search_past_conversations({query: "旅行"})
 AI: 「以前の会話で、北海道に旅行に行った思い出をお話しされていましたね。…」
 ```
 
-### シナリオ10: 会話終了（意図検出）
+### シナリオ11: 会話終了（意図検出）
 
 ```
 ユーザー: 「もう疲れちゃったから、また今度にしようかな」
@@ -358,7 +393,7 @@ AI: 「今日もたくさんお話しできてよかったです。ゆっくり�
 → 3秒後に会話自動停止、データ保存・要約開始
 ```
 
-### シナリオ11: 話題変更（ツール不使用）
+### シナリオ12: 話題変更（ツール不使用）
 
 ```
 ユーザー: （医療テーマの会話中に）「お金のことも気になるんだけど」
@@ -406,6 +441,7 @@ AI: 「お金のことも気になりますよね。どんなことが心配で�
 | `update_user_name` | ユーザー名の設定 | Tier 1 |
 | `change_character` | キャラクター選択 | Tier 1 |
 | `change_font_size` | 文字サイズ選択 | Tier 1 |
+| `update_speaking_preferences` | 話し方の好み設定 | Tier 1 |
 | `end_conversation` | 全設定完了後の会話終了 | Lifecycle |
 
 ### フロー
@@ -414,7 +450,8 @@ AI: 「お金のことも気になりますよね。どんなことが心配で�
 2. お名前を聞いて `update_user_name` で設定
 3. 3キャラクター（のんびり/しっかり/にこにこ）を紹介し選択 → `change_character` で設定
 4. 文字サイズの好み（標準/大きめ/特大）を確認 → `change_font_size` で設定
-5. `end_conversation` で会話終了 → メインアプリへ遷移
+5. 話し方の好み（速さ）を確認 → `update_speaking_preferences` で設定（オンボーディングでは速さのみ聞く）
+6. `end_conversation` で会話終了 → メインアプリへ遷移
 
 ### セッション制限免除
 

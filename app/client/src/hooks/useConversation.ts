@@ -13,6 +13,7 @@ import {
   MIN_TRANSCRIPT_LENGTH,
   BARGE_IN_RMS_THRESHOLD,
   BARGE_IN_CONSECUTIVE_CHUNKS,
+  SILENCE_DURATION_MS_MAP,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import {
@@ -54,6 +55,7 @@ import type {
   ErrorType,
   NoteEntry,
   QuestionCategory,
+  SpeakingPreferences,
   TranscriptEntry,
   VoiceActionResult,
 } from "../types/conversation";
@@ -207,6 +209,8 @@ export interface UseConversationReturn {
   stop: () => void;
   /** Retry after an error. */
   retry: () => void;
+  /** Re-send session.update with new speaking preferences (for mid-conversation changes). */
+  updateSessionConfig: (preferences: SpeakingPreferences) => void;
 }
 
 /** Collect latest note entries from past records for change-aware summarization. */
@@ -274,6 +278,18 @@ function dispatchVoiceAction(
       const args = JSON.parse(argsJson) as { name: string };
       return callbacks.updateUserName(args.name);
     }
+    case "update_speaking_preferences": {
+      const args = JSON.parse(argsJson) as {
+        speaking_speed?: string;
+        silence_duration?: string;
+        confirmation_level?: string;
+      };
+      return callbacks.updateSpeakingPreferences({
+        speakingSpeed: args.speaking_speed,
+        silenceDuration: args.silence_duration,
+        confirmationLevel: args.confirmation_level,
+      });
+    }
     // Tier 2: Confirmation-required
     case "start_focused_conversation": {
       const args = JSON.parse(argsJson) as { category: string };
@@ -327,6 +343,13 @@ export function useConversation(): UseConversationReturn {
 
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
+
+  // Speaking preferences (loaded on start, used in session.update)
+  const speakingPrefsRef = useRef<SpeakingPreferences>({
+    speakingSpeed: "normal",
+    silenceDuration: "normal",
+    confirmationLevel: "normal",
+  });
 
   // Echo suppression: gate audio input to server during AI speech + cooldown
   const audioGatedRef = useRef(false);
@@ -490,6 +513,7 @@ export function useConversation(): UseConversationReturn {
             sessionConfigSentRef.current = true;
             const charId = characterIdRef.current ?? "character-a";
             const character = getCharacterById(charId);
+            const prefs = speakingPrefsRef.current;
             let instructions: string;
             if (categoryRef.current !== null) {
               // Focused mode: category-specific prompt
@@ -498,6 +522,7 @@ export function useConversation(): UseConversationReturn {
                 categoryRef.current,
                 pastContextRef.current ?? undefined,
                 userNameRef.current ?? undefined,
+                prefs,
               );
             } else {
               // Guided mode: cross-category prompt
@@ -508,12 +533,19 @@ export function useConversation(): UseConversationReturn {
                   recentSummaries: [],
                 },
                 userNameRef.current ?? undefined,
+                prefs,
               );
             }
+            const silenceDurationMs =
+              SILENCE_DURATION_MS_MAP[prefs.silenceDuration];
             ws.send({
               type: "session.update",
               session: {
                 ...SESSION_CONFIG,
+                turn_detection: {
+                  ...SESSION_CONFIG.turn_detection,
+                  silence_duration_ms: silenceDurationMs,
+                },
                 voice: character.voice,
                 instructions,
                 tools: [...REALTIME_TOOLS],
@@ -741,6 +773,20 @@ export function useConversation(): UseConversationReturn {
           }
 
           userNameRef.current = profile?.name ?? null;
+
+          // Load speaking preferences from profile
+          const profileSpeed = profile?.speakingSpeed;
+          const profileSilence = profile?.silenceDuration;
+          const profileConfirmation = profile?.confirmationLevel;
+          speakingPrefsRef.current = {
+            speakingSpeed: profileSpeed !== undefined ? profileSpeed : "normal",
+            silenceDuration:
+              profileSilence !== undefined ? profileSilence : "normal",
+            confirmationLevel:
+              profileConfirmation !== undefined
+                ? profileConfirmation
+                : "normal",
+          };
         })
         .finally(() => {
           ws.connect();
@@ -940,6 +986,11 @@ export function useConversation(): UseConversationReturn {
     guidedContextRef.current = null;
     userNameRef.current = null;
     allRecordsRef.current = [];
+    speakingPrefsRef.current = {
+      speakingSpeed: "normal",
+      silenceDuration: "normal",
+      confirmationLevel: "normal",
+    };
   }, [ws, audioInput, audioOutput, clearCooldownTimer]);
 
   // Keep stopRef in sync with the latest stop callback
@@ -958,6 +1009,55 @@ export function useConversation(): UseConversationReturn {
       }
     };
   }, []);
+
+  // Re-send session.update with updated speaking preferences (mid-conversation)
+  const updateSessionConfig = useCallback(
+    (preferences: SpeakingPreferences): void => {
+      speakingPrefsRef.current = preferences;
+      const charId = characterIdRef.current ?? "character-a";
+      const character = getCharacterById(charId);
+
+      let instructions: string;
+      if (categoryRef.current !== null) {
+        instructions = buildSessionPrompt(
+          charId,
+          categoryRef.current,
+          pastContextRef.current ?? undefined,
+          userNameRef.current ?? undefined,
+          preferences,
+        );
+      } else {
+        instructions = buildGuidedSessionPrompt(
+          charId,
+          guidedContextRef.current ?? {
+            allCoveredQuestionIds: [],
+            recentSummaries: [],
+          },
+          userNameRef.current ?? undefined,
+          preferences,
+        );
+      }
+
+      const silenceDurationMs =
+        SILENCE_DURATION_MS_MAP[preferences.silenceDuration];
+
+      ws.send({
+        type: "session.update",
+        session: {
+          ...SESSION_CONFIG,
+          turn_detection: {
+            ...SESSION_CONFIG.turn_detection,
+            silence_duration_ms: silenceDurationMs,
+          },
+          voice: character.voice,
+          instructions,
+          tools: [...REALTIME_TOOLS],
+          tool_choice: "auto",
+        },
+      });
+    },
+    [ws],
+  );
 
   // Retry after error
   const retry = useCallback((): void => {
@@ -985,5 +1085,6 @@ export function useConversation(): UseConversationReturn {
     start,
     stop,
     retry,
+    updateSessionConfig,
   };
 }

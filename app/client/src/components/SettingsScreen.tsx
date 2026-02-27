@@ -9,6 +9,9 @@ import {
 import { CHARACTERS } from "../lib/characters";
 import {
   FONT_SIZE_OPTIONS,
+  SPEAKING_SPEED_OPTIONS,
+  SILENCE_DURATION_OPTIONS,
+  CONFIRMATION_LEVEL_OPTIONS,
   SETTINGS_MESSAGES,
   UI_MESSAGES,
 } from "../lib/constants";
@@ -19,7 +22,13 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { PrintableEndingNote } from "./PrintableEndingNote";
 import { Toast } from "./Toast";
 
-import type { CharacterId, FontSizeLevel } from "../types/conversation";
+import type {
+  CharacterId,
+  ConfirmationLevel,
+  FontSizeLevel,
+  SilenceDuration,
+  SpeakingSpeed,
+} from "../types/conversation";
 import type { ReactNode } from "react";
 
 interface SettingsScreenProps {
@@ -35,6 +44,11 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("character-a");
+  const [speakingSpeed, setSpeakingSpeed] = useState<SpeakingSpeed>("normal");
+  const [silenceDuration, setSilenceDuration] =
+    useState<SilenceDuration>("normal");
+  const [confirmationLevel, setConfirmationLevel] =
+    useState<ConfirmationLevel>("normal");
   const [deleteMessage, setDeleteMessage] = useState("");
   const [showPrintView, setShowPrintView] = useState(false);
 
@@ -51,6 +65,15 @@ export function SettingsScreen({
         setName(profile.name);
         if (profile.characterId !== undefined && profile.characterId !== null) {
           setSelectedCharacterId(profile.characterId);
+        }
+        if (profile.speakingSpeed !== undefined) {
+          setSpeakingSpeed(profile.speakingSpeed);
+        }
+        if (profile.silenceDuration !== undefined) {
+          setSilenceDuration(profile.silenceDuration);
+        }
+        if (profile.confirmationLevel !== undefined) {
+          setConfirmationLevel(profile.confirmationLevel);
         }
       }
     });
@@ -177,6 +200,72 @@ export function SettingsScreen({
     [setFontSize],
   );
 
+  const handleSpeakingSpeedChange = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>): void => {
+      const value = e.currentTarget.dataset["speakingSpeed"] as
+        | SpeakingSpeed
+        | undefined;
+      if (value !== undefined) {
+        setSpeakingSpeed(value);
+      }
+    },
+    [],
+  );
+
+  const handleSilenceDurationChange = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>): void => {
+      const value = e.currentTarget.dataset["silenceDuration"] as
+        | SilenceDuration
+        | undefined;
+      if (value !== undefined) {
+        setSilenceDuration(value);
+      }
+    },
+    [],
+  );
+
+  const handleConfirmationLevelChange = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>): void => {
+      const value = e.currentTarget.dataset["confirmationLevel"] as
+        | ConfirmationLevel
+        | undefined;
+      if (value !== undefined) {
+        setConfirmationLevel(value);
+      }
+    },
+    [],
+  );
+
+  const handleSaveSpeakingPreferences = useCallback((): void => {
+    void saveUserProfile({
+      name,
+      characterId: selectedCharacterId,
+      speakingSpeed,
+      silenceDuration,
+      confirmationLevel,
+      updatedAt: Date.now(),
+    })
+      .then(() => {
+        showToast(SETTINGS_MESSAGES.speakingPreferences.saved, "success");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to save speaking preferences:", {
+          error,
+          speakingSpeed,
+          silenceDuration,
+          confirmationLevel,
+        });
+        showToast(UI_MESSAGES.error.saveFailed, "error");
+      });
+  }, [
+    name,
+    selectedCharacterId,
+    speakingSpeed,
+    silenceDuration,
+    confirmationLevel,
+    showToast,
+  ]);
+
   return (
     <div className="flex-1 w-full overflow-y-auto px-4 py-4">
       <div className="max-w-lg mx-auto space-y-8">
@@ -221,7 +310,118 @@ export function SettingsScreen({
           </div>
         </section>
 
-        {/* Section 2: Profile (save-gated) */}
+        {/* Section 2: Speaking Preferences */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-text-secondary">
+            {SETTINGS_MESSAGES.speakingPreferences.title}
+          </h2>
+          <p className="text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.speakingPreferences.description}
+          </p>
+
+          {/* Speaking speed */}
+          <p className="text-lg text-text-primary">
+            {SETTINGS_MESSAGES.speakingPreferences.speedLabel}
+          </p>
+          <div
+            className="flex gap-2"
+            role="radiogroup"
+            aria-label={SETTINGS_MESSAGES.speakingPreferences.speedLabel}
+          >
+            {SPEAKING_SPEED_OPTIONS.map((option) => {
+              const isActive = speakingSpeed === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  data-speaking-speed={option.value}
+                  className={`flex-1 min-h-11 rounded-full text-lg font-medium text-center py-2 transition-colors ${
+                    isActive
+                      ? "bg-accent-primary text-text-on-accent shadow-sm"
+                      : "bg-bg-surface border border-border text-text-secondary active:bg-bg-surface-hover"
+                  }`}
+                  onClick={handleSpeakingSpeedChange}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Silence duration */}
+          <p className="text-lg text-text-primary mt-4">
+            {SETTINGS_MESSAGES.speakingPreferences.silenceLabel}
+          </p>
+          <div
+            className="flex gap-2"
+            role="radiogroup"
+            aria-label={SETTINGS_MESSAGES.speakingPreferences.silenceLabel}
+          >
+            {SILENCE_DURATION_OPTIONS.map((option) => {
+              const isActive = silenceDuration === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  data-silence-duration={option.value}
+                  className={`flex-1 min-h-11 rounded-full text-lg font-medium text-center py-2 transition-colors ${
+                    isActive
+                      ? "bg-accent-primary text-text-on-accent shadow-sm"
+                      : "bg-bg-surface border border-border text-text-secondary active:bg-bg-surface-hover"
+                  }`}
+                  onClick={handleSilenceDurationChange}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Confirmation level */}
+          <p className="text-lg text-text-primary mt-4">
+            {SETTINGS_MESSAGES.speakingPreferences.confirmationLabel}
+          </p>
+          <div
+            className="flex gap-2"
+            role="radiogroup"
+            aria-label={SETTINGS_MESSAGES.speakingPreferences.confirmationLabel}
+          >
+            {CONFIRMATION_LEVEL_OPTIONS.map((option) => {
+              const isActive = confirmationLevel === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  data-confirmation-level={option.value}
+                  className={`flex-1 min-h-11 rounded-full text-lg font-medium text-center py-2 transition-colors ${
+                    isActive
+                      ? "bg-accent-primary text-text-on-accent shadow-sm"
+                      : "bg-bg-surface border border-border text-text-secondary active:bg-bg-surface-hover"
+                  }`}
+                  onClick={handleConfirmationLevelChange}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg"
+            onClick={handleSaveSpeakingPreferences}
+          >
+            保存する
+          </button>
+        </section>
+
+        {/* Section 3: Profile (save-gated) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             プロフィール
@@ -272,7 +472,7 @@ export function SettingsScreen({
           </button>
         </section>
 
-        {/* Section 3: Account (low risk, reversible) */}
+        {/* Section 4: Account (low risk, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             アカウント
@@ -301,7 +501,7 @@ export function SettingsScreen({
           <div className="flex-1 border-t border-border" />
         </div>
 
-        {/* Section 4: Note Printing */}
+        {/* Section 5: Note Printing */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             {SETTINGS_MESSAGES.print.sectionTitle}
@@ -318,7 +518,7 @@ export function SettingsScreen({
           </button>
         </section>
 
-        {/* Section 5: Data Deletion (critical, irreversible — collapsed) */}
+        {/* Section 6: Data Deletion (critical, irreversible — collapsed) */}
         <details className="group">
           <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
             {/* Warning triangle icon */}
@@ -379,7 +579,7 @@ export function SettingsScreen({
           </div>
         </details>
 
-        {/* Section 6: Account Deletion (most critical — collapsed) */}
+        {/* Section 7: Account Deletion (most critical — collapsed) */}
         <details className="group">
           <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
             <svg

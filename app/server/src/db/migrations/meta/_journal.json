@@ -43,6 +43,13 @@
       "when": 1772202612733,
       "tag": "0005_rapid_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772220308605,
+      "tag": "0006_strong_mentor",
+      "breakpoints": true
     }
   ]
 }

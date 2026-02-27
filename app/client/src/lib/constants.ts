@@ -1,4 +1,9 @@
-import type { FontSizeLevel } from "../types/conversation";
+import type {
+  FontSizeLevel,
+  SpeakingSpeed,
+  SilenceDuration,
+  ConfirmationLevel,
+} from "../types/conversation";
 
 // WebSocket URL — in development, Vite proxy handles /ws
 // In production, same origin serves both static files and WebSocket
@@ -235,6 +240,35 @@ export const REALTIME_TOOLS = [
       required: ["name"],
     },
   },
+  {
+    type: "function" as const,
+    name: "update_speaking_preferences",
+    description:
+      "AIの話し方の設定を変更します。ユーザーが「もっとゆっくり話して」「もう少し速く」「ちゃんと確認して」「待ち時間を長くして」などと言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        speaking_speed: {
+          type: "string",
+          enum: ["slow", "normal", "fast"],
+          description:
+            "話す速さ（slow=ゆっくり短い文で、normal=ふつう、fast=テキパキと）",
+        },
+        silence_duration: {
+          type: "string",
+          enum: ["short", "normal", "long"],
+          description:
+            "応答までの待ち時間（short=すぐ応答、normal=ふつう、long=ゆっくり待つ）",
+        },
+        confirmation_level: {
+          type: "string",
+          enum: ["frequent", "normal", "minimal"],
+          description:
+            "確認の頻度（frequent=こまめに確認、normal=ふつう、minimal=あまり確認しない）",
+        },
+      },
+    },
+  },
   // --- Tier 2: Confirmation-required tools ---
   {
     type: "function" as const,
@@ -305,6 +339,82 @@ export const FONT_SIZE_LABELS: Record<string, string> = {
   standard: "標準",
   large: "大きめ",
   "x-large": "特大",
+};
+
+// --- Speaking preference settings ---
+
+/** Japanese labels for speaking speed levels. */
+export const SPEAKING_SPEED_LABELS: Record<SpeakingSpeed, string> = {
+  slow: "ゆっくり",
+  normal: "ふつう",
+  fast: "すこし速め",
+};
+
+/** Japanese labels for silence duration levels. */
+export const SILENCE_DURATION_LABELS: Record<SilenceDuration, string> = {
+  short: "短め",
+  normal: "ふつう",
+  long: "長め",
+};
+
+/** Japanese labels for confirmation level. */
+export const CONFIRMATION_LEVEL_LABELS: Record<ConfirmationLevel, string> = {
+  frequent: "こまめに確認",
+  normal: "ふつう",
+  minimal: "あまり確認しない",
+};
+
+/** Speaking speed options for settings UI. */
+export const SPEAKING_SPEED_OPTIONS: readonly {
+  readonly value: SpeakingSpeed;
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  { value: "slow", label: "ゆっくり", description: "短い文で、一つずつ丁寧に" },
+  { value: "normal", label: "ふつう", description: "自然な速さで" },
+  { value: "fast", label: "すこし速め", description: "テキパキと" },
+] as const;
+
+/** Silence duration options for settings UI. */
+export const SILENCE_DURATION_OPTIONS: readonly {
+  readonly value: SilenceDuration;
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  { value: "short", label: "短め", description: "すぐに次を話す" },
+  { value: "normal", label: "ふつう", description: "少し待ってから" },
+  { value: "long", label: "長め", description: "ゆっくり考えてから話せる" },
+] as const;
+
+/** Confirmation level options for settings UI. */
+export const CONFIRMATION_LEVEL_OPTIONS: readonly {
+  readonly value: ConfirmationLevel;
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  {
+    value: "frequent",
+    label: "こまめに確認",
+    description: "大事なことを繰り返す",
+  },
+  { value: "normal", label: "ふつう", description: "ときどき確認する" },
+  {
+    value: "minimal",
+    label: "あまり確認しない",
+    description: "どんどん進める",
+  },
+] as const;
+
+/** Default speaking preference values. */
+export const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
+export const DEFAULT_SILENCE_DURATION: SilenceDuration = "normal";
+export const DEFAULT_CONFIRMATION_LEVEL: ConfirmationLevel = "normal";
+
+/** Map silence duration preference to VAD silence_duration_ms values. */
+export const SILENCE_DURATION_MS_MAP: Record<SilenceDuration, number> = {
+  short: 800,
+  normal: 1200,
+  long: 2000,
 };
 
 /** Screen names the voice AI can navigate to, mapped to AppScreen values and Japanese labels. */
@@ -661,6 +771,7 @@ const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
   "update_user_name",
   "change_character",
   "change_font_size",
+  "update_speaking_preferences",
   "end_conversation",
 ]);
 
@@ -681,6 +792,7 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   nameLabel: "お名前",
   characterLabel: "話し相手",
   fontSizeLabel: "文字の大きさ",
+  speakingSpeedLabel: "話し方",
   description:
     "みどりさんとお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
   startButton: "はじめる",
@@ -691,6 +803,14 @@ export const SETTINGS_MESSAGES = {
   profile: {
     description:
       "お名前と話し相手を設定します。変更したら「保存する」を押してください。",
+  },
+  speakingPreferences: {
+    title: "AIの話し方",
+    description: "みどりさんの話し方を調整できます",
+    speedLabel: "話す速さ",
+    silenceLabel: "待ち時間",
+    confirmationLabel: "確認の頻度",
+    saved: "話し方の設定を保存しました",
   },
   account: {
     description: "現在ログイン中のアカウントです",

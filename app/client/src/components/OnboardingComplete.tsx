@@ -3,12 +3,13 @@ import { useState, useEffect } from "react";
 import {
   ONBOARDING_COMPLETE_MESSAGES,
   FONT_SIZE_LABELS,
+  SPEAKING_SPEED_LABELS,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
 
 import type { ReactNode } from "react";
-import type { CharacterId } from "../types/conversation";
+import type { CharacterId, SpeakingSpeed } from "../types/conversation";
 
 interface OnboardingCompleteProps {
   onStart: () => void;
@@ -16,6 +17,7 @@ interface OnboardingCompleteProps {
 
 const DEFAULT_CHARACTER_ID: CharacterId = "character-a";
 const DEFAULT_FONT_SIZE_KEY = "standard";
+const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
 
 export function OnboardingComplete({
   onStart,
@@ -24,6 +26,7 @@ export function OnboardingComplete({
   const [characterName, setCharacterName] = useState("");
   const [characterDescription, setCharacterDescription] = useState("");
   const [fontSizeLabel, setFontSizeLabel] = useState("");
+  const [speakingSpeedLabel, setSpeakingSpeedLabel] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,6 +35,7 @@ export function OnboardingComplete({
         const name = profile?.name ?? "";
         const charId = profile?.characterId ?? DEFAULT_CHARACTER_ID;
         const fontSize = profile?.fontSize ?? DEFAULT_FONT_SIZE_KEY;
+        const speed = profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED;
 
         setUserName(name);
 
@@ -44,6 +48,8 @@ export function OnboardingComplete({
           FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ??
           "";
         setFontSizeLabel(label);
+
+        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {
@@ -54,6 +60,7 @@ export function OnboardingComplete({
         setCharacterName(character.name);
         setCharacterDescription(character.description);
         setFontSizeLabel(FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "");
+        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED]);
       })
       .finally(() => {
         setLoading(false);
@@ -132,6 +139,16 @@ export function OnboardingComplete({
             </span>
             <span className="text-lg text-text-primary font-medium">
               {fontSizeLabel}
+            </span>
+          </div>
+
+          {/* Speaking speed */}
+          <div className="flex items-center gap-3">
+            <span className="text-base text-text-secondary flex-shrink-0">
+              {ONBOARDING_COMPLETE_MESSAGES.speakingSpeedLabel}
+            </span>
+            <span className="text-lg text-text-primary font-medium">
+              {speakingSpeedLabel}
             </span>
           </div>
         </div>

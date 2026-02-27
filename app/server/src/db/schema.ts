@@ -19,6 +19,9 @@ export const users = pgTable("users", {
   name: text("name").notNull().default(""),
   characterId: text("character_id"),
   fontSize: text("font_size").notNull().default("standard"),
+  speakingSpeed: text("speaking_speed").notNull().default("normal"),
+  silenceDuration: text("silence_duration").notNull().default("normal"),
+  confirmationLevel: text("confirmation_level").notNull().default("normal"),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
 });

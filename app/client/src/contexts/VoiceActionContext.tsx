@@ -17,6 +17,11 @@ export interface VoiceActionCallbacks {
   changeFontSize: (level: string) => VoiceActionResult;
   changeCharacter: (characterId: string) => Promise<VoiceActionResult>;
   updateUserName: (name: string) => Promise<VoiceActionResult>;
+  updateSpeakingPreferences: (params: {
+    speakingSpeed?: string;
+    silenceDuration?: string;
+    confirmationLevel?: string;
+  }) => Promise<VoiceActionResult>;
 
   // Tier 2: Significant actions (UI confirmation dialog required)
   requestStartConversation: (category: string) => VoiceActionResult;
