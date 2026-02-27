@@ -139,6 +139,11 @@ const TOPIC_SCOPE_GUIDED = `
 全カテゴリが対象。人生の振り返りや価値観は柔軟に受け止める。無関係な話題が長く続いたら【話題の守り方】に従って戻す。
 法的テーマでは「具体的な手続きは専門家にご相談ください」と案内する。`;
 
+// Language guardrail appended to the END of all prompts for maximum recency effect
+const LANGUAGE_GUARDRAIL = `
+【言語ルール】
+必ず日本語で話してください。ユーザーが外国語の単語や文を言った場合でも、応答は常に日本語で行ってください。`;
+
 // Categories that require extra security reminders
 const SENSITIVE_CATEGORIES: ReadonlySet<QuestionCategory> = new Set([
   "money",
@@ -266,6 +271,8 @@ ${questionList}`;
 
   prompt += TOOL_AWARENESS_PROMPT;
 
+  prompt += LANGUAGE_GUARDRAIL;
+
   return prompt;
 }
 
@@ -298,9 +305,11 @@ export function buildGuidedSessionPrompt(
   prompt += `\n\n【会話の進め方】
 あなたはエンディングノートの全テーマを横断して会話をリードします。
 会話の冒頭で「何について話しましょうか」「今日のテーマは？」のような漠然とした問いかけはしないでください。
-未回答の項目から最も話しやすそうな話題を1つ選び、短い挨拶の後すぐにその話題について具体的に質問してください。
-例：「こんにちは！今日は子供の頃の楽しかった思い出を聞かせてもらえますか？」
-ユーザーが別の話題を希望した場合は、柔軟にそちらに切り替えてください。
+短い挨拶の後、未回答の項目から話しやすそうな話題を2〜3個ピックアップして、やさしい言葉で具体的に提示してください。
+カテゴリ名（「思い出」「生活」など）ではなく、質問の内容がイメージできる形で紹介してください。
+例：「こんにちは！今日はいくつかお話しできることがありますよ。たとえば、子供の頃の楽しかった思い出のこと、大切な人への想いのこと、それからお家のことや暮らしのこと…どれか気になるものはありますか？もちろん、他のお話でも大丈夫ですよ」
+ユーザーが選んだ話題に沿って会話を進めてください。
+「どれでもいい」「おまかせ」と言われた場合は、最も話しやすそうなものを1つ選んで始めてください。
 一つのテーマに長くこだわりすぎず、区切りの良いところで「他のテーマも少し聞いてもいいですか？」と提案してください。`;
 
   // Past conversation context
@@ -326,6 +335,8 @@ ${compactQuestions}`;
   prompt += TOPIC_SCOPE_GUIDED;
 
   prompt += TOOL_AWARENESS_PROMPT;
+
+  prompt += LANGUAGE_GUARDRAIL;
 
   return prompt;
 }
@@ -392,10 +403,11 @@ ${characterDescriptions}
 
 【重要な注意】
 - この会話はエンディングノートの話題には入らないでください。設定の案内だけに集中してください
-- ツールの存在をユーザーに説明しないでください。自然に設定を反映してください
-- 必ず日本語で話してください。ユーザーが外国語の単語や文を言った場合でも、応答は常に日本語で行う`;
+- ツールの存在をユーザーに説明しないでください。自然に設定を反映してください`;
 
   prompt += ONBOARDING_TOOL_AWARENESS;
+
+  prompt += LANGUAGE_GUARDRAIL;
 
   return prompt;
 }

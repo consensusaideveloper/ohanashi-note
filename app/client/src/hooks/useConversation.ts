@@ -653,9 +653,25 @@ export function useConversation(): UseConversationReturn {
       dispatch({ type: "CONNECT" });
       sessionConfigSentRef.current = false;
 
-      // Load all conversations and user profile
-      Promise.all([listConversations(), getUserProfile()])
-        .then(([allRecords, profile]) => {
+      // Load all conversations and user profile (partial failure safe)
+      Promise.allSettled([listConversations(), getUserProfile()])
+        .then(([recordsResult, profileResult]) => {
+          const allRecords =
+            recordsResult.status === "fulfilled" ? recordsResult.value : [];
+          if (recordsResult.status === "rejected") {
+            console.error("Failed to load conversations:", {
+              error: recordsResult.reason,
+            });
+          }
+
+          const profile =
+            profileResult.status === "fulfilled" ? profileResult.value : null;
+          if (profileResult.status === "rejected") {
+            console.error("Failed to load user profile for session:", {
+              error: profileResult.reason,
+            });
+          }
+
           allRecordsRef.current = allRecords;
 
           if (category !== null) {
@@ -720,11 +736,6 @@ export function useConversation(): UseConversationReturn {
           }
 
           userNameRef.current = profile?.name ?? null;
-        })
-        .catch(() => {
-          pastContextRef.current = null;
-          guidedContextRef.current = null;
-          userNameRef.current = null;
         })
         .finally(() => {
           ws.connect();
