@@ -509,6 +509,12 @@ export const UI_MESSAGES = {
     reopenButton: "未着手に戻す",
     deletedUser: "退会済みユーザー",
   },
+  wheelPicker: {
+    confirm: "決定",
+    cancel: "キャンセル",
+    relationshipTitle: "続柄を選択",
+    assigneeTitle: "担当者を選択",
+  },
   todoError: {
     loadFailed: "やることリストの読み込みに失敗しました",
     createFailed: "やることの追加に失敗しました",

@@ -1,6 +1,11 @@
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
+
+import { UI_MESSAGES } from "../lib/constants";
+import { WheelPicker } from "./WheelPicker";
+import { WheelPickerTrigger } from "./WheelPickerTrigger";
 
 import type { ReactNode } from "react";
+import type { WheelPickerOption } from "./WheelPicker";
 
 interface RelationshipPickerProps {
   value: string;
@@ -9,10 +14,7 @@ interface RelationshipPickerProps {
   onLabelChange: (label: string) => void;
 }
 
-const RELATIONSHIP_OPTIONS: readonly {
-  readonly value: string;
-  readonly label: string;
-}[] = [
+const RELATIONSHIP_OPTIONS: readonly WheelPickerOption[] = [
   { value: "spouse", label: "配偶者" },
   { value: "child", label: "子" },
   { value: "sibling", label: "兄弟姉妹" },
@@ -26,14 +28,26 @@ export function RelationshipPicker({
   onRelationshipChange,
   onLabelChange,
 }: RelationshipPickerProps): ReactNode {
-  const handleSelectChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>): void => {
-      const selected = e.target.value;
-      onRelationshipChange(selected);
-      const option = RELATIONSHIP_OPTIONS.find((o) => o.value === selected);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  const handleOpenPicker = useCallback((): void => {
+    setIsPickerOpen(true);
+  }, []);
+
+  const handleClosePicker = useCallback((): void => {
+    setIsPickerOpen(false);
+  }, []);
+
+  const handlePickerConfirm = useCallback(
+    (selectedValue: string): void => {
+      onRelationshipChange(selectedValue);
+      const option = RELATIONSHIP_OPTIONS.find(
+        (o) => o.value === selectedValue,
+      );
       if (option !== undefined) {
         onLabelChange(option.label);
       }
+      setIsPickerOpen(false);
     },
     [onRelationshipChange, onLabelChange],
   );
@@ -45,6 +59,9 @@ export function RelationshipPicker({
     [onLabelChange],
   );
 
+  const displayValue =
+    RELATIONSHIP_OPTIONS.find((o) => o.value === value)?.label ?? "";
+
   return (
     <div className="space-y-3">
       <label
@@ -53,21 +70,21 @@ export function RelationshipPicker({
       >
         続柄
       </label>
-      <select
+      <WheelPickerTrigger
         id="relationship-select"
-        className="w-full rounded-card border border-border-light bg-bg-surface px-4 py-3 text-lg text-text-primary focus:outline-none focus:border-accent-primary"
-        value={value}
-        onChange={handleSelectChange}
-      >
-        <option value="" disabled>
-          選択してください
-        </option>
-        {RELATIONSHIP_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        displayValue={displayValue}
+        placeholder="選択してください"
+        onClick={handleOpenPicker}
+      />
+
+      <WheelPicker
+        isOpen={isPickerOpen}
+        options={RELATIONSHIP_OPTIONS}
+        selectedValue={value}
+        title={UI_MESSAGES.wheelPicker.relationshipTitle}
+        onConfirm={handlePickerConfirm}
+        onCancel={handleClosePicker}
+      />
 
       <label
         className="block text-lg text-text-primary"

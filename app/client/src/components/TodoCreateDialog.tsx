@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
+import { WheelPicker } from "./WheelPicker";
+import { WheelPickerTrigger } from "./WheelPickerTrigger";
 
 import type { ReactNode } from "react";
 import type { TodoPriority } from "../lib/todo-api";
+import type { WheelPickerOption } from "./WheelPicker";
 
 interface FamilyMemberOption {
   familyMemberId: string;
@@ -50,6 +53,18 @@ export function TodoCreateDialog({
   const [priority, setPriority] = useState<TodoPriority>("medium");
   const [assigneeId, setAssigneeId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false);
+
+  const assigneeOptions: readonly WheelPickerOption[] = useMemo(
+    () => [
+      { value: "", label: UI_MESSAGES.todo.noAssignee },
+      ...familyMembers.map((m) => ({
+        value: m.familyMemberId,
+        label: m.name,
+      })),
+    ],
+    [familyMembers],
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -69,6 +84,7 @@ export function TodoCreateDialog({
       setPriority("medium");
       setAssigneeId("");
       setDueDate("");
+      setIsAssigneePickerOpen(false);
     }
   }, [isOpen]);
 
@@ -132,9 +148,18 @@ export function TodoCreateDialog({
     [],
   );
 
-  const handleAssigneeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>): void => {
-      setAssigneeId(e.target.value);
+  const handleOpenAssigneePicker = useCallback((): void => {
+    setIsAssigneePickerOpen(true);
+  }, []);
+
+  const handleCloseAssigneePicker = useCallback((): void => {
+    setIsAssigneePickerOpen(false);
+  }, []);
+
+  const handleAssigneePickerConfirm = useCallback(
+    (selectedValue: string): void => {
+      setAssigneeId(selectedValue);
+      setIsAssigneePickerOpen(false);
     },
     [],
   );
@@ -233,19 +258,22 @@ export function TodoCreateDialog({
           >
             {UI_MESSAGES.todo.assigneeLabel}
           </label>
-          <select
+          <WheelPickerTrigger
             id="todo-assignee"
-            className="w-full min-h-11 border border-border-light bg-bg-surface px-4 py-3 text-lg rounded-card focus:border-accent-primary focus:outline-none"
-            value={assigneeId}
-            onChange={handleAssigneeChange}
-          >
-            <option value="">{UI_MESSAGES.todo.noAssignee}</option>
-            {familyMembers.map((member) => (
-              <option key={member.familyMemberId} value={member.familyMemberId}>
-                {member.name}
-              </option>
-            ))}
-          </select>
+            displayValue={
+              assigneeOptions.find((o) => o.value === assigneeId)?.label ?? ""
+            }
+            placeholder={UI_MESSAGES.todo.noAssignee}
+            onClick={handleOpenAssigneePicker}
+          />
+          <WheelPicker
+            isOpen={isAssigneePickerOpen}
+            options={assigneeOptions}
+            selectedValue={assigneeId}
+            title={UI_MESSAGES.wheelPicker.assigneeTitle}
+            onConfirm={handleAssigneePickerConfirm}
+            onCancel={handleCloseAssigneePicker}
+          />
         </div>
 
         {/* Due date */}
