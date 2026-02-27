@@ -16,6 +16,8 @@ import {
 import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
 import { createInvitation } from "./lib/family-api";
+import { getInviteTokenFromUrl } from "./lib/inviteUrl";
+import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
@@ -91,6 +93,14 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
+  const [inviteToken, setInviteToken] = useState<string | null>(() =>
+    getInviteTokenFromUrl(),
+  );
+
+  const handleInviteComplete = useCallback((): void => {
+    window.history.replaceState(null, "", "/");
+    setInviteToken(null);
+  }, []);
 
   // Show loading spinner while auth state is being determined
   if (loading) {
@@ -104,6 +114,16 @@ function AuthGate(): ReactNode {
   // Show login screen when not authenticated
   if (user === null) {
     return <LoginScreen />;
+  }
+
+  // Show invitation acceptance screen when URL has /invite/{token}
+  if (inviteToken !== null) {
+    return (
+      <InvitationAcceptScreen
+        token={inviteToken}
+        onComplete={handleInviteComplete}
+      />
+    );
   }
 
   return (

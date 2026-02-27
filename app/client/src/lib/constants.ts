@@ -494,6 +494,39 @@ export const SETTINGS_MESSAGES = {
   },
 } as const;
 
+// --- Invitation acceptance screen ---
+/** Delay (ms) before auto-navigating to app after successful invitation acceptance. */
+export const INVITATION_SUCCESS_DELAY_MS = 2000;
+
+/** URL path prefix for invitation links. */
+export const INVITE_PATH_PREFIX = "/invite/";
+
+export const INVITATION_MESSAGES = {
+  screenTitle: "家族の招待",
+  loadingText: "招待情報を確認しています...",
+  fromUser: "さんからの招待です",
+  relationshipLabel: "続柄",
+  roleLabel: "役割",
+  roleRepresentative: "代表者",
+  roleMember: "家族",
+  expiresLabel: "有効期限",
+  acceptButton: "招待を受ける",
+  acceptingButton: "登録しています...",
+  skipLink: "あとで確認する",
+  successTitle: "登録が完了しました",
+  successMessage: "さんの家族として登録されました",
+  startAppButton: "アプリを始める",
+  notFound:
+    "この招待リンクは無効です。送り主にもう一度招待してもらってください。",
+  alreadyUsed: "この招待リンクはすでに使用されています。",
+  selfInvite: "ご自身を家族として登録することはできません。",
+  alreadyMember: "すでにこの方の家族として登録されています。",
+  genericError:
+    "招待の確認中にエラーが発生しました。しばらくしてからもう一度お試しください。",
+  retryButton: "もう一度試す",
+  backToAppButton: "アプリに戻る",
+} as const;
+
 // --- Text display ---
 export const TRANSCRIPT_PREVIEW_MAX_LENGTH = 80;
 
