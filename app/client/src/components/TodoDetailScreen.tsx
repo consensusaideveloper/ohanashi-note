@@ -416,7 +416,8 @@ export function TodoDetailScreen({
                       <div key={entry.id} className="space-y-1">
                         <p className="text-base text-text-secondary">
                           {formatHistoryAction(entry)} &mdash;{" "}
-                          {entry.performedByName}
+                          {entry.performedByName ??
+                            UI_MESSAGES.todo.deletedUser}
                         </p>
                         <p className="text-sm text-text-secondary">
                           {new Date(entry.createdAt).toLocaleDateString(

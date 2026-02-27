@@ -40,7 +40,7 @@ interface TodoResponseItem {
   status: string;
   priority: string;
   dueDate: string | null;
-  createdBy: string;
+  createdBy: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -49,8 +49,8 @@ interface TodoResponseItem {
 interface CommentResponseItem {
   id: string;
   todoId: string;
-  authorId: string;
-  authorName: string;
+  authorId: string | null;
+  authorName: string | null;
   content: string;
   createdAt: string;
 }
@@ -59,8 +59,8 @@ interface HistoryResponseItem {
   id: string;
   todoId: string;
   action: string;
-  performedBy: string;
-  performedByName: string;
+  performedBy: string | null;
+  performedByName: string | null;
   metadata: unknown;
   createdAt: string;
 }
@@ -808,7 +808,7 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
         createdAt: todoComments.createdAt,
       })
       .from(todoComments)
-      .innerJoin(users, eq(users.id, todoComments.authorId))
+      .leftJoin(users, eq(users.id, todoComments.authorId))
       .where(eq(todoComments.todoId, todoId))
       .orderBy(desc(todoComments.createdAt));
 
@@ -816,7 +816,7 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
       id: r.id,
       todoId: r.todoId,
       authorId: r.authorId,
-      authorName: r.authorName,
+      authorName: r.authorName ?? null,
       content: r.content,
       createdAt: r.createdAt.toISOString(),
     }));
@@ -833,7 +833,7 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
         createdAt: todoHistory.createdAt,
       })
       .from(todoHistory)
-      .innerJoin(users, eq(users.id, todoHistory.performedBy))
+      .leftJoin(users, eq(users.id, todoHistory.performedBy))
       .where(eq(todoHistory.todoId, todoId))
       .orderBy(desc(todoHistory.createdAt));
 
@@ -842,7 +842,7 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
       todoId: r.todoId,
       action: r.action,
       performedBy: r.performedBy,
-      performedByName: r.performedByName,
+      performedByName: r.performedByName ?? null,
       metadata: r.metadata,
       createdAt: r.createdAt.toISOString(),
     }));

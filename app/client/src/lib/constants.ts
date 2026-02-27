@@ -507,6 +507,7 @@ export const UI_MESSAGES = {
     startButton: "着手する",
     completeButton: "完了にする",
     reopenButton: "未着手に戻す",
+    deletedUser: "退会済みユーザー",
   },
   todoError: {
     loadFailed: "やることリストの読み込みに失敗しました",

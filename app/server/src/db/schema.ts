@@ -132,8 +132,12 @@ export const noteLifecycle = pgTable("note_lifecycle", {
     .references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("active"),
   deathReportedAt: timestamp("death_reported_at", tz),
-  deathReportedBy: uuid("death_reported_by").references(() => users.id),
-  consentInitiatedBy: uuid("consent_initiated_by").references(() => users.id),
+  deathReportedBy: uuid("death_reported_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  consentInitiatedBy: uuid("consent_initiated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
   openedAt: timestamp("opened_at", tz),
   deletionStatus: text("deletion_status"),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
@@ -223,9 +227,9 @@ export const lifecycleActionLog = pgTable(
       .notNull()
       .references(() => noteLifecycle.id, { onDelete: "cascade" }),
     action: text("action").notNull(),
-    performedBy: uuid("performed_by")
-      .notNull()
-      .references(() => users.id),
+    performedBy: uuid("performed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
@@ -310,11 +314,13 @@ export const todos = pgTable(
     status: text("status").notNull().default("pending"),
     priority: text("priority").notNull().default("medium"),
     dueDate: timestamp("due_date", tz),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     completedAt: timestamp("completed_at", tz),
-    completedBy: uuid("completed_by").references(() => users.id),
+    completedBy: uuid("completed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
   },
@@ -335,9 +341,9 @@ export const todoComments = pgTable(
     todoId: uuid("todo_id")
       .notNull()
       .references(() => todos.id, { onDelete: "cascade" }),
-    authorId: uuid("author_id")
-      .notNull()
-      .references(() => users.id),
+    authorId: uuid("author_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     content: text("content").notNull(),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
@@ -354,9 +360,9 @@ export const todoHistory = pgTable(
       .notNull()
       .references(() => todos.id, { onDelete: "cascade" }),
     action: text("action").notNull(),
-    performedBy: uuid("performed_by")
-      .notNull()
-      .references(() => users.id),
+    performedBy: uuid("performed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
@@ -375,9 +381,9 @@ export const todoVisibility = pgTable(
     familyMemberId: uuid("family_member_id")
       .notNull()
       .references(() => familyMembers.id, { onDelete: "cascade" }),
-    hiddenBy: uuid("hidden_by")
-      .notNull()
-      .references(() => users.id),
+    hiddenBy: uuid("hidden_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (table) => [

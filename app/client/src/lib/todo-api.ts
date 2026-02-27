@@ -17,7 +17,7 @@ export interface TodoItem {
   status: TodoStatus;
   priority: TodoPriority;
   dueDate: string | null;
-  createdBy: string;
+  createdBy: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -37,8 +37,8 @@ export interface TodoListResponse {
 
 export interface TodoComment {
   id: string;
-  authorId: string;
-  authorName: string;
+  authorId: string | null;
+  authorName: string | null;
   content: string;
   createdAt: string;
 }
@@ -46,8 +46,8 @@ export interface TodoComment {
 export interface TodoHistoryEntry {
   id: string;
   action: string;
-  performedBy: string;
-  performedByName: string;
+  performedBy: string | null;
+  performedByName: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }

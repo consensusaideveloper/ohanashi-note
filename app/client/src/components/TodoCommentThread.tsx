@@ -59,7 +59,7 @@ export function TodoCommentThread({
             >
               <div className="flex items-center gap-2">
                 <span className="text-base font-medium text-text-primary">
-                  {comment.authorName}
+                  {comment.authorName ?? UI_MESSAGES.todo.deletedUser}
                 </span>
                 <span className="text-sm text-text-secondary">
                   {new Date(comment.createdAt).toLocaleDateString("ja-JP", {
