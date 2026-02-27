@@ -202,7 +202,9 @@ export const notifications = pgTable(
     type: text("type").notNull(),
     title: text("title").notNull(),
     message: text("message").notNull(),
-    relatedCreatorId: uuid("related_creator_id").references(() => users.id),
+    relatedCreatorId: uuid("related_creator_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     isRead: boolean("is_read").notNull().default(false),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
