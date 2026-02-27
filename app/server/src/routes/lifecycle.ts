@@ -6,92 +6,20 @@ import {
   noteLifecycle,
   familyMembers,
   consentRecords,
-  notifications,
   users,
-  lifecycleActionLog,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { getUserRole } from "../middleware/role.js";
 import { logger } from "../lib/logger.js";
+import {
+  getCreatorName,
+  getActiveFamilyMembers,
+  notifyFamilyMembers,
+  logLifecycleAction,
+} from "../lib/lifecycle-helpers.js";
 
 import type { Context } from "hono";
-
-// --- Helpers ---
-
-/**
- * Look up the display name for a creator by their user ID.
- * Returns a fallback string if the user record is not found.
- */
-async function getCreatorName(creatorId: string): Promise<string> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, creatorId),
-    columns: { name: true },
-  });
-  return user?.name || "ご利用者";
-}
-
-/**
- * Fetch all active family members for a given creator.
- * Returns an array of { memberId, familyMemberId } objects.
- */
-async function getActiveFamilyMembers(
-  creatorId: string,
-): Promise<Array<{ memberId: string; familyMemberId: string }>> {
-  const rows = await db
-    .select({
-      memberId: familyMembers.memberId,
-      familyMemberId: familyMembers.id,
-    })
-    .from(familyMembers)
-    .where(
-      and(
-        eq(familyMembers.creatorId, creatorId),
-        eq(familyMembers.isActive, true),
-      ),
-    );
-  return rows;
-}
-
-/**
- * Create a notification for each specified user.
- */
-async function notifyFamilyMembers(
-  memberUserIds: string[],
-  type: string,
-  title: string,
-  message: string,
-  relatedCreatorId: string,
-): Promise<void> {
-  if (memberUserIds.length === 0) return;
-
-  const values = memberUserIds.map((userId) => ({
-    userId,
-    type,
-    title,
-    message,
-    relatedCreatorId,
-  }));
-
-  await db.insert(notifications).values(values);
-}
-
-/**
- * Record an action in the lifecycle action log for audit purposes.
- */
-async function logLifecycleAction(
-  lifecycleId: string,
-  action: string,
-  performedBy: string,
-  metadata?: Record<string, unknown>,
-): Promise<void> {
-  await db.insert(lifecycleActionLog).values({
-    lifecycleId,
-    action,
-    performedBy,
-    metadata: metadata ?? null,
-  });
-}
 
 // --- Route ---
 

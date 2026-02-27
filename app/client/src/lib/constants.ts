@@ -439,6 +439,20 @@ export const UI_MESSAGES = {
     viewNoteButton: "ノートを見る",
     accessManageButton: "アクセス管理",
     waitingForRepresentative: "代表者の対応をお待ちください",
+    removeConfirmMessageRepresentative:
+      "この方は代表者です。削除すると代表者の権限も解除されます。\n本当に削除してもよろしいですか？",
+    removeConfirmMessageOpened:
+      "この方を家族から削除してもよろしいですか？\n削除すると、この方のノートへのアクセス権も取り消されます。",
+    removeConfirmMessageRepresentativeOpened:
+      "この方は代表者です。削除すると代表者の権限とノートへのアクセス権が取り消されます。\n本当に削除してもよろしいですか？",
+    removeDeletionBlocked: "現在の状態では家族メンバーを削除できません。",
+    leaveButton: "この家族から脱退する",
+    leaveConfirmTitle: "家族からの脱退",
+    leaveConfirmMessage:
+      "この方の家族から脱退してもよろしいですか？\n脱退後はノートの閲覧ができなくなります。",
+    leaveConfirmMessageOpened:
+      "この方の家族から脱退してもよろしいですか？\n脱退すると、ノートへのアクセス権が取り消されます。",
+    memberLeft: "家族から脱退しました",
   },
   creatorLifecycle: {
     bannerDeathReported:
@@ -471,6 +485,10 @@ export const UI_MESSAGES = {
     accessPresetAddFailed: "設定の追加に失敗しました。",
     accessPresetRemoveFailed: "設定の削除に失敗しました。",
     accessPresetsRecommendationsFailed: "推奨設定の取得に失敗しました。",
+    removeBlockedByLifecycle:
+      "現在の状態では削除できません。しばらくしてからもう一度お試しください。",
+    leaveFailed: "脱退に失敗しました。",
+    leaveBlockedByLifecycle: "現在の状態では脱退できません。",
   },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",

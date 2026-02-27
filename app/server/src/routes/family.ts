@@ -9,11 +9,16 @@ import {
   familyInvitations,
   familyMembers,
   noteLifecycle,
+  notifications,
   users,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
+import {
+  getCreatorName,
+  logLifecycleAction,
+} from "../lib/lifecycle-helpers.js";
 
 import type { Context } from "hono";
 
@@ -50,7 +55,7 @@ familyRoute.get("/api/family", async (c: Context) => {
       .innerJoin(users, eq(users.id, familyMembers.memberId))
       .where(eq(familyMembers.creatorId, userId));
 
-    const result = rows.map((row) => ({
+    const members = rows.map((row) => ({
       id: row.id,
       memberId: row.memberId,
       name: row.name,
@@ -61,7 +66,16 @@ familyRoute.get("/api/family", async (c: Context) => {
       createdAt: row.createdAt.toISOString(),
     }));
 
-    return c.json(result);
+    // Include creator's lifecycle status for client-side UI decisions
+    const lifecycle = await db.query.noteLifecycle.findFirst({
+      where: eq(noteLifecycle.creatorId, userId),
+      columns: { status: true },
+    });
+
+    return c.json({
+      members,
+      lifecycleStatus: lifecycle?.status ?? "active",
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to list family members", { error: message });
@@ -458,15 +472,32 @@ familyRoute.delete("/api/family/:id", async (c: Context) => {
   try {
     const firebaseUid = getFirebaseUid(c);
     const userId = await resolveUserId(firebaseUid);
-    const memberId = c.req.param("id");
+    const familyMemberRowId = c.req.param("id");
 
-    // Prevent deletion during consent gathering
-    const lifecycle = await db.query.noteLifecycle.findFirst({
-      where: eq(noteLifecycle.creatorId, userId),
-      columns: { status: true },
+    // Look up the member to verify ownership and get details
+    const existing = await db.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.id, familyMemberRowId),
+        eq(familyMembers.creatorId, userId),
+      ),
     });
 
-    if (lifecycle && lifecycle.status === "consent_gathering") {
+    if (!existing) {
+      return c.json(
+        { error: "家族メンバーが見つかりません", code: "NOT_FOUND" },
+        404,
+      );
+    }
+
+    // Check lifecycle state — block deletion during consent_gathering and death_reported
+    const lifecycle = await db.query.noteLifecycle.findFirst({
+      where: eq(noteLifecycle.creatorId, userId),
+      columns: { id: true, status: true },
+    });
+
+    const lifecycleStatus = lifecycle?.status ?? "active";
+
+    if (lifecycleStatus === "consent_gathering") {
       return c.json(
         {
           error:
@@ -477,15 +508,30 @@ familyRoute.delete("/api/family/:id", async (c: Context) => {
       );
     }
 
+    if (lifecycleStatus === "death_reported") {
+      return c.json(
+        {
+          error:
+            "逝去報告後は家族メンバーを削除できません。代表者に報告の取り消しを依頼してください",
+          code: "DEATH_REPORTED_ACTIVE",
+        },
+        409,
+      );
+    }
+
+    // Delete the member (cascade cleans up consentRecords, accessPresets, categoryAccess)
     const result = await db
       .delete(familyMembers)
       .where(
         and(
-          eq(familyMembers.id, memberId),
+          eq(familyMembers.id, familyMemberRowId),
           eq(familyMembers.creatorId, userId),
         ),
       )
-      .returning({ id: familyMembers.id });
+      .returning({
+        id: familyMembers.id,
+        memberId: familyMembers.memberId,
+      });
 
     if (result.length === 0) {
       return c.json(
@@ -494,12 +540,170 @@ familyRoute.delete("/api/family/:id", async (c: Context) => {
       );
     }
 
+    const deletedRow = result[0];
+    if (deletedRow === undefined) {
+      return c.json(
+        { error: "家族メンバーが見つかりません", code: "NOT_FOUND" },
+        404,
+      );
+    }
+    const deletedMemberId = deletedRow.memberId;
+
+    // Notify the deleted member
+    const creatorName = await getCreatorName(userId);
+    await db.insert(notifications).values({
+      userId: deletedMemberId,
+      type: "family_removed",
+      title: "家族登録の解除",
+      message: `${creatorName}さんの家族から削除されました`,
+      relatedCreatorId: userId,
+    });
+
+    // Audit log
+    if (lifecycle) {
+      await logLifecycleAction(lifecycle.id, "family_member_removed", userId, {
+        removedMemberId: deletedMemberId,
+        removedFamilyMemberRowId: familyMemberRowId,
+        relationship: existing.relationship,
+        role: existing.role,
+      });
+    }
+
+    logger.info("Family member removed by creator", {
+      creatorId: userId,
+      familyMemberRowId,
+      memberId: deletedMemberId,
+      lifecycleStatus,
+    });
+
     return c.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to delete family member", { error: message });
     return c.json(
       { error: "家族メンバーの削除に失敗しました", code: "DELETE_FAILED" },
+      500,
+    );
+  }
+});
+
+/** DELETE /api/family/leave/:creatorId — Self-remove from a creator's family (member only). */
+familyRoute.delete("/api/family/leave/:creatorId", async (c: Context) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const creatorId = c.req.param("creatorId");
+
+    // Cannot leave your own family
+    if (userId === creatorId) {
+      return c.json(
+        {
+          error: "ご自身の家族から脱退することはできません",
+          code: "SELF_LEAVE",
+        },
+        400,
+      );
+    }
+
+    // Find the membership
+    const membership = await db.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.creatorId, creatorId),
+        eq(familyMembers.memberId, userId),
+        eq(familyMembers.isActive, true),
+      ),
+    });
+
+    if (!membership) {
+      return c.json(
+        { error: "家族メンバーが見つかりません", code: "NOT_FOUND" },
+        404,
+      );
+    }
+
+    // Check lifecycle state
+    const lifecycle = await db.query.noteLifecycle.findFirst({
+      where: eq(noteLifecycle.creatorId, creatorId),
+      columns: { id: true, status: true },
+    });
+
+    const lifecycleStatus = lifecycle?.status ?? "active";
+
+    if (lifecycleStatus === "consent_gathering") {
+      return c.json(
+        {
+          error:
+            "同意収集中は家族から脱退できません。同意収集の完了をお待ちください",
+          code: "CONSENT_GATHERING_ACTIVE",
+        },
+        409,
+      );
+    }
+
+    // Safety: prevent leaving if last representative during death_reported
+    if (
+      lifecycleStatus === "death_reported" &&
+      membership.role === "representative"
+    ) {
+      const [repCount] = await db
+        .select({ value: count() })
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.creatorId, creatorId),
+            eq(familyMembers.role, "representative"),
+            eq(familyMembers.isActive, true),
+          ),
+        );
+
+      if (repCount && repCount.value <= 1) {
+        return c.json(
+          {
+            error:
+              "最後の代表者のため脱退できません。他の方を代表者に指定してから脱退してください",
+            code: "LAST_REPRESENTATIVE",
+          },
+          409,
+        );
+      }
+    }
+
+    // Delete the membership (cascade cleans up consentRecords, accessPresets, categoryAccess)
+    await db.delete(familyMembers).where(eq(familyMembers.id, membership.id));
+
+    // Notify the creator
+    const memberName = await getCreatorName(userId);
+    await db.insert(notifications).values({
+      userId: creatorId,
+      type: "family_member_left",
+      title: "家族の脱退",
+      message: `${memberName}さんが家族から脱退しました`,
+      relatedCreatorId: creatorId,
+    });
+
+    // Audit log
+    if (lifecycle) {
+      await logLifecycleAction(lifecycle.id, "family_member_left", userId, {
+        leftMemberId: userId,
+        familyMemberRowId: membership.id,
+        relationship: membership.relationship,
+        role: membership.role,
+      });
+    }
+
+    logger.info("Family member self-removed", {
+      creatorId,
+      memberId: userId,
+      familyMemberRowId: membership.id,
+      lifecycleStatus,
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to self-remove from family", { error: message });
+    return c.json(
+      { error: "家族からの脱退に失敗しました", code: "LEAVE_FAILED" },
       500,
     );
   }

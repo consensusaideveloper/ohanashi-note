@@ -39,9 +39,14 @@ export interface FamilyConnection {
   hasPendingConsent: boolean;
 }
 
-export async function listFamilyMembers(): Promise<FamilyMember[]> {
+export interface FamilyMemberListResponse {
+  members: FamilyMember[];
+  lifecycleStatus: string;
+}
+
+export async function listFamilyMembers(): Promise<FamilyMemberListResponse> {
   const response = await fetchWithAuth("/api/family");
-  return response.json() as Promise<FamilyMember[]>;
+  return response.json() as Promise<FamilyMemberListResponse>;
 }
 
 export async function createInvitation(data: {
@@ -97,6 +102,10 @@ export async function updateFamilyMember(
 
 export async function deleteFamilyMember(id: string): Promise<void> {
   await fetchWithAuth(`/api/family/${id}`, { method: "DELETE" });
+}
+
+export async function leaveFamilyConnection(creatorId: string): Promise<void> {
+  await fetchWithAuth(`/api/family/leave/${creatorId}`, { method: "DELETE" });
 }
 
 export async function listMyConnections(): Promise<FamilyConnection[]> {

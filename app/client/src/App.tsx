@@ -320,6 +320,11 @@ function AppContent(): ReactNode {
     setScreen("family-dashboard");
   }, []);
 
+  const handleLeaveFamily = useCallback((): void => {
+    setSelectedConnection(null);
+    setScreen("family-dashboard");
+  }, []);
+
   const handleViewNoteFromDetail = useCallback(
     (creatorId: string, creatorName: string): void => {
       setSelectedCreatorId(creatorId);
@@ -553,6 +558,7 @@ function AppContent(): ReactNode {
             connection={selectedConnection}
             onBack={handleBackFromCreatorDetail}
             onViewNote={handleViewNoteFromDetail}
+            onLeave={handleLeaveFamily}
           />
         );
       case "family-note":

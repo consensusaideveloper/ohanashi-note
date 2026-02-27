@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 import { UI_MESSAGES, MAX_REPRESENTATIVES } from "../lib/constants";
+import { ApiError } from "../lib/api";
 import {
   listFamilyMembers,
   deleteFamilyMember,
@@ -46,6 +47,7 @@ export function FamilyScreen({
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState(false);
+  const [myLifecycleStatus, setMyLifecycleStatus] = useState("active");
 
   // Connections section state
   const [connections, setConnections] = useState<FamilyConnection[]>([]);
@@ -67,7 +69,8 @@ export function FamilyScreen({
     setMembersError(false);
     void listFamilyMembers()
       .then((data) => {
-        setMembers(data);
+        setMembers(data.members);
+        setMyLifecycleStatus(data.lifecycleStatus);
       })
       .catch((err: unknown) => {
         console.error("Failed to load family members:", { error: err });
@@ -122,7 +125,14 @@ export function FamilyScreen({
             error: err,
             memberId: id,
           });
-          showToast(UI_MESSAGES.familyError.removeFailed, "error");
+          if (err instanceof ApiError && err.status === 409) {
+            showToast(
+              UI_MESSAGES.familyError.removeBlockedByLifecycle,
+              "error",
+            );
+          } else {
+            showToast(UI_MESSAGES.familyError.removeFailed, "error");
+          }
         });
     },
     [showToast],
@@ -400,11 +410,11 @@ export function FamilyScreen({
                           <FamilyMemberCard
                             key={member.id}
                             member={member}
+                            lifecycleStatus={myLifecycleStatus}
                             onRemove={handleRemove}
                             onSetRepresentative={handleSetRepresentative}
                             onRevokeRepresentative={handleRevokeRepresentative}
                             onUpdate={handleUpdateMember}
-                            isOnlyMember={members.length === 1}
                             isMaxRepresentatives={isMaxRepresentatives}
                           />
                         ))}

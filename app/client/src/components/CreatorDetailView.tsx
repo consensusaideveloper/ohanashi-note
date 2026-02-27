@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
+import { ApiError } from "../lib/api";
 import {
   getLifecycleState,
   initiateConsent,
   cancelDeathReport,
+  leaveFamilyConnection,
 } from "../lib/family-api";
 import { useToast } from "../hooks/useToast";
 import { RoleBadge } from "./RoleBadge";
@@ -18,16 +20,21 @@ import { Toast } from "./Toast";
 import type { ReactNode } from "react";
 import type { FamilyConnection } from "../lib/family-api";
 
+/** Lifecycle states where self-removal is blocked. */
+const LEAVE_BLOCKED_STATES = ["consent_gathering"];
+
 interface CreatorDetailViewProps {
   connection: FamilyConnection;
   onBack: () => void;
   onViewNote: (creatorId: string, creatorName: string) => void;
+  onLeave: (creatorId: string) => void;
 }
 
 export function CreatorDetailView({
   connection,
   onBack,
   onViewNote,
+  onLeave,
 }: CreatorDetailViewProps): ReactNode {
   const [lifecycleStatus, setLifecycleStatus] = useState(
     connection.lifecycleStatus,
@@ -37,6 +44,7 @@ export function CreatorDetailView({
   const [showCancelDeathConfirm, setShowCancelDeathConfirm] = useState(false);
   const [showInitiateConsentConfirm, setShowInitiateConsentConfirm] =
     useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
@@ -142,7 +150,41 @@ export function CreatorDetailView({
     onViewNote(connection.creatorId, connection.creatorName);
   }, [onViewNote, connection.creatorId, connection.creatorName]);
 
+  // --- Leave handlers ---
+  const handleOpenLeave = useCallback((): void => {
+    setShowLeaveConfirm(true);
+  }, []);
+
+  const handleLeaveConfirm = useCallback((): void => {
+    setShowLeaveConfirm(false);
+    setIsProcessing(true);
+    void leaveFamilyConnection(connection.creatorId)
+      .then(() => {
+        showToast(UI_MESSAGES.family.memberLeft, "success");
+        onLeave(connection.creatorId);
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to leave family:", {
+          error: err,
+          creatorId: connection.creatorId,
+        });
+        if (err instanceof ApiError && err.status === 409) {
+          showToast(UI_MESSAGES.familyError.leaveBlockedByLifecycle, "error");
+        } else {
+          showToast(UI_MESSAGES.familyError.leaveFailed, "error");
+        }
+      })
+      .finally(() => {
+        setIsProcessing(false);
+      });
+  }, [connection.creatorId, showToast, onLeave]);
+
+  const handleLeaveClose = useCallback((): void => {
+    setShowLeaveConfirm(false);
+  }, []);
+
   const isOpened = lifecycleStatus === "opened";
+  const isLeaveBlocked = LEAVE_BLOCKED_STATES.includes(lifecycleStatus);
 
   return (
     <div className="flex-1 flex flex-col w-full overflow-hidden">
@@ -273,6 +315,20 @@ export function CreatorDetailView({
                   </button>
                 </section>
               )}
+
+              {/* Leave family button (hidden during consent_gathering) */}
+              {!isLeaveBlocked && (
+                <section className="pt-4 border-t border-border">
+                  <button
+                    type="button"
+                    className="w-full min-h-11 rounded-full border border-error text-error bg-bg-surface text-lg transition-colors active:bg-error-light disabled:opacity-50"
+                    onClick={handleOpenLeave}
+                    disabled={isProcessing}
+                  >
+                    {UI_MESSAGES.family.leaveButton}
+                  </button>
+                </section>
+              )}
             </>
           )}
         </div>
@@ -307,6 +363,21 @@ export function CreatorDetailView({
         cancelLabel="やめる"
         onConfirm={handleInitiateConsentConfirm}
         onCancel={handleInitiateConsentClose}
+      />
+
+      {/* Leave family confirmation */}
+      <ConfirmDialog
+        isOpen={showLeaveConfirm}
+        title={UI_MESSAGES.family.leaveConfirmTitle}
+        message={
+          isOpened
+            ? UI_MESSAGES.family.leaveConfirmMessageOpened
+            : UI_MESSAGES.family.leaveConfirmMessage
+        }
+        confirmLabel="脱退する"
+        cancelLabel="やめる"
+        onConfirm={handleLeaveConfirm}
+        onCancel={handleLeaveClose}
       />
 
       <Toast

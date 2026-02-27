@@ -8,8 +8,12 @@ import { EditMemberDialog } from "./EditMemberDialog";
 import type { ReactNode } from "react";
 import type { FamilyMember } from "../lib/family-api";
 
+/** Lifecycle states where creator-initiated deletion is blocked. */
+const DELETION_BLOCKED_STATES = ["consent_gathering", "death_reported"];
+
 interface FamilyMemberCardProps {
   member: FamilyMember;
+  lifecycleStatus: string;
   onRemove: (id: string) => void;
   onSetRepresentative: (id: string) => void;
   onRevokeRepresentative: (id: string) => void;
@@ -17,22 +21,42 @@ interface FamilyMemberCardProps {
     id: string,
     data: { relationship: string; relationshipLabel: string },
   ) => void;
-  isOnlyMember: boolean;
   isMaxRepresentatives: boolean;
+}
+
+function getRemoveConfirmMessage(
+  member: FamilyMember,
+  lifecycleStatus: string,
+): string {
+  const isRepresentative = member.role === "representative";
+  const isOpened = lifecycleStatus === "opened";
+
+  if (isRepresentative && isOpened) {
+    return UI_MESSAGES.family.removeConfirmMessageRepresentativeOpened;
+  }
+  if (isRepresentative) {
+    return UI_MESSAGES.family.removeConfirmMessageRepresentative;
+  }
+  if (isOpened) {
+    return UI_MESSAGES.family.removeConfirmMessageOpened;
+  }
+  return UI_MESSAGES.family.removeConfirmMessage;
 }
 
 export function FamilyMemberCard({
   member,
+  lifecycleStatus,
   onRemove,
   onSetRepresentative,
   onRevokeRepresentative,
   onUpdate,
-  isOnlyMember,
   isMaxRepresentatives,
 }: FamilyMemberCardProps): ReactNode {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+
+  const isDeletionBlocked = DELETION_BLOCKED_STATES.includes(lifecycleStatus);
 
   const handleRemoveClick = useCallback((): void => {
     setShowRemoveConfirm(true);
@@ -134,22 +158,30 @@ export function FamilyMemberCard({
             {UI_MESSAGES.family.setRepresentative}
           </button>
         )}
-        {!isOnlyMember && (
-          <button
-            type="button"
-            className="min-h-11 min-w-11 rounded-full border border-error text-error bg-bg-surface px-4 text-lg transition-colors active:bg-error-light"
-            onClick={handleRemoveClick}
-            aria-label="家族を削除"
-          >
-            {UI_MESSAGES.family.removeButton}
-          </button>
-        )}
+        <button
+          type="button"
+          className={`min-h-11 min-w-11 rounded-full border border-error text-error bg-bg-surface px-4 text-lg transition-colors ${
+            isDeletionBlocked
+              ? "opacity-50 cursor-not-allowed"
+              : "active:bg-error-light"
+          }`}
+          onClick={isDeletionBlocked ? undefined : handleRemoveClick}
+          disabled={isDeletionBlocked}
+          aria-label="家族を削除"
+          title={
+            isDeletionBlocked
+              ? UI_MESSAGES.family.removeDeletionBlocked
+              : undefined
+          }
+        >
+          {UI_MESSAGES.family.removeButton}
+        </button>
       </div>
 
       <ConfirmDialog
         isOpen={showRemoveConfirm}
         title={UI_MESSAGES.family.removeConfirmTitle}
-        message={UI_MESSAGES.family.removeConfirmMessage}
+        message={getRemoveConfirmMessage(member, lifecycleStatus)}
         confirmLabel="削除する"
         cancelLabel="やめる"
         variant="danger"
