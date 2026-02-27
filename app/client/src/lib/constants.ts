@@ -360,6 +360,15 @@ export const UI_MESSAGES = {
     representativeHelp:
       "代表者とは、ノートを開封した後に情報の管理を任せる方です。",
     setRepresentative: "代表者に指定する",
+    revokeRepresentative: "代表者を解除する",
+    revokeRepresentativeConfirmTitle: "代表者の解除",
+    revokeRepresentativeConfirmMessage:
+      "この方の代表者の役割を解除してもよろしいですか？\n解除すると、一般の家族メンバーに戻ります。",
+    representativeRevoked: "代表者を解除しました",
+    editMember: "編集",
+    editMemberDialogTitle: "家族情報の編集",
+    memberUpdated: "家族情報を更新しました",
+    saveButton: "保存する",
     removeConfirmTitle: "家族を削除",
     removeConfirmMessage: "この方を家族から削除してもよろしいですか？",
     inviteLinkCopied: "招待リンクをコピーしました",

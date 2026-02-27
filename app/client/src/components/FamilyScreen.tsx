@@ -123,6 +123,49 @@ export function FamilyScreen({
     [showToast],
   );
 
+  const handleRevokeRepresentative = useCallback(
+    (id: string): void => {
+      void updateFamilyMember(id, { role: "member" })
+        .then((updated) => {
+          setMembers((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
+          );
+          showToast(UI_MESSAGES.family.representativeRevoked, "success");
+        })
+        .catch((err: unknown) => {
+          console.error("Failed to revoke representative:", {
+            error: err,
+            memberId: id,
+          });
+          showToast(UI_MESSAGES.familyError.updateFailed, "error");
+        });
+    },
+    [showToast],
+  );
+
+  const handleUpdateMember = useCallback(
+    (
+      id: string,
+      data: { relationship: string; relationshipLabel: string },
+    ): void => {
+      void updateFamilyMember(id, data)
+        .then((updated) => {
+          setMembers((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
+          );
+          showToast(UI_MESSAGES.family.memberUpdated, "success");
+        })
+        .catch((err: unknown) => {
+          console.error("Failed to update family member:", {
+            error: err,
+            memberId: id,
+          });
+          showToast(UI_MESSAGES.familyError.updateFailed, "error");
+        });
+    },
+    [showToast],
+  );
+
   const handleOpenInvite = useCallback((): void => {
     setShowInviteDialog(true);
   }, []);
@@ -207,6 +250,8 @@ export function FamilyScreen({
                     member={member}
                     onRemove={handleRemove}
                     onSetRepresentative={handleSetRepresentative}
+                    onRevokeRepresentative={handleRevokeRepresentative}
+                    onUpdate={handleUpdateMember}
                     isOnlyMember={members.length === 1}
                   />
                 ))}
