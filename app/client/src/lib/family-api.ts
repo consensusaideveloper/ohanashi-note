@@ -178,15 +178,21 @@ export async function initiateConsent(
   }>;
 }
 
+interface SubmitConsentResult {
+  consented: boolean;
+  consentedAt: string | null;
+  autoOpened: boolean;
+}
+
 export async function submitConsent(
   creatorId: string,
   consented: boolean,
-): Promise<ConsentStatus> {
+): Promise<SubmitConsentResult> {
   const response = await fetchWithAuth(`/api/lifecycle/${creatorId}/consent`, {
     method: "POST",
     body: JSON.stringify({ consented }),
   });
-  return response.json() as Promise<ConsentStatus>;
+  return response.json() as Promise<SubmitConsentResult>;
 }
 
 export async function getConsentStatus(

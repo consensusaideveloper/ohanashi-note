@@ -49,6 +49,7 @@ export function ConsentScreen({
     (consented: boolean): void => {
       setIsSubmitting(true);
       void submitConsent(creatorId, consented)
+        .then(() => getConsentStatus(creatorId))
         .then((data) => {
           setConsentStatus(data);
         })
