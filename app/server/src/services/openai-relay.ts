@@ -25,6 +25,20 @@ interface RelaySession {
   forwardClientMessage(data: string): void;
 }
 
+/** Shape of an OpenAI Realtime API error event (server-to-client). */
+interface OpenAIErrorEvent {
+  type: "error";
+  error: {
+    type: string;
+    code: string;
+    message: string;
+  };
+}
+
+/** Maximum number of client messages buffered while the OpenAI WebSocket is connecting.
+ *  Prevents unbounded memory growth if OpenAI never connects. */
+const MAX_PENDING_BUFFER_SIZE = 256;
+
 // Fields we sanitize in client-to-OpenAI JSON messages
 const TEXT_FIELDS_TO_SANITIZE = new Set([
   "text",
@@ -83,6 +97,23 @@ function sanitizeClientMessage(raw: string): string {
   }
 }
 
+/**
+ * Check if a parsed message is an OpenAI error event.
+ */
+function isOpenAIErrorEvent(data: unknown): data is OpenAIErrorEvent {
+  if (typeof data !== "object" || data === null) return false;
+  const record = data as Record<string, unknown>;
+  if (record.type !== "error") return false;
+  const error = record.error;
+  if (typeof error !== "object" || error === null) return false;
+  const errorRecord = error as Record<string, unknown>;
+  return (
+    typeof errorRecord.type === "string" &&
+    typeof errorRecord.code === "string" &&
+    typeof errorRecord.message === "string"
+  );
+}
+
 // --- Relay factory ---
 
 /**
@@ -95,6 +126,7 @@ function sanitizeClientMessage(raw: string): string {
  */
 function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
   let closed = false;
+  const pendingMessages: string[] = [];
 
   const openaiWs = new WebSocket(OPENAI_REALTIME_URL, {
     headers: {
@@ -108,6 +140,7 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
       return;
     }
     closed = true;
+    pendingMessages.length = 0;
 
     // Close the OpenAI WebSocket if still open
     if (
@@ -140,9 +173,21 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
   // --- OpenAI WebSocket event handlers ---
 
   openaiWs.on("open", () => {
-    logger.info("Connected to OpenAI Realtime API");
-    // Session configuration (including instructions) is sent by the client
-    // after category selection, so no server-side session.update is needed.
+    logger.info("Connected to OpenAI Realtime API", {
+      bufferedMessages: pendingMessages.length,
+    });
+
+    // Flush any messages that arrived while the connection was being established
+    for (const message of pendingMessages) {
+      try {
+        openaiWs.send(message);
+      } catch (err: unknown) {
+        logger.error("Error flushing buffered message to OpenAI", {
+          error: String(err),
+        });
+      }
+    }
+    pendingMessages.length = 0;
   });
 
   openaiWs.on("message", (data: WebSocket.RawData) => {
@@ -151,10 +196,24 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
     }
 
     try {
-      // Forward OpenAI messages to the client as-is
       // eslint-disable-next-line @typescript-eslint/no-base-to-string
       const message = typeof data === "string" ? data : data.toString("utf-8");
 
+      // Detect and log OpenAI error events for server-side observability
+      try {
+        const parsed: unknown = JSON.parse(message);
+        if (isOpenAIErrorEvent(parsed)) {
+          logger.error("OpenAI Realtime API error event", {
+            errorType: parsed.error.type,
+            errorCode: parsed.error.code,
+            errorMessage: parsed.error.message,
+          });
+        }
+      } catch {
+        // Not valid JSON — skip error detection (message is still forwarded)
+      }
+
+      // Forward OpenAI messages to the client as-is
       if (clientWs.readyState === 1 /* OPEN */) {
         clientWs.send(message);
       }
@@ -193,6 +252,19 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
         return;
       }
 
+      const sanitized = sanitizeClientMessage(data);
+
+      if (openaiWs.readyState === WebSocket.CONNECTING) {
+        if (pendingMessages.length < MAX_PENDING_BUFFER_SIZE) {
+          pendingMessages.push(sanitized);
+        } else {
+          logger.warn("Pending message buffer full, dropping message", {
+            bufferSize: pendingMessages.length,
+          });
+        }
+        return;
+      }
+
       if (openaiWs.readyState !== WebSocket.OPEN) {
         logger.warn("OpenAI WebSocket not open, cannot forward message", {
           readyState: openaiWs.readyState,
@@ -201,7 +273,6 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
       }
 
       try {
-        const sanitized = sanitizeClientMessage(data);
         openaiWs.send(sanitized);
       } catch (err: unknown) {
         logger.error("Error forwarding client message to OpenAI", {

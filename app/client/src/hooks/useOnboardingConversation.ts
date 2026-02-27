@@ -418,6 +418,11 @@ export function useOnboardingConversation({
         }
 
         case "error":
+          console.error("OpenAI Realtime API error (onboarding):", {
+            errorType: event.error.type,
+            errorCode: event.error.code,
+            errorMessage: event.error.message,
+          });
           dispatch({ type: "ERROR", errorType: "aiUnavailable" });
           break;
 

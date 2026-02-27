@@ -605,6 +605,11 @@ export function useConversation(): UseConversationReturn {
         }
 
         case "error":
+          console.error("OpenAI Realtime API error:", {
+            errorType: event.error.type,
+            errorCode: event.error.code,
+            errorMessage: event.error.message,
+          });
           dispatch({ type: "ERROR", errorType: "aiUnavailable" });
           break;
 
