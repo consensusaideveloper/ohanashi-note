@@ -87,7 +87,8 @@ export function EditMemberDialog({
 
         {member !== null && (
           <p className="text-lg text-text-secondary">
-            {member.name}さんの情報を編集します
+            {member.name}
+            {UI_MESSAGES.family.editMemberDescription}
           </p>
         )}
 

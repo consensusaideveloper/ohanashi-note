@@ -18,6 +18,7 @@ interface FamilyMemberCardProps {
     data: { relationship: string; relationshipLabel: string },
   ) => void;
   isOnlyMember: boolean;
+  isMaxRepresentatives: boolean;
 }
 
 export function FamilyMemberCard({
@@ -27,6 +28,7 @@ export function FamilyMemberCard({
   onRevokeRepresentative,
   onUpdate,
   isOnlyMember,
+  isMaxRepresentatives,
 }: FamilyMemberCardProps): ReactNode {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
@@ -121,8 +123,13 @@ export function FamilyMemberCard({
         ) : (
           <button
             type="button"
-            className="flex-1 min-h-11 rounded-full border border-accent-primary text-accent-primary bg-bg-surface text-lg transition-colors active:bg-accent-primary-light"
+            className={`flex-1 min-h-11 rounded-full border text-lg transition-colors ${
+              isMaxRepresentatives
+                ? "border-border text-text-secondary bg-bg-surface opacity-50 cursor-not-allowed"
+                : "border-accent-primary text-accent-primary bg-bg-surface active:bg-accent-primary-light"
+            }`}
             onClick={handleSetRepresentative}
+            disabled={isMaxRepresentatives}
           >
             {UI_MESSAGES.family.setRepresentative}
           </button>
@@ -134,7 +141,7 @@ export function FamilyMemberCard({
             onClick={handleRemoveClick}
             aria-label="家族を削除"
           >
-            削除
+            {UI_MESSAGES.family.removeButton}
           </button>
         )}
       </div>

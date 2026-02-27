@@ -130,6 +130,7 @@ export interface IntegrityVerificationResult {
 export type FontSizeLevel = "standard" | "large" | "x-large";
 
 export interface UserProfile {
+  id?: string;
   name: string;
   characterId?: CharacterId | null;
   fontSize?: FontSizeLevel;

@@ -11,6 +11,7 @@ import type { Context } from "hono";
 
 /** Client-facing profile shape matching the UserProfile type. */
 interface ClientProfile {
+  id: string;
   name: string;
   characterId: string | null;
   fontSize: string;
@@ -37,6 +38,7 @@ profileRoute.get("/api/profile", async (c: Context) => {
     }
 
     const profile: ClientProfile = {
+      id: userId,
       name: row.name,
       characterId: row.characterId,
       fontSize: row.fontSize,
@@ -91,6 +93,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
     }
 
     const profile: ClientProfile = {
+      id: userId,
       name: row.name,
       characterId: row.characterId,
       fontSize: row.fontSize,

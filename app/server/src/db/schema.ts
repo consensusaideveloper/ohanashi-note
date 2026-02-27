@@ -133,6 +133,7 @@ export const noteLifecycle = pgTable("note_lifecycle", {
   status: text("status").notNull().default("active"),
   deathReportedAt: timestamp("death_reported_at", tz),
   deathReportedBy: uuid("death_reported_by").references(() => users.id),
+  consentInitiatedBy: uuid("consent_initiated_by").references(() => users.id),
   openedAt: timestamp("opened_at", tz),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
@@ -184,6 +185,52 @@ export const notifications = pgTable(
   ],
 );
 
+// --- Lifecycle Action Log ---
+
+export const lifecycleActionLog = pgTable(
+  "lifecycle_action_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifecycleId: uuid("lifecycle_id")
+      .notNull()
+      .references(() => noteLifecycle.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    performedBy: uuid("performed_by")
+      .notNull()
+      .references(() => users.id),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_lifecycle_action_log_lifecycle").on(table.lifecycleId),
+  ],
+);
+
+// --- Access Presets (creator's pre-mortem category access wishes) ---
+
+export const accessPresets = pgTable(
+  "access_presets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    familyMemberId: uuid("family_member_id")
+      .notNull()
+      .references(() => familyMembers.id, { onDelete: "cascade" }),
+    categoryId: text("category_id").notNull(),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_access_presets_creator").on(table.creatorId),
+    unique("uq_access_presets").on(
+      table.creatorId,
+      table.familyMemberId,
+      table.categoryId,
+    ),
+  ],
+);
+
 // --- Category Access ---
 
 export const categoryAccess = pgTable(
@@ -197,9 +244,9 @@ export const categoryAccess = pgTable(
       .notNull()
       .references(() => familyMembers.id, { onDelete: "cascade" }),
     categoryId: text("category_id").notNull(),
-    grantedBy: uuid("granted_by")
-      .notNull()
-      .references(() => users.id),
+    grantedBy: uuid("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     grantedAt: timestamp("granted_at", tz).notNull().defaultNow(),
   },
   (table) => [

@@ -117,6 +117,12 @@ export function ConsentScreen({
         {creatorName}さんの{UI_MESSAGES.family.consentExplanation}
       </p>
 
+      {!hasResponded && (
+        <p className="text-base text-text-secondary whitespace-pre-line">
+          {UI_MESSAGES.family.consentDetailExplanation}
+        </p>
+      )}
+
       {hasResponded ? (
         <div className="rounded-card border border-border-light bg-bg-primary p-4 flex items-center gap-3">
           {myConsent.consented === true ? (

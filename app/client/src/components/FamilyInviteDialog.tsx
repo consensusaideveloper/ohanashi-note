@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-import { UI_MESSAGES, INVITE_SHARE_MESSAGES } from "../lib/constants";
+import {
+  UI_MESSAGES,
+  INVITE_SHARE_MESSAGES,
+  MAX_REPRESENTATIVES,
+} from "../lib/constants";
 import { createInvitation } from "../lib/family-api";
 import { RelationshipPicker } from "./RelationshipPicker";
 
@@ -10,12 +14,14 @@ interface FamilyInviteDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onInviteCreated: () => void;
+  isMaxRepresentatives: boolean;
 }
 
 export function FamilyInviteDialog({
   isOpen,
   onClose,
   onInviteCreated,
+  isMaxRepresentatives,
 }: FamilyInviteDialogProps): ReactNode {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -155,8 +161,17 @@ export function FamilyInviteDialog({
                 type="button"
                 role="checkbox"
                 aria-checked={isRepresentative}
-                className="flex items-center gap-3 w-full min-h-11 text-left"
-                onClick={handleToggleRepresentative}
+                aria-disabled={isMaxRepresentatives}
+                className={`flex items-center gap-3 w-full min-h-11 text-left ${
+                  isMaxRepresentatives && !isRepresentative
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                }`}
+                onClick={
+                  isMaxRepresentatives && !isRepresentative
+                    ? undefined
+                    : handleToggleRepresentative
+                }
               >
                 <span
                   className={`flex-none w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
@@ -186,7 +201,9 @@ export function FamilyInviteDialog({
                 </span>
               </button>
               <p className="text-base text-text-secondary pl-9">
-                {UI_MESSAGES.family.representativeHelp}
+                {isMaxRepresentatives
+                  ? `${UI_MESSAGES.family.representativeHelp}\n（代表者は最大${String(MAX_REPRESENTATIVES)}名まで指定できます）`
+                  : UI_MESSAGES.family.representativeHelp}
               </p>
             </div>
 

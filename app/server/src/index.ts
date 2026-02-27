@@ -16,6 +16,7 @@ import { notificationsRoute } from "./routes/notifications.js";
 import { audioUploadRoute } from "./routes/audio-upload.js";
 import { enhancedSummarizeRoute } from "./routes/enhanced-summarize.js";
 import { sessionQuotaRoute } from "./routes/session-quota.js";
+import { accessPresetsRoute } from "./routes/access-presets.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
@@ -127,6 +128,8 @@ app.use("/api/lifecycle/*", authMiddleware);
 app.use("/api/notifications/*", authMiddleware);
 app.use("/api/notifications", authMiddleware);
 app.use("/api/access/*", authMiddleware);
+app.use("/api/access-presets/*", authMiddleware);
+app.use("/api/access-presets", authMiddleware);
 
 // --- Routes ---
 
@@ -141,6 +144,7 @@ app.route("/", notificationsRoute);
 app.route("/", audioUploadRoute);
 app.route("/", enhancedSummarizeRoute);
 app.route("/", sessionQuotaRoute);
+app.route("/", accessPresetsRoute);
 
 // WebSocket route via relay
 const wsRoute = createWsRoute(upgradeWebSocket);

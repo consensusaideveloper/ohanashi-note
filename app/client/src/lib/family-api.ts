@@ -36,6 +36,7 @@ export interface FamilyConnection {
   relationshipLabel: string;
   role: "representative" | "member";
   lifecycleStatus: string;
+  hasPendingConsent: boolean;
 }
 
 export async function listFamilyMembers(): Promise<FamilyMember[]> {
@@ -301,4 +302,54 @@ export async function getAccessMatrix(
 ): Promise<AccessMatrix> {
   const response = await fetchWithAuth(`/api/access/${creatorId}/matrix`);
   return response.json() as Promise<AccessMatrix>;
+}
+
+// --- Access Presets API ---
+
+export interface AccessPreset {
+  id: string;
+  familyMemberId: string;
+  memberName: string;
+  categoryId: string;
+  createdAt: string;
+}
+
+export interface AccessPresetRecommendation {
+  id: string;
+  familyMemberId: string;
+  memberName: string;
+  categoryId: string;
+}
+
+export async function listAccessPresets(): Promise<AccessPreset[]> {
+  const response = await fetchWithAuth("/api/access-presets");
+  return response.json() as Promise<AccessPreset[]>;
+}
+
+export async function createAccessPreset(data: {
+  familyMemberId: string;
+  categoryId: string;
+}): Promise<{ id: string; familyMemberId: string; categoryId: string }> {
+  const response = await fetchWithAuth("/api/access-presets", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return response.json() as Promise<{
+    id: string;
+    familyMemberId: string;
+    categoryId: string;
+  }>;
+}
+
+export async function deleteAccessPreset(id: string): Promise<void> {
+  await fetchWithAuth(`/api/access-presets/${id}`, { method: "DELETE" });
+}
+
+export async function getAccessPresetRecommendations(
+  creatorId: string,
+): Promise<AccessPresetRecommendation[]> {
+  const response = await fetchWithAuth(
+    `/api/access-presets/${creatorId}/recommendations`,
+  );
+  return response.json() as Promise<AccessPresetRecommendation[]>;
 }

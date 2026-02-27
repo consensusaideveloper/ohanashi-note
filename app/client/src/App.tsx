@@ -15,12 +15,14 @@ import {
 } from "./lib/constants";
 import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
-import { createInvitation } from "./lib/family-api";
+import { createInvitation, getLifecycleState } from "./lib/family-api";
 import { getInviteTokenFromUrl } from "./lib/inviteUrl";
 import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
+import { CreatorLifecycleBanner } from "./components/CreatorLifecycleBanner";
 import { ConversationScreen } from "./components/ConversationScreen";
+import { ConversationBlockedScreen } from "./components/ConversationBlockedScreen";
 import { ConversationHistory } from "./components/ConversationHistory";
 import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
@@ -28,9 +30,11 @@ import { SettingsScreen } from "./components/SettingsScreen";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FamilyScreen } from "./components/FamilyScreen";
 import { FamilyNoteView } from "./components/FamilyNoteView";
+import { CreatorDetailView } from "./components/CreatorDetailView";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type { QuestionCategory } from "./types/conversation";
+import type { FamilyConnection } from "./lib/family-api";
 
 type AppScreen =
   | "conversation"
@@ -39,6 +43,7 @@ type AppScreen =
   | "note"
   | "settings"
   | "family-dashboard"
+  | "family-creator-detail"
   | "family-note";
 
 /** Pending voice action that requires UI confirmation before executing. */
@@ -147,11 +152,32 @@ function AppContent(): ReactNode {
     "history" | "note"
   >("history");
 
+  // Creator lifecycle status (for the logged-in user as a creator)
+  const [myLifecycleStatus, setMyLifecycleStatus] = useState("active");
+
+  // Fetch lifecycle status on mount
+  useEffect(() => {
+    void getUserProfile().then((profile) => {
+      if (profile?.id !== undefined) {
+        void getLifecycleState(profile.id)
+          .then((state) => {
+            setMyLifecycleStatus(state.status);
+          })
+          .catch(() => {
+            // No lifecycle record means active
+            setMyLifecycleStatus("active");
+          });
+      }
+    });
+  }, []);
+
   // Family mode state
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(
     null,
   );
   const [selectedCreatorName, setSelectedCreatorName] = useState("");
+  const [selectedConnection, setSelectedConnection] =
+    useState<FamilyConnection | null>(null);
 
   const handleSelectConversation = useCallback((id: string): void => {
     setSelectedConversationId(id);
@@ -275,7 +301,26 @@ function AppContent(): ReactNode {
   }, [navigateWithGuard]);
 
   // Family mode navigation handlers
-  const handleSelectCreator = useCallback(
+  const handleSelectCreatorDetail = useCallback(
+    (
+      creatorId: string,
+      creatorName: string,
+      connection: FamilyConnection,
+    ): void => {
+      setSelectedCreatorId(creatorId);
+      setSelectedCreatorName(creatorName);
+      setSelectedConnection(connection);
+      setScreen("family-creator-detail");
+    },
+    [],
+  );
+
+  const handleBackFromCreatorDetail = useCallback((): void => {
+    setSelectedConnection(null);
+    setScreen("family-dashboard");
+  }, []);
+
+  const handleViewNoteFromDetail = useCallback(
     (creatorId: string, creatorName: string): void => {
       setSelectedCreatorId(creatorId);
       setSelectedCreatorName(creatorName);
@@ -285,10 +330,15 @@ function AppContent(): ReactNode {
   );
 
   const handleBackFromFamilyNote = useCallback((): void => {
-    setSelectedCreatorId(null);
-    setSelectedCreatorName("");
-    setScreen("family-dashboard");
-  }, []);
+    // If we came from creator detail, go back to detail; otherwise go to dashboard
+    if (selectedConnection !== null) {
+      setScreen("family-creator-detail");
+    } else {
+      setSelectedCreatorId(null);
+      setSelectedCreatorName("");
+      setScreen("family-dashboard");
+    }
+  }, [selectedConnection]);
 
   // --- Voice action callbacks registration ---
   const voiceActionRef = useVoiceActionRef();
@@ -448,6 +498,14 @@ function AppContent(): ReactNode {
   const renderScreen = (): ReactNode => {
     switch (screen) {
       case "conversation":
+        if (myLifecycleStatus !== "active") {
+          return (
+            <ConversationBlockedScreen
+              lifecycleStatus={myLifecycleStatus}
+              onNavigateToNote={handleNavigateNote}
+            />
+          );
+        }
         return (
           <ConversationScreen
             initialCategory={pendingCategory}
@@ -484,7 +542,19 @@ function AppContent(): ReactNode {
       case "settings":
         return <SettingsScreen />;
       case "family-dashboard":
-        return <FamilyScreen onSelectCreator={handleSelectCreator} />;
+        return <FamilyScreen onSelectCreator={handleSelectCreatorDetail} />;
+      case "family-creator-detail":
+        if (selectedConnection === null) {
+          setScreen("family-dashboard");
+          return null;
+        }
+        return (
+          <CreatorDetailView
+            connection={selectedConnection}
+            onBack={handleBackFromCreatorDetail}
+            onViewNote={handleViewNoteFromDetail}
+          />
+        );
       case "family-note":
         if (selectedCreatorId === null) {
           // Safety fallback: go back to family dashboard if no creator is selected
@@ -510,19 +580,29 @@ function AppContent(): ReactNode {
     }
   };
 
-  const isTabHidden = screen === "detail";
+  const isTabHidden = screen === "detail" || screen === "family-creator-detail";
   const isFamilyScreen =
-    screen === "family-dashboard" || screen === "family-note";
+    screen === "family-dashboard" ||
+    screen === "family-creator-detail" ||
+    screen === "family-note";
 
   const showConversationBanner =
     isConversationActive &&
     screen !== "conversation" &&
     activeCharacterName !== null;
 
+  const showLifecycleBanner = myLifecycleStatus !== "active";
+  const hasTopBanner = showConversationBanner || showLifecycleBanner;
+
   return (
     <div className="min-h-dvh flex flex-col bg-bg-primary">
+      {/* Lifecycle banner for creators with non-active status */}
+      {showLifecycleBanner && (
+        <CreatorLifecycleBanner status={myLifecycleStatus} />
+      )}
+
       {/* Active conversation banner on non-conversation screens */}
-      {showConversationBanner && (
+      {showConversationBanner && !showLifecycleBanner && (
         <ActiveConversationBanner
           characterName={activeCharacterName}
           onReturn={handleNavigateConversation}
@@ -531,7 +611,7 @@ function AppContent(): ReactNode {
 
       {/* Main content area */}
       <div
-        className={`flex-1 flex flex-col pb-[72px] ${showConversationBanner ? "pt-12" : ""}`}
+        className={`flex-1 flex flex-col pb-[72px] ${hasTopBanner ? "pt-12" : ""}`}
       >
         {renderScreen()}
       </div>
@@ -565,7 +645,7 @@ function AppContent(): ReactNode {
               screen === "conversation"
                 ? "text-accent-primary"
                 : "text-text-secondary active:text-text-primary"
-            }`}
+            } ${myLifecycleStatus !== "active" ? "opacity-50" : ""}`}
             onClick={handleNavigateConversation}
           >
             {/* Chat icon */}

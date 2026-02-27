@@ -43,6 +43,7 @@ const ALL_CATEGORIES = [
 async function requireOpenedLifecycle(
   c: Context,
   creatorId: string,
+  callerRole?: string,
 ): Promise<
   | { ok: true; lifecycle: typeof noteLifecycle.$inferSelect }
   | { ok: false; response: Response }
@@ -50,6 +51,11 @@ async function requireOpenedLifecycle(
   const lifecycle = await db.query.noteLifecycle.findFirst({
     where: eq(noteLifecycle.creatorId, creatorId),
   });
+
+  // Creator always has access to their own note regardless of lifecycle status
+  if (callerRole === "creator" && lifecycle) {
+    return { ok: true, lifecycle };
+  }
 
   if (!lifecycle || lifecycle.status !== "opened") {
     return {
@@ -112,7 +118,7 @@ categoryAccessRoute.get(
         );
       }
 
-      const lifecycleResult = await requireOpenedLifecycle(c, creatorId);
+      const lifecycleResult = await requireOpenedLifecycle(c, creatorId, role);
       if (!lifecycleResult.ok) {
         return lifecycleResult.response;
       }
@@ -375,7 +381,7 @@ categoryAccessRoute.get(
         );
       }
 
-      const lifecycleResult = await requireOpenedLifecycle(c, creatorId);
+      const lifecycleResult = await requireOpenedLifecycle(c, creatorId, role);
       if (!lifecycleResult.ok) {
         return lifecycleResult.response;
       }
@@ -476,7 +482,7 @@ categoryAccessRoute.get(
         );
       }
 
-      const lifecycleResult = await requireOpenedLifecycle(c, creatorId);
+      const lifecycleResult = await requireOpenedLifecycle(c, creatorId, role);
       if (!lifecycleResult.ok) {
         return lifecycleResult.response;
       }

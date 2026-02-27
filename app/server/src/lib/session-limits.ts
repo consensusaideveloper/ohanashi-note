@@ -17,5 +17,8 @@ export const WS_CLOSE_QUOTA_EXCEEDED = 4008;
 /** WebSocket close code: session duration limit reached (RFC 6455 app range 4000-4999). */
 export const WS_CLOSE_SESSION_TIMEOUT = 4009;
 
+/** WebSocket close code: lifecycle status prevents new conversations (RFC 6455 app range 4000-4999). */
+export const WS_CLOSE_LIFECYCLE_BLOCKED = 4004;
+
 /** JST timezone identifier for day-boundary calculations. */
 export const JST_TIMEZONE = "Asia/Tokyo";

@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+import { UI_MESSAGES } from "../lib/constants";
+
 import type { ReactNode } from "react";
 import type { Notification } from "../lib/family-api";
 
@@ -8,8 +10,6 @@ interface NotificationListProps {
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
 }
-
-const EMPTY_MESSAGE = "通知はありません";
 const MARK_ALL_READ_LABEL = "すべて既読にする";
 
 /** Milliseconds per minute. */
@@ -98,7 +98,7 @@ export function NotificationList({
     return (
       <div className="rounded-card border border-border-light bg-bg-surface p-6">
         <p className="text-lg text-text-secondary text-center">
-          {EMPTY_MESSAGE}
+          {UI_MESSAGES.family.noNotifications}
         </p>
       </div>
     );

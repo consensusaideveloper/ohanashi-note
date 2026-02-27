@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
 
 import { Hono } from "hono";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import {
+  consentRecords,
   familyInvitations,
   familyMembers,
   noteLifecycle,
@@ -20,6 +21,9 @@ import type { Context } from "hono";
 
 /** Invitation token validity: 7 days in milliseconds. */
 const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Maximum number of representatives per creator. */
+const MAX_REPRESENTATIVES = 3;
 
 // --- Route ---
 
@@ -102,23 +106,24 @@ familyRoute.post("/api/family/invite", async (c: Context) => {
       );
     }
 
-    // If assigning representative, check no other active representative exists
+    // If assigning representative, check count does not exceed maximum
     if (role === "representative") {
-      const existingRep = await db.query.familyMembers.findFirst({
-        where: and(
-          eq(familyMembers.creatorId, userId),
-          eq(familyMembers.role, "representative"),
-          eq(familyMembers.isActive, true),
-        ),
-        columns: { id: true },
-      });
+      const [repCount] = await db
+        .select({ value: count() })
+        .from(familyMembers)
+        .where(
+          and(
+            eq(familyMembers.creatorId, userId),
+            eq(familyMembers.role, "representative"),
+            eq(familyMembers.isActive, true),
+          ),
+        );
 
-      if (existingRep) {
+      if (repCount && repCount.value >= MAX_REPRESENTATIVES) {
         return c.json(
           {
-            error:
-              "代理人はすでに登録されています。先に現在の代理人を変更してください",
-            code: "REPRESENTATIVE_EXISTS",
+            error: `代表者は最大${String(MAX_REPRESENTATIVES)}名まで指定できます`,
+            code: "MAX_REPRESENTATIVES_REACHED",
           },
           409,
         );
@@ -380,23 +385,24 @@ familyRoute.patch("/api/family/:id", async (c: Context) => {
         );
       }
 
-      // If changing to representative, ensure no other active representative
+      // If changing to representative, check count does not exceed maximum
       if (newRole === "representative" && existing.role !== "representative") {
-        const existingRep = await db.query.familyMembers.findFirst({
-          where: and(
-            eq(familyMembers.creatorId, userId),
-            eq(familyMembers.role, "representative"),
-            eq(familyMembers.isActive, true),
-          ),
-          columns: { id: true },
-        });
+        const [repCount] = await db
+          .select({ value: count() })
+          .from(familyMembers)
+          .where(
+            and(
+              eq(familyMembers.creatorId, userId),
+              eq(familyMembers.role, "representative"),
+              eq(familyMembers.isActive, true),
+            ),
+          );
 
-        if (existingRep) {
+        if (repCount && repCount.value >= MAX_REPRESENTATIVES) {
           return c.json(
             {
-              error:
-                "代理人はすでに登録されています。先に現在の代理人を変更してください",
-              code: "REPRESENTATIVE_EXISTS",
+              error: `代表者は最大${String(MAX_REPRESENTATIVES)}名まで指定できます`,
+              code: "MAX_REPRESENTATIVES_REACHED",
             },
             409,
           );
@@ -454,6 +460,23 @@ familyRoute.delete("/api/family/:id", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const memberId = c.req.param("id");
 
+    // Prevent deletion during consent gathering
+    const lifecycle = await db.query.noteLifecycle.findFirst({
+      where: eq(noteLifecycle.creatorId, userId),
+      columns: { status: true },
+    });
+
+    if (lifecycle && lifecycle.status === "consent_gathering") {
+      return c.json(
+        {
+          error:
+            "同意収集中は家族メンバーを削除できません。先に同意収集をキャンセルしてください",
+          code: "CONSENT_GATHERING_ACTIVE",
+        },
+        409,
+      );
+    }
+
     const result = await db
       .delete(familyMembers)
       .where(
@@ -497,12 +520,20 @@ familyRoute.get("/api/family/my-connections", async (c: Context) => {
         relationshipLabel: familyMembers.relationshipLabel,
         role: familyMembers.role,
         lifecycleStatus: noteLifecycle.status,
+        consentValue: consentRecords.consented,
       })
       .from(familyMembers)
       .innerJoin(users, eq(users.id, familyMembers.creatorId))
       .leftJoin(
         noteLifecycle,
         eq(noteLifecycle.creatorId, familyMembers.creatorId),
+      )
+      .leftJoin(
+        consentRecords,
+        and(
+          eq(consentRecords.familyMemberId, familyMembers.id),
+          eq(consentRecords.lifecycleId, noteLifecycle.id),
+        ),
       )
       .where(
         and(
@@ -511,15 +542,21 @@ familyRoute.get("/api/family/my-connections", async (c: Context) => {
         ),
       );
 
-    const result = rows.map((row) => ({
-      id: row.id,
-      creatorId: row.creatorId,
-      creatorName: row.creatorName,
-      relationship: row.relationship,
-      relationshipLabel: row.relationshipLabel,
-      role: row.role,
-      lifecycleStatus: row.lifecycleStatus ?? "active",
-    }));
+    const result = rows.map((row) => {
+      const lifecycleStatus = row.lifecycleStatus ?? "active";
+      const hasPendingConsent =
+        lifecycleStatus === "consent_gathering" && row.consentValue === null;
+      return {
+        id: row.id,
+        creatorId: row.creatorId,
+        creatorName: row.creatorName,
+        relationship: row.relationship,
+        relationshipLabel: row.relationshipLabel,
+        role: row.role,
+        lifecycleStatus,
+        hasPendingConsent,
+      };
+    });
 
     return c.json(result);
   } catch (error) {

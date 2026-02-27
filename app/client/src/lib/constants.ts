@@ -374,11 +374,11 @@ export const UI_MESSAGES = {
     inviteLinkCopied: "招待リンクをコピーしました",
     inviteCreated: "招待リンクを作成しました",
     memberRemoved: "家族を削除しました",
-    representativeChanged: "代表者を変更しました",
+    representativeSet: "代表者に指定しました",
     noFamilyMembers: "まだ家族が登録されていません",
     inviteExpired: "この招待リンクは期限切れです",
     inviteAccepted: "家族として登録されました",
-    alreadyRepresentative: "すでに代表者が指定されています",
+    maxRepresentativesReached: "代表者は最大3名まで指定できます",
     deathReportDialogTitle: "逝去のご報告",
     deathReportConfirmMessage:
       "この方の逝去を報告します。よろしいですか？\n（代表者が取り消すことができます）",
@@ -393,6 +393,8 @@ export const UI_MESSAGES = {
       "ご家族のノートを開封するためには、全員の同意が必要です。",
     consentAgreeButton: "同意する",
     consentDeclineButton: "同意しない",
+    consentDetailExplanation:
+      "同意するとノートが開封され、中身を見ることができるようになります。一度同意すると取り消すことはできませんのでご注意ください。",
     consentGiven: "同意しました",
     consentDeclined: "同意しませんでした",
     consentPending: "未回答",
@@ -411,6 +413,44 @@ export const UI_MESSAGES = {
     lifecycleDeath: "逝去報告済み",
     lifecycleConsent: "同意収集中",
     lifecycleOpened: "開封済み",
+    accessPresetsSectionTitle: "開封時の設定",
+    accessPresetsDescription:
+      "ノートが開封されたとき、ご家族にどのカテゴリを見せたいか事前に設定できます。この設定は代表者への「推奨」として表示されます。",
+    accessPresetsNoMembers: "家族メンバーを登録してから設定できます。",
+    accessPresetsEmpty: "まだ設定がありません。",
+    accessPresetAdded: "設定を追加しました",
+    accessPresetRemoved: "設定を削除しました",
+    accessPresetsNotActive:
+      "この設定はノートが「活動中」の状態でのみ変更できます。",
+    accessPresetsRecommendationHint:
+      "この方はこのカテゴリを見せたいと設定していました",
+    accessPresetsApplyAll: "推奨どおりに設定する",
+    removeButton: "削除",
+    editMemberDescription: "さんの情報を編集します",
+    noNotifications: "通知はありません",
+    myFamilyTab: "わたしの家族",
+    familyNotesTab: "家族のノート",
+    pendingActionsCount: "件の対応",
+    creatorDetailTitle: "詳細",
+    reportDeathButton: "逝去のご報告",
+    initiateConsentButton: "同意収集を開始する",
+    cancelDeathReportButton: "報告を取り消す",
+    resetConsentButton: "同意をやり直す",
+    viewNoteButton: "ノートを見る",
+    accessManageButton: "アクセス管理",
+    waitingForRepresentative: "代表者の対応をお待ちください",
+  },
+  creatorLifecycle: {
+    bannerDeathReported:
+      "ご家族から逝去の報告がありました。誤りの場合は代表者の方にご連絡ください。",
+    bannerConsentGathering: "ノートの開封について、ご家族の同意が進行中です。",
+    bannerOpened: "ノートが開封されました。ご家族が閲覧できる状態です。",
+    conversationBlocked: "現在、新しい会話を始めることはできません。",
+    conversationBlockedDeathReported:
+      "逝去の報告がされているため、新しい会話を始めることはできません。\n誤りの場合は代表者の方にご連絡ください。",
+    conversationBlockedOpened:
+      "ノートが開封済みのため、新しい会話を始めることはできません。",
+    viewNoteInstead: "ノートを見る",
   },
   familyError: {
     loadFailed: "家族情報の読み込みに失敗しました。",
@@ -427,6 +467,10 @@ export const UI_MESSAGES = {
     grantAccessFailed: "アクセス権の付与に失敗しました。",
     revokeAccessFailed: "アクセス権の取り消しに失敗しました。",
     noteFetchFailed: "ノートの取得に失敗しました。",
+    accessPresetsFailed: "事前設定の取得に失敗しました。",
+    accessPresetAddFailed: "設定の追加に失敗しました。",
+    accessPresetRemoveFailed: "設定の削除に失敗しました。",
+    accessPresetsRecommendationsFailed: "推奨設定の取得に失敗しました。",
   },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
@@ -449,6 +493,12 @@ export const UI_MESSAGES = {
   },
 } as const;
 
+// --- Family limits ---
+// Note: The server (family.ts) is the authoritative source for this value.
+// This client-side constant must be kept in sync with the server.
+/** Maximum number of representatives per creator. */
+export const MAX_REPRESENTATIVES = 3;
+
 // --- Session limits ---
 // Note: The server (session-limits.ts) is the authoritative source for these values.
 // These client-side constants must be kept in sync with the server.
@@ -464,6 +514,8 @@ export const MAX_DAILY_SESSIONS = 5;
 export const WS_CLOSE_QUOTA_EXCEEDED = 4008;
 /** Server close code: session duration limit reached. */
 export const WS_CLOSE_SESSION_TIMEOUT = 4009;
+/** Server close code: lifecycle status blocks new conversations. */
+export const WS_CLOSE_LIFECYCLE_BLOCKED = 4004;
 
 // --- UI timing ---
 export const RETRY_DELAY_MS = 300;

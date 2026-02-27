@@ -3,6 +3,8 @@
 
 import { Hono } from "hono";
 
+import { eq } from "drizzle-orm";
+
 import { createRelay } from "../services/openai-relay.js";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
@@ -14,9 +16,12 @@ import { getSessionQuota } from "../lib/session-quota.js";
 import {
   MAX_SESSION_DURATION_MS,
   SESSION_GRACE_PERIOD_MS,
+  WS_CLOSE_LIFECYCLE_BLOCKED,
   WS_CLOSE_QUOTA_EXCEEDED,
   WS_CLOSE_SESSION_TIMEOUT,
 } from "../lib/session-limits.js";
+import { db } from "../db/connection.js";
+import { noteLifecycle } from "../db/schema.js";
 
 import type { UpgradeWebSocket } from "hono/ws";
 import type { WebSocket as NodeWebSocket } from "ws";
@@ -134,6 +139,23 @@ export function createWsRoute(
                 ws.close(
                   WS_CLOSE_QUOTA_EXCEEDED,
                   JSON.stringify({ code: "DAILY_QUOTA_EXCEEDED" }),
+                );
+                return;
+              }
+
+              // --- Lifecycle status check ---
+              const lifecycle = await db.query.noteLifecycle.findFirst({
+                where: eq(noteLifecycle.creatorId, userId),
+                columns: { status: true },
+              });
+              if (lifecycle !== undefined && lifecycle.status !== "active") {
+                logger.warn("Conversation blocked by lifecycle status", {
+                  userId,
+                  lifecycleStatus: lifecycle.status,
+                });
+                ws.close(
+                  WS_CLOSE_LIFECYCLE_BLOCKED,
+                  JSON.stringify({ code: "LIFECYCLE_BLOCKED" }),
                 );
                 return;
               }

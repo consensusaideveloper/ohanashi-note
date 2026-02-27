@@ -8,6 +8,7 @@ import {
   consentRecords,
   notifications,
   users,
+  lifecycleActionLog,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
@@ -73,6 +74,23 @@ async function notifyFamilyMembers(
   }));
 
   await db.insert(notifications).values(values);
+}
+
+/**
+ * Record an action in the lifecycle action log for audit purposes.
+ */
+async function logLifecycleAction(
+  lifecycleId: string,
+  action: string,
+  performedBy: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  await db.insert(lifecycleActionLog).values({
+    lifecycleId,
+    action,
+    performedBy,
+    metadata: metadata ?? null,
+  });
 }
 
 // --- Route ---
@@ -149,6 +167,22 @@ lifecycleRoute.post(
       });
 
       if (existing && existing.status !== "active") {
+        // If already death_reported, return existing state (idempotent)
+        if (existing.status === "death_reported") {
+          return c.json({
+            id: existing.id,
+            status: existing.status,
+            deathReportedAt: existing.deathReportedAt
+              ? existing.deathReportedAt.toISOString()
+              : null,
+            deathReportedBy: existing.deathReportedBy,
+            openedAt: existing.openedAt
+              ? existing.openedAt.toISOString()
+              : null,
+            createdAt: existing.createdAt.toISOString(),
+            alreadyReported: true,
+          });
+        }
         return c.json(
           {
             error: "現在のステータスではこの操作を行えません",
@@ -197,6 +231,9 @@ lifecycleRoute.post(
           500,
         );
       }
+
+      // Log action
+      await logLifecycleAction(record.id, "death_reported", userId);
 
       // Create notifications for ALL family members
       const creatorName = await getCreatorName(creatorId);
@@ -297,6 +334,9 @@ lifecycleRoute.post(
         );
       }
 
+      // Log action
+      await logLifecycleAction(existing.id, "death_report_cancelled", userId);
+
       // Create notifications for all family members
       const creatorName = await getCreatorName(creatorId);
       const members = await getActiveFamilyMembers(creatorId);
@@ -360,6 +400,16 @@ lifecycleRoute.post(
       });
 
       if (!existing || existing.status !== "death_reported") {
+        // Differentiated error for consent already started
+        if (existing && existing.status === "consent_gathering") {
+          return c.json(
+            {
+              error: "すでに同意の収集が開始されています",
+              code: "CONSENT_ALREADY_INITIATED",
+            },
+            409,
+          );
+        }
         return c.json(
           {
             error: "現在のステータスではこの操作を行えません",
@@ -369,12 +419,27 @@ lifecycleRoute.post(
         );
       }
 
-      // Update status to "consent_gathering"
+      // Check for active family members before transitioning status
+      const members = await getActiveFamilyMembers(creatorId);
+
+      if (members.length === 0) {
+        return c.json(
+          {
+            error:
+              "家族メンバーが登録されていないため、同意収集を開始できません",
+            code: "NO_FAMILY_MEMBERS",
+          },
+          403,
+        );
+      }
+
+      // Update status to "consent_gathering" with initiator tracking
       const now = new Date();
       const [updated] = await db
         .update(noteLifecycle)
         .set({
           status: "consent_gathering",
+          consentInitiatedBy: userId,
           updatedAt: now,
         })
         .where(eq(noteLifecycle.id, existing.id))
@@ -391,17 +456,18 @@ lifecycleRoute.post(
       }
 
       // Create consent_records for all active family members
-      const members = await getActiveFamilyMembers(creatorId);
+      const consentValues = members.map((m) => ({
+        lifecycleId: existing.id,
+        familyMemberId: m.familyMemberId,
+        consented: null as boolean | null,
+      }));
 
-      if (members.length > 0) {
-        const consentValues = members.map((m) => ({
-          lifecycleId: existing.id,
-          familyMemberId: m.familyMemberId,
-          consented: null as boolean | null,
-        }));
+      await db.insert(consentRecords).values(consentValues);
 
-        await db.insert(consentRecords).values(consentValues);
-      }
+      // Log action
+      await logLifecycleAction(existing.id, "consent_initiated", userId, {
+        memberCount: members.length,
+      });
 
       // Create notifications
       const creatorName = await getCreatorName(creatorId);
@@ -505,23 +571,69 @@ lifecycleRoute.post("/api/lifecycle/:creatorId/consent", async (c: Context) => {
       );
     }
 
-    // Update the caller's consent_record
+    // Use a transaction to atomically update consent + check for auto-open
     const now = new Date();
-    const [updatedConsent] = await db
-      .update(consentRecords)
-      .set({
-        consented,
-        consentedAt: now,
-      })
-      .where(
-        and(
-          eq(consentRecords.lifecycleId, lifecycle.id),
-          eq(consentRecords.familyMemberId, membership.id),
-        ),
-      )
-      .returning();
+    const txResult = await db.transaction(async (tx) => {
+      // Update the caller's consent_record
+      const [updatedConsent] = await tx
+        .update(consentRecords)
+        .set({
+          consented,
+          consentedAt: now,
+        })
+        .where(
+          and(
+            eq(consentRecords.lifecycleId, lifecycle.id),
+            eq(consentRecords.familyMemberId, membership.id),
+          ),
+        )
+        .returning();
 
-    if (!updatedConsent) {
+      if (!updatedConsent) {
+        return { type: "not_found" as const };
+      }
+
+      // Check if ALL active family members have consented=true
+      const allRecords = await tx
+        .select({
+          consented: consentRecords.consented,
+        })
+        .from(consentRecords)
+        .where(eq(consentRecords.lifecycleId, lifecycle.id));
+
+      const allConsented =
+        allRecords.length > 0 && allRecords.every((r) => r.consented === true);
+
+      let autoOpened = false;
+
+      if (allConsented) {
+        // Auto-transition to "opened" with status guard to prevent double transition
+        const [openedRecord] = await tx
+          .update(noteLifecycle)
+          .set({
+            status: "opened",
+            openedAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(noteLifecycle.id, lifecycle.id),
+              eq(noteLifecycle.status, "consent_gathering"),
+            ),
+          )
+          .returning();
+
+        autoOpened = !!openedRecord;
+      }
+
+      return {
+        type: "success" as const,
+        updatedConsent,
+        autoOpened,
+      };
+    });
+
+    if (txResult.type === "not_found") {
       return c.json(
         {
           error: "同意記録が見つかりません",
@@ -531,33 +643,15 @@ lifecycleRoute.post("/api/lifecycle/:creatorId/consent", async (c: Context) => {
       );
     }
 
-    // Check if ALL active family members have consented=true
-    const allRecords = await db
-      .select({
-        consented: consentRecords.consented,
-      })
-      .from(consentRecords)
-      .where(eq(consentRecords.lifecycleId, lifecycle.id));
+    // Log consent action
+    await logLifecycleAction(lifecycle.id, "consent_submitted", userId, {
+      consented,
+    });
 
-    const allConsented =
-      allRecords.length > 0 && allRecords.every((r) => r.consented === true);
+    // Send notifications outside the transaction (non-critical)
+    if (txResult.autoOpened) {
+      await logLifecycleAction(lifecycle.id, "note_opened", userId);
 
-    let autoOpened = false;
-
-    if (allConsented) {
-      // Auto-transition to "opened"
-      await db
-        .update(noteLifecycle)
-        .set({
-          status: "opened",
-          openedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(noteLifecycle.id, lifecycle.id));
-
-      autoOpened = true;
-
-      // Create notifications for note opened
       const creatorName = await getCreatorName(creatorId);
       const members = await getActiveFamilyMembers(creatorId);
       const memberUserIds = members.map((m) => m.memberId);
@@ -572,11 +666,11 @@ lifecycleRoute.post("/api/lifecycle/:creatorId/consent", async (c: Context) => {
     }
 
     return c.json({
-      consented: updatedConsent.consented,
-      consentedAt: updatedConsent.consentedAt
-        ? updatedConsent.consentedAt.toISOString()
+      consented: txResult.updatedConsent.consented,
+      consentedAt: txResult.updatedConsent.consentedAt
+        ? txResult.updatedConsent.consentedAt.toISOString()
         : null,
-      autoOpened,
+      autoOpened: txResult.autoOpened,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -734,6 +828,108 @@ lifecycleRoute.get(
         {
           error: "同意状況の取得に失敗しました",
           code: "CONSENT_STATUS_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** POST /api/lifecycle/:creatorId/reset-consent — Reset consent gathering (representative only). */
+lifecycleRoute.post(
+  "/api/lifecycle/:creatorId/reset-consent",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+
+      // Auth: representative ONLY
+      const role = await getUserRole(userId, creatorId);
+
+      if (role !== "representative") {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      // Check lifecycle status is "consent_gathering"
+      const existing = await db.query.noteLifecycle.findFirst({
+        where: eq(noteLifecycle.creatorId, creatorId),
+      });
+
+      if (!existing || existing.status !== "consent_gathering") {
+        return c.json(
+          {
+            error: "現在のステータスではこの操作を行えません",
+            code: "INVALID_STATUS",
+          },
+          409,
+        );
+      }
+
+      // Delete all consent records and reset status to "death_reported"
+      const now = new Date();
+
+      await db
+        .delete(consentRecords)
+        .where(eq(consentRecords.lifecycleId, existing.id));
+
+      const [updated] = await db
+        .update(noteLifecycle)
+        .set({
+          status: "death_reported",
+          updatedAt: now,
+        })
+        .where(eq(noteLifecycle.id, existing.id))
+        .returning();
+
+      if (!updated) {
+        return c.json(
+          {
+            error: "ライフサイクルの更新に失敗しました",
+            code: "UPDATE_FAILED",
+          },
+          500,
+        );
+      }
+
+      // Log action
+      await logLifecycleAction(existing.id, "consent_reset", userId);
+
+      // Notify all family members
+      const creatorName = await getCreatorName(creatorId);
+      const members = await getActiveFamilyMembers(creatorId);
+      const memberUserIds = members.map((m) => m.memberId);
+
+      await notifyFamilyMembers(
+        memberUserIds,
+        "consent_reset",
+        "同意の収集がリセットされました",
+        `${creatorName}さんのノート開封の同意収集がリセットされました。改めてご案内いたします`,
+        creatorId,
+      );
+
+      return c.json({
+        id: updated.id,
+        status: updated.status,
+        deathReportedAt: updated.deathReportedAt
+          ? updated.deathReportedAt.toISOString()
+          : null,
+        openedAt: updated.openedAt ? updated.openedAt.toISOString() : null,
+        createdAt: updated.createdAt.toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to reset consent", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+      });
+      return c.json(
+        {
+          error: "同意のリセットに失敗しました",
+          code: "RESET_CONSENT_FAILED",
         },
         500,
       );
