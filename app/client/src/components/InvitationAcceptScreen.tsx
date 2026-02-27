@@ -6,6 +6,10 @@ import {
   INVITATION_MESSAGES,
   INVITATION_SUCCESS_DELAY_MS,
 } from "../lib/constants";
+import {
+  savePendingInviteToken,
+  clearPendingInviteToken,
+} from "../lib/pendingInvite";
 
 import type { ReactNode } from "react";
 import type { InvitationInfo } from "../lib/family-api";
@@ -91,6 +95,9 @@ export function InvitationAcceptScreen({
           token,
         });
         const parsed = parseApiError(err);
+        if (!isRetryableError(parsed.code)) {
+          clearPendingInviteToken();
+        }
         setErrorMessage(parsed.message);
         setErrorCode(parsed.code);
         setPhase("error");
@@ -114,11 +121,15 @@ export function InvitationAcceptScreen({
     setPhase("accepting");
     void acceptInvitation(token)
       .then(() => {
+        clearPendingInviteToken();
         setPhase("success");
       })
       .catch((err: unknown) => {
         console.error("Failed to accept invitation:", { error: err, token });
         const parsed = parseApiError(err);
+        if (!isRetryableError(parsed.code)) {
+          clearPendingInviteToken();
+        }
         setErrorMessage(parsed.message);
         setErrorCode(parsed.code);
         setPhase("error");
@@ -130,8 +141,9 @@ export function InvitationAcceptScreen({
   }, [fetchInvitation]);
 
   const handleSkip = useCallback((): void => {
+    savePendingInviteToken(token);
     onComplete();
-  }, [onComplete]);
+  }, [token, onComplete]);
 
   const handleBackToApp = useCallback((): void => {
     onComplete();

@@ -597,6 +597,9 @@ export const INVITATION_SUCCESS_DELAY_MS = 2000;
 /** URL path prefix for invitation links. */
 export const INVITE_PATH_PREFIX = "/invite/";
 
+/** localStorage key for invitation tokens deferred with "あとで確認する". */
+export const PENDING_INVITE_STORAGE_KEY = "pending_invite_token";
+
 export const INVITATION_MESSAGES = {
   screenTitle: "家族の招待",
   loadingText: "招待情報を確認しています...",

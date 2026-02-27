@@ -17,6 +17,7 @@ import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
 import { createInvitation, getLifecycleState } from "./lib/family-api";
 import { getInviteTokenFromUrl } from "./lib/inviteUrl";
+import { getPendingInviteToken } from "./lib/pendingInvite";
 import { InvitationAcceptScreen } from "./components/InvitationAcceptScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { ActiveConversationBanner } from "./components/ActiveConversationBanner";
@@ -98,8 +99,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
-  const [inviteToken, setInviteToken] = useState<string | null>(() =>
-    getInviteTokenFromUrl(),
+  const [inviteToken, setInviteToken] = useState<string | null>(
+    () => getInviteTokenFromUrl() ?? getPendingInviteToken(),
   );
 
   const handleInviteComplete = useCallback((): void => {
