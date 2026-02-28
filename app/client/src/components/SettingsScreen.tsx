@@ -13,13 +13,19 @@ import {
   SILENCE_DURATION_OPTIONS,
   CONFIRMATION_LEVEL_OPTIONS,
   SETTINGS_MESSAGES,
+  TERMS_CONSENT_MESSAGES,
   UI_MESSAGES,
 } from "../lib/constants";
+import {
+  TERMS_OF_SERVICE_CONTENT,
+  PRIVACY_POLICY_CONTENT,
+} from "../lib/legal-content";
 import { useFontSize } from "../contexts/FontSizeContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useToast } from "../hooks/useToast";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PrintableEndingNote } from "./PrintableEndingNote";
+import { LegalDocumentViewer } from "./LegalDocumentViewer";
 import { Toast } from "./Toast";
 
 import type {
@@ -58,6 +64,8 @@ export function SettingsScreen({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAccountDeleteFirst, setShowAccountDeleteFirst] = useState(false);
   const [showAccountDeleteSecond, setShowAccountDeleteSecond] = useState(false);
+  const [showTermsViewer, setShowTermsViewer] = useState(false);
+  const [showPrivacyViewer, setShowPrivacyViewer] = useState(false);
 
   useEffect(() => {
     void getUserProfile().then((profile) => {
@@ -97,6 +105,22 @@ export function SettingsScreen({
         showToast(UI_MESSAGES.error.saveFailed, "error");
       });
   }, [name, selectedCharacterId, showToast]);
+
+  const handleViewTerms = useCallback((): void => {
+    setShowTermsViewer(true);
+  }, []);
+
+  const handleCloseTerms = useCallback((): void => {
+    setShowTermsViewer(false);
+  }, []);
+
+  const handleViewPrivacy = useCallback((): void => {
+    setShowPrivacyViewer(true);
+  }, []);
+
+  const handleClosePrivacy = useCallback((): void => {
+    setShowPrivacyViewer(false);
+  }, []);
 
   const handleOpenPrint = useCallback((): void => {
     setShowPrintView(true);
@@ -492,6 +516,53 @@ export function SettingsScreen({
           </button>
         </section>
 
+        {/* Section: Legal Documents */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-text-secondary">
+            {TERMS_CONSENT_MESSAGES.settingsSectionTitle}
+          </h2>
+          <button
+            type="button"
+            className="w-full bg-bg-surface border border-border-light rounded-card px-4 py-3 text-left text-lg text-text-primary hover:bg-bg-surface-hover active:bg-bg-surface-hover transition-colors flex items-center justify-between min-h-11"
+            onClick={handleViewTerms}
+          >
+            <span>{TERMS_CONSENT_MESSAGES.settingsViewTerms}</span>
+            <svg
+              className="h-5 w-5 text-text-secondary flex-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8.25 4.5l7.5 7.5-7.5 7.5"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="w-full bg-bg-surface border border-border-light rounded-card px-4 py-3 text-left text-lg text-text-primary hover:bg-bg-surface-hover active:bg-bg-surface-hover transition-colors flex items-center justify-between min-h-11"
+            onClick={handleViewPrivacy}
+          >
+            <span>{TERMS_CONSENT_MESSAGES.settingsViewPrivacy}</span>
+            <svg
+              className="h-5 w-5 text-text-secondary flex-none"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8.25 4.5l7.5 7.5-7.5 7.5"
+              />
+            </svg>
+          </button>
+        </section>
+
         {/* Zone separator: safe settings above, data management below */}
         <div className="flex items-center gap-3 pt-4">
           <div className="flex-1 border-t border-border" />
@@ -682,6 +753,20 @@ export function SettingsScreen({
         onDismiss={hideToast}
       />
       {showPrintView && <PrintableEndingNote onClose={handleClosePrint} />}
+      {showTermsViewer && (
+        <LegalDocumentViewer
+          title={TERMS_CONSENT_MESSAGES.termsTitle}
+          content={TERMS_OF_SERVICE_CONTENT}
+          onClose={handleCloseTerms}
+        />
+      )}
+      {showPrivacyViewer && (
+        <LegalDocumentViewer
+          title={TERMS_CONSENT_MESSAGES.privacyTitle}
+          content={PRIVACY_POLICY_CONTENT}
+          onClose={handleClosePrivacy}
+        />
+      )}
     </div>
   );
 }

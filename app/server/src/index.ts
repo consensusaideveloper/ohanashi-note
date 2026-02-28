@@ -18,6 +18,7 @@ import { enhancedSummarizeRoute } from "./routes/enhanced-summarize.js";
 import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { accessPresetsRoute } from "./routes/access-presets.js";
 import { accountRoute } from "./routes/account.js";
+import { termsConsentRoute } from "./routes/terms-consent.js";
 import { todoRoute } from "./routes/todos.js";
 import { activityRoute } from "./routes/activity.js";
 import { createWsRoute } from "./routes/ws.js";
@@ -137,6 +138,8 @@ app.use("/api/account", authMiddleware);
 app.use("/api/todos/*", authMiddleware);
 app.use("/api/todos", authMiddleware);
 app.use("/api/activity/*", authMiddleware);
+app.use("/api/terms-consent/*", authMiddleware);
+app.use("/api/terms-consent", authMiddleware);
 
 // --- Routes ---
 
@@ -155,6 +158,7 @@ app.route("/", accessPresetsRoute);
 app.route("/", accountRoute);
 app.route("/", todoRoute);
 app.route("/", activityRoute);
+app.route("/", termsConsentRoute);
 
 // WebSocket route via relay
 const wsRoute = createWsRoute(upgradeWebSocket);

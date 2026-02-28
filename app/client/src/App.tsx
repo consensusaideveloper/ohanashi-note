@@ -54,8 +54,11 @@ import { TodoListScreen } from "./components/TodoListScreen";
 import { TodoDetailScreen } from "./components/TodoDetailScreen";
 import { FamilyConversationDetail } from "./components/FamilyConversationDetail";
 import { ParticipantAccessScreen } from "./components/ParticipantAccessScreen";
+import { TermsConsentScreen } from "./components/TermsConsentScreen";
+import { checkTermsConsentStatus } from "./lib/legal-api";
 
 import type { ReactNode, ErrorInfo } from "react";
+import type { ConsentStatus } from "./lib/legal-api";
 import type {
   ConfirmationLevel,
   QuestionCategory,
@@ -139,6 +142,10 @@ function AuthGate(): ReactNode {
   const [onboardingPhase, setOnboardingPhase] =
     useState<OnboardingPhase>("none");
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [consentStatus, setConsentStatus] = useState<ConsentStatus | null>(
+    null,
+  );
+  const [consentChecked, setConsentChecked] = useState(false);
 
   // Save invite token to localStorage immediately so it survives OAuth redirects
   useEffect(() => {
@@ -147,9 +154,30 @@ function AuthGate(): ReactNode {
     }
   }, [inviteToken, user]);
 
+  // Check if authenticated user has consented to current terms
+  useEffect(() => {
+    if (user !== null && inviteToken === null && !consentChecked) {
+      void checkTermsConsentStatus()
+        .then((status) => {
+          setConsentStatus(status);
+          setConsentChecked(true);
+        })
+        .catch(() => {
+          // Fail-open: if consent check fails, allow through to avoid locking users out
+          setConsentChecked(true);
+        });
+    }
+  }, [user, inviteToken, consentChecked]);
+
   // Check if authenticated user needs onboarding (new user with empty name)
   useEffect(() => {
-    if (user !== null && inviteToken === null && !onboardingChecked) {
+    if (
+      user !== null &&
+      inviteToken === null &&
+      consentChecked &&
+      (consentStatus === null || consentStatus.hasConsented) &&
+      !onboardingChecked
+    ) {
       void getUserProfile()
         .then((profile) => {
           if (profile !== null && profile.name === "") {
@@ -162,7 +190,7 @@ function AuthGate(): ReactNode {
           setOnboardingChecked(true);
         });
     }
-  }, [user, inviteToken, onboardingChecked]);
+  }, [user, inviteToken, consentChecked, consentStatus, onboardingChecked]);
 
   const handleInviteComplete = useCallback((): void => {
     window.history.replaceState(null, "", "/");
@@ -179,6 +207,12 @@ function AuthGate(): ReactNode {
       .catch(() => {
         setOnboardingChecked(true);
       });
+  }, []);
+
+  const handleConsentComplete = useCallback((): void => {
+    setConsentStatus((prev) =>
+      prev !== null ? { ...prev, hasConsented: true } : null,
+    );
   }, []);
 
   const handleOnboardingConversationDone = useCallback((): void => {
@@ -209,6 +243,27 @@ function AuthGate(): ReactNode {
       <InvitationAcceptScreen
         token={inviteToken}
         onComplete={handleInviteComplete}
+      />
+    );
+  }
+
+  // Show loading spinner while checking consent status
+  if (!consentChecked) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-bg-primary">
+        <div className="w-10 h-10 border-4 border-accent-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show terms consent screen when user has not consented to current terms
+  if (consentStatus !== null && !consentStatus.hasConsented) {
+    return (
+      <TermsConsentScreen
+        termsVersion={consentStatus.currentTermsVersion}
+        privacyVersion={consentStatus.currentPrivacyVersion}
+        isUpdate={consentStatus.needsReconsent === true}
+        onConsented={handleConsentComplete}
       />
     );
   }

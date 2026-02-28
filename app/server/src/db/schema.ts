@@ -403,6 +403,25 @@ export const todoHistory = pgTable(
   (table) => [index("idx_todo_history_todo").on(table.todoId)],
 );
 
+// --- Terms Consent (legal document consent records) ---
+
+export const termsConsent = pgTable(
+  "terms_consent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    termsVersion: text("terms_version").notNull(),
+    privacyVersion: text("privacy_version").notNull(),
+    consentedAt: timestamp("consented_at", tz).notNull().defaultNow(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [index("idx_terms_consent_user").on(table.userId)],
+);
+
 // --- Todo Visibility (per-item hiding for specific members) ---
 
 export const todoVisibility = pgTable(
