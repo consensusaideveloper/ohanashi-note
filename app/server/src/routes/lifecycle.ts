@@ -1017,7 +1017,7 @@ lifecycleRoute.post(
 // Data Deletion Consent Flow (post-opening, unanimous consent required)
 // =============================================================================
 
-/** POST /api/lifecycle/:creatorId/initiate-data-deletion — Start data deletion consent (representative only). */
+/** POST /api/lifecycle/:creatorId/initiate-data-deletion — Start data deletion consent (representative, fallback to member). */
 lifecycleRoute.post(
   "/api/lifecycle/:creatorId/initiate-data-deletion",
   async (c: Context) => {
@@ -1026,12 +1026,25 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: representative only
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
       if (role !== "representative") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "initiate-data-deletion" },
         );
       }
 
@@ -1386,7 +1399,7 @@ lifecycleRoute.post(
   },
 );
 
-/** POST /api/lifecycle/:creatorId/cancel-data-deletion — Cancel data deletion process (representative only). */
+/** POST /api/lifecycle/:creatorId/cancel-data-deletion — Cancel data deletion process (representative, fallback to member). */
 lifecycleRoute.post(
   "/api/lifecycle/:creatorId/cancel-data-deletion",
   async (c: Context) => {
@@ -1395,12 +1408,25 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: representative only
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
       if (role !== "representative") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "cancel-data-deletion" },
         );
       }
 

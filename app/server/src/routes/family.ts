@@ -16,9 +16,11 @@ import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
 import {
+  getActiveFamilyMembers,
   getCreatorName,
   hasActiveRepresentative,
   logLifecycleAction,
+  notifyFamilyMembers,
 } from "../lib/lifecycle-helpers.js";
 
 import type { Context } from "hono";
@@ -662,7 +664,7 @@ familyRoute.delete("/api/family/leave/:creatorId", async (c: Context) => {
     // Check lifecycle state
     const lifecycle = await db.query.noteLifecycle.findFirst({
       where: eq(noteLifecycle.creatorId, creatorId),
-      columns: { id: true, status: true },
+      columns: { id: true, status: true, deletionStatus: true },
     });
 
     const lifecycleStatus = lifecycle?.status ?? "active";
@@ -678,46 +680,104 @@ familyRoute.delete("/api/family/leave/:creatorId", async (c: Context) => {
       );
     }
 
-    // Safety: prevent leaving if last representative during death_reported
-    if (
-      lifecycleStatus === "death_reported" &&
-      membership.role === "representative"
-    ) {
-      const [repCount] = await db
+    // Block leave during data deletion consent gathering
+    if (lifecycle?.deletionStatus === "deletion_consent_gathering") {
+      return c.json(
+        {
+          error:
+            "データ削除の同意収集中は家族から脱退できません。同意収集の完了をお待ちください",
+          code: "DELETION_CONSENT_GATHERING_ACTIVE",
+        },
+        409,
+      );
+    }
+
+    // Safety: prevent orphaning or loss of representative capabilities
+    if (lifecycleStatus === "death_reported" || lifecycleStatus === "opened") {
+      // Check if this is the last member
+      const [totalCount] = await db
         .select({ value: count() })
         .from(familyMembers)
         .where(
           and(
             eq(familyMembers.creatorId, creatorId),
-            eq(familyMembers.role, "representative"),
             eq(familyMembers.isActive, true),
           ),
         );
 
-      if (repCount && repCount.value <= 1) {
+      if (totalCount && totalCount.value <= 1) {
         return c.json(
           {
             error:
-              "最後の代表者のため脱退できません。他の方を代表者に指定してから脱退してください",
-            code: "LAST_REPRESENTATIVE",
+              "最後の家族メンバーのため脱退できません。ノートの管理者がいなくなってしまいます",
+            code: "LAST_MEMBER",
           },
           409,
         );
+      }
+
+      // Check if this is the last representative
+      if (membership.role === "representative") {
+        const [repCount] = await db
+          .select({ value: count() })
+          .from(familyMembers)
+          .where(
+            and(
+              eq(familyMembers.creatorId, creatorId),
+              eq(familyMembers.role, "representative"),
+              eq(familyMembers.isActive, true),
+            ),
+          );
+
+        if (repCount && repCount.value <= 1) {
+          return c.json(
+            {
+              error:
+                "最後の代表者のため脱退できません。他の方を代表者に指定してから脱退してください",
+              code: "LAST_REPRESENTATIVE",
+            },
+            409,
+          );
+        }
       }
     }
 
     // Delete the membership (cascade cleans up consentRecords, accessPresets, categoryAccess)
     await db.delete(familyMembers).where(eq(familyMembers.id, membership.id));
 
-    // Notify the creator
+    // Notify about departure
     const memberName = await getCreatorName(userId);
-    await db.insert(notifications).values({
-      userId: creatorId,
-      type: "family_member_left",
-      title: "家族の脱退",
-      message: `${memberName}さんが家族から脱退しました`,
-      relatedCreatorId: creatorId,
-    });
+    const isCreatorDeceased =
+      lifecycleStatus === "death_reported" ||
+      lifecycleStatus === "consent_gathering" ||
+      lifecycleStatus === "opened";
+
+    if (isCreatorDeceased) {
+      // Creator is deceased — notify remaining family members instead
+      const remainingMembers = await getActiveFamilyMembers(creatorId);
+      const remainingUserIds = remainingMembers
+        .filter((m) => m.memberId !== userId)
+        .map((m) => m.memberId);
+
+      if (remainingUserIds.length > 0) {
+        await notifyFamilyMembers(
+          remainingUserIds,
+          "family_member_left",
+          "家族メンバーの脱退",
+          `${memberName}さんが家族から脱退しました`,
+          creatorId,
+        );
+      }
+    } else {
+      // Creator is alive — notify them directly
+      await db.insert(notifications).values({
+        userId: creatorId,
+        type: "family_member_left",
+        title: "家族の脱退",
+        message: `${memberName}さんが家族から脱退しました`,
+        relatedCreatorId: creatorId,
+      });
+    }
 
     // Audit log
     if (lifecycle) {
@@ -742,6 +802,115 @@ familyRoute.delete("/api/family/leave/:creatorId", async (c: Context) => {
     logger.error("Failed to self-remove from family", { error: message });
     return c.json(
       { error: "家族からの脱退に失敗しました", code: "LEAVE_FAILED" },
+      500,
+    );
+  }
+});
+
+/** GET /api/family/leave/:creatorId/check — Pre-check leave eligibility for contextual UI warnings. */
+familyRoute.get("/api/family/leave/:creatorId/check", async (c: Context) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const creatorId = c.req.param("creatorId");
+
+    // Find the membership
+    const membership = await db.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.creatorId, creatorId),
+        eq(familyMembers.memberId, userId),
+        eq(familyMembers.isActive, true),
+      ),
+    });
+
+    if (!membership) {
+      return c.json(
+        { error: "家族メンバーが見つかりません", code: "NOT_FOUND" },
+        404,
+      );
+    }
+
+    // Fetch lifecycle state
+    const lifecycle = await db.query.noteLifecycle.findFirst({
+      where: eq(noteLifecycle.creatorId, creatorId),
+      columns: { status: true, deletionStatus: true },
+    });
+
+    const lifecycleStatus = lifecycle?.status ?? "active";
+    const deletionStatus = lifecycle?.deletionStatus ?? null;
+
+    // Count members and representatives
+    const [totalCount] = await db
+      .select({ value: count() })
+      .from(familyMembers)
+      .where(
+        and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.isActive, true),
+        ),
+      );
+
+    const [repCount] = await db
+      .select({ value: count() })
+      .from(familyMembers)
+      .where(
+        and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.role, "representative"),
+          eq(familyMembers.isActive, true),
+        ),
+      );
+
+    const remainingMemberCount = totalCount?.value ?? 0;
+    const remainingRepresentativeCount = repCount?.value ?? 0;
+    const isLastMember = remainingMemberCount <= 1;
+    const isLastRepresentative =
+      membership.role === "representative" && remainingRepresentativeCount <= 1;
+
+    // Determine block reason
+    let canLeave = true;
+    let blockReason: string | null = null;
+
+    if (userId === creatorId) {
+      canLeave = false;
+      blockReason = "SELF_LEAVE";
+    } else if (lifecycleStatus === "consent_gathering") {
+      canLeave = false;
+      blockReason = "CONSENT_GATHERING_ACTIVE";
+    } else if (deletionStatus === "deletion_consent_gathering") {
+      canLeave = false;
+      blockReason = "DELETION_CONSENT_GATHERING_ACTIVE";
+    } else if (
+      lifecycleStatus === "death_reported" ||
+      lifecycleStatus === "opened"
+    ) {
+      if (isLastMember) {
+        canLeave = false;
+        blockReason = "LAST_MEMBER";
+      } else if (isLastRepresentative) {
+        canLeave = false;
+        blockReason = "LAST_REPRESENTATIVE";
+      }
+    }
+
+    return c.json({
+      canLeave,
+      blockReason,
+      isLastMember,
+      isLastRepresentative,
+      lifecycleStatus,
+      deletionStatus,
+      remainingMemberCount,
+      remainingRepresentativeCount,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to check leave eligibility", { error: message });
+    return c.json(
+      {
+        error: "脱退可否の確認に失敗しました",
+        code: "CHECK_FAILED",
+      },
       500,
     );
   }

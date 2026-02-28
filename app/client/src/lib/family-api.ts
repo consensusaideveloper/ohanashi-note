@@ -109,6 +109,24 @@ export async function leaveFamilyConnection(creatorId: string): Promise<void> {
   await fetchWithAuth(`/api/family/leave/${creatorId}`, { method: "DELETE" });
 }
 
+export interface LeaveCheckResult {
+  canLeave: boolean;
+  blockReason: string | null;
+  isLastMember: boolean;
+  isLastRepresentative: boolean;
+  lifecycleStatus: string;
+  deletionStatus: string | null;
+  remainingMemberCount: number;
+  remainingRepresentativeCount: number;
+}
+
+export async function checkLeaveEligibility(
+  creatorId: string,
+): Promise<LeaveCheckResult> {
+  const response = await fetchWithAuth(`/api/family/leave/${creatorId}/check`);
+  return response.json() as Promise<LeaveCheckResult>;
+}
+
 export async function listMyConnections(): Promise<FamilyConnection[]> {
   const response = await fetchWithAuth("/api/family/my-connections");
   return response.json() as Promise<FamilyConnection[]>;

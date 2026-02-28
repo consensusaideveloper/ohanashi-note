@@ -7,6 +7,7 @@ import {
   initiateConsent,
   cancelDeathReport,
   leaveFamilyConnection,
+  checkLeaveEligibility,
 } from "../lib/family-api";
 import { useToast } from "../hooks/useToast";
 import { RoleBadge } from "./RoleBadge";
@@ -18,10 +19,51 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
-import type { FamilyConnection } from "../lib/family-api";
+import type { FamilyConnection, LeaveCheckResult } from "../lib/family-api";
 
-/** Lifecycle states where self-removal is blocked. */
-const LEAVE_BLOCKED_STATES = ["consent_gathering"];
+/** Lifecycle states where the leave button is hidden entirely. */
+const LEAVE_HIDDEN_STATES = ["consent_gathering"];
+
+/** Minimum member count that triggers the "few members" warning. */
+const FEW_MEMBERS_THRESHOLD = 3;
+
+/** Map server block reasons to user-facing error messages. */
+function getLeaveBlockedMessage(blockReason: string | null): string {
+  switch (blockReason) {
+    case "CONSENT_GATHERING_ACTIVE":
+      return UI_MESSAGES.familyError.leaveBlockedByLifecycle;
+    case "DELETION_CONSENT_GATHERING_ACTIVE":
+      return UI_MESSAGES.familyError.leaveBlockedByDeletionConsent;
+    case "LAST_MEMBER":
+      return UI_MESSAGES.familyError.leaveBlockedLastMember;
+    case "LAST_REPRESENTATIVE":
+      return UI_MESSAGES.familyError.leaveBlockedLastRepresentative;
+    default:
+      return UI_MESSAGES.familyError.leaveBlockedByLifecycle;
+  }
+}
+
+/** Build contextual leave confirmation message based on pre-check result. */
+function buildLeaveConfirmMessage(
+  check: LeaveCheckResult | null,
+  isOpened: boolean,
+): string {
+  const lines: string[] = [];
+
+  if (isOpened) {
+    lines.push(UI_MESSAGES.family.leaveConfirmMessageOpened);
+  } else if (check?.lifecycleStatus === "death_reported") {
+    lines.push(UI_MESSAGES.family.leaveConfirmMessageDeathReported);
+  } else {
+    lines.push(UI_MESSAGES.family.leaveConfirmMessage);
+  }
+
+  if (check && check.remainingMemberCount <= FEW_MEMBERS_THRESHOLD) {
+    lines.push(UI_MESSAGES.family.leaveWarningFewMembers);
+  }
+
+  return lines.join("\n\n");
+}
 
 interface CreatorDetailViewProps {
   connection: FamilyConnection;
@@ -52,6 +94,9 @@ export function CreatorDetailView({
   const [showInitiateConsentConfirm, setShowInitiateConsentConfirm] =
     useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaveCheckResult, setLeaveCheckResult] =
+    useState<LeaveCheckResult | null>(null);
+  const [isCheckingLeave, setIsCheckingLeave] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
@@ -172,8 +217,27 @@ export function CreatorDetailView({
 
   // --- Leave handlers ---
   const handleOpenLeave = useCallback((): void => {
-    setShowLeaveConfirm(true);
-  }, []);
+    setIsCheckingLeave(true);
+    void checkLeaveEligibility(connection.creatorId)
+      .then((result) => {
+        if (!result.canLeave) {
+          showToast(getLeaveBlockedMessage(result.blockReason), "error");
+        } else {
+          setLeaveCheckResult(result);
+          setShowLeaveConfirm(true);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to check leave eligibility:", {
+          error: err,
+          creatorId: connection.creatorId,
+        });
+        showToast(UI_MESSAGES.familyError.leaveFailed, "error");
+      })
+      .finally(() => {
+        setIsCheckingLeave(false);
+      });
+  }, [connection.creatorId, showToast]);
 
   const handleLeaveConfirm = useCallback((): void => {
     setShowLeaveConfirm(false);
@@ -204,7 +268,7 @@ export function CreatorDetailView({
   }, []);
 
   const isOpened = lifecycleStatus === "opened";
-  const isLeaveBlocked = LEAVE_BLOCKED_STATES.includes(lifecycleStatus);
+  const isLeaveHidden = LEAVE_HIDDEN_STATES.includes(lifecycleStatus);
 
   return (
     <div className="flex-1 flex flex-col w-full overflow-hidden">
@@ -364,15 +428,17 @@ export function CreatorDetailView({
               )}
 
               {/* Leave family button (hidden during consent_gathering) */}
-              {!isLeaveBlocked && (
+              {!isLeaveHidden && (
                 <section className="pt-4 border-t border-border">
                   <button
                     type="button"
                     className="w-full min-h-11 rounded-full border border-error text-error bg-bg-surface text-lg transition-colors active:bg-error-light disabled:opacity-50"
                     onClick={handleOpenLeave}
-                    disabled={isProcessing}
+                    disabled={isProcessing || isCheckingLeave}
                   >
-                    {UI_MESSAGES.family.leaveButton}
+                    {isCheckingLeave
+                      ? "確認しています..."
+                      : UI_MESSAGES.family.leaveButton}
                   </button>
                 </section>
               )}
@@ -416,11 +482,7 @@ export function CreatorDetailView({
       <ConfirmDialog
         isOpen={showLeaveConfirm}
         title={UI_MESSAGES.family.leaveConfirmTitle}
-        message={
-          isOpened
-            ? UI_MESSAGES.family.leaveConfirmMessageOpened
-            : UI_MESSAGES.family.leaveConfirmMessage
-        }
+        message={buildLeaveConfirmMessage(leaveCheckResult, isOpened)}
         confirmLabel="脱退する"
         cancelLabel="もどる"
         onConfirm={handleLeaveConfirm}

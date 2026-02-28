@@ -580,6 +580,10 @@ export const UI_MESSAGES = {
       "この方の家族から脱退してもよろしいですか？\n脱退後はノートの閲覧ができなくなります。",
     leaveConfirmMessageOpened:
       "この方の家族から脱退してもよろしいですか？\n脱退すると、ノートへのアクセス権が取り消されます。",
+    leaveConfirmMessageDeathReported:
+      "逝去報告後に脱退すると、ノートの開封手続きに参加できなくなります。\n本当に脱退してもよろしいですか？",
+    leaveWarningFewMembers:
+      "残りの家族メンバーが少なくなっています。脱退するとノートの管理が難しくなる場合があります。",
     memberLeft: "家族から脱退しました",
   },
   todo: {
@@ -703,6 +707,11 @@ export const UI_MESSAGES = {
       "現在の状態では削除できません。しばらくしてからもう一度お試しください。",
     leaveFailed: "脱退に失敗しました。",
     leaveBlockedByLifecycle: "現在の状態では脱退できません。",
+    leaveBlockedByDeletionConsent: "データ削除の同意収集中は脱退できません。",
+    leaveBlockedLastMember:
+      "最後の家族メンバーのため脱退できません。ノートの管理者がいなくなってしまいます。",
+    leaveBlockedLastRepresentative:
+      "最後の代表者のため脱退できません。他の方を代表者に指定してから脱退してください。",
   },
   audio: {
     downloadButton: "録音をダウンロード",
