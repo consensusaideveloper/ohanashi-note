@@ -44,3 +44,26 @@ export async function deleteUserAudioFiles(userId: string): Promise<void> {
     deleted: deletedCount,
   });
 }
+
+/**
+ * Delete a single R2 audio object by its storage key.
+ * Best-effort: logs errors but does not throw.
+ */
+export async function deleteConversationAudioFile(
+  audioStorageKey: string,
+): Promise<void> {
+  if (r2 === null) {
+    return;
+  }
+
+  try {
+    await r2.deleteObject(audioStorageKey);
+    logger.info("R2 audio file deleted", { key: audioStorageKey });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to delete R2 audio file", {
+      key: audioStorageKey,
+      error: message,
+    });
+  }
+}

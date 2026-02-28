@@ -10,6 +10,7 @@ import {
   getCreatorLifecycleStatus,
   isDeletionBlocked,
 } from "../lib/lifecycle-helpers.js";
+import { deleteConversationAudioFile } from "../lib/r2-cleanup.js";
 
 import type { Context } from "hono";
 
@@ -378,19 +379,33 @@ conversationsRoute.delete("/api/conversations/:id", async (c: Context) => {
       );
     }
 
-    const result = await db
+    // Fetch conversation to verify ownership and get audioStorageKey
+    const existing = await db.query.conversations.findFirst({
+      where: and(
+        eq(conversations.id, conversationId),
+        eq(conversations.userId, userId),
+      ),
+      columns: { id: true, audioStorageKey: true },
+    });
+
+    if (!existing) {
+      return c.json({ error: "会話が見つかりません", code: "NOT_FOUND" }, 404);
+    }
+
+    // Delete R2 audio file BEFORE DB deletion (best-effort)
+    if (existing.audioStorageKey !== null) {
+      await deleteConversationAudioFile(existing.audioStorageKey);
+    }
+
+    // Delete the conversation from DB
+    await db
       .delete(conversations)
       .where(
         and(
           eq(conversations.id, conversationId),
           eq(conversations.userId, userId),
         ),
-      )
-      .returning({ id: conversations.id });
-
-    if (result.length === 0) {
-      return c.json({ error: "会話が見つかりません", code: "NOT_FOUND" }, 404);
-    }
+      );
 
     return c.json({ success: true });
   } catch (error) {
