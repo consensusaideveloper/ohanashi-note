@@ -20,8 +20,6 @@ interface UseAudioInputReturn {
   startCapture: () => Promise<void>;
   /** Stop capturing and release all resources. */
   stopCapture: () => void;
-  /** Stop capturing and return the recorded audio blob (if MediaRecorder was available). */
-  stopCaptureWithRecording: () => Promise<Blob | null>;
   /** Whether microphone capture is currently active. */
   isCapturing: boolean;
   /** RMS audio level in the range [0.0, 1.0] for visualisation. */
@@ -42,24 +40,16 @@ function calculateRms(samples: Float32Array): number {
 }
 
 /**
- * Find a supported MIME type for MediaRecorder.
- * Returns empty string if none is supported (MediaRecorder will use default).
- */
-function getSupportedMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "";
-  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-  return types.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
-}
-
-/**
  * Microphone capture hook.
  *
  * Uses the Web Audio API to capture audio from the user's microphone,
  * converts it to base64-encoded PCM16, and delivers chunks through the
  * `onAudioChunk` callback. Designed for use with the OpenAI Realtime API.
  *
- * Additionally, a MediaRecorder runs in parallel on the same MediaStream
- * to produce a compressed audio recording (webm/opus) for persistence.
+ * MediaRecorder is intentionally NOT used during capture. Running a
+ * parallel MediaRecorder (webm/opus encoding every 1s) causes CPU
+ * contention with the ScriptProcessorNode on mobile, resulting in
+ * choppy audio playback. Audio recording is handled server-side.
  *
  * Uses a dedicated AudioContext for input, separate from the output
  * context. This follows the OpenAI official demo pattern and avoids
@@ -87,14 +77,7 @@ export function useAudioInput({
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
   const capturingRef = useRef(false);
 
-  // MediaRecorder for parallel audio recording
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingChunksRef = useRef<Blob[]>([]);
-  const recordingResolverRef = useRef<((blob: Blob | null) => void) | null>(
-    null,
-  );
-
-  /** Release capture resources (nodes, stream). Does NOT close the shared AudioContext. */
+  /** Release capture resources (nodes, stream). Does NOT close the AudioContext. */
   const releaseResources = useCallback((): void => {
     const processorNode = processorNodeRef.current;
     if (processorNode !== null) {
@@ -189,90 +172,17 @@ export function useAudioInput({
     sourceNode.connect(processorNode);
     processorNode.connect(audioContext.destination);
 
-    // Start parallel MediaRecorder for audio recording (graceful degradation)
-    if (typeof MediaRecorder !== "undefined") {
-      try {
-        const mimeType = getSupportedMimeType();
-        const recorderOptions: MediaRecorderOptions = {};
-        if (mimeType) {
-          recorderOptions.mimeType = mimeType;
-        }
-        const recorder = new MediaRecorder(stream, recorderOptions);
-        recordingChunksRef.current = [];
-
-        recorder.ondataavailable = (e: BlobEvent): void => {
-          if (e.data.size > 0) {
-            recordingChunksRef.current.push(e.data);
-          }
-        };
-
-        recorder.onstop = (): void => {
-          const chunks = recordingChunksRef.current;
-          recordingChunksRef.current = [];
-          const blob =
-            chunks.length > 0
-              ? new Blob(chunks, { type: recorder.mimeType })
-              : null;
-          const resolver = recordingResolverRef.current;
-          recordingResolverRef.current = null;
-          if (resolver) {
-            resolver(blob);
-          }
-        };
-
-        recorder.start(1000); // collect chunks every second
-        mediaRecorderRef.current = recorder;
-      } catch {
-        // MediaRecorder creation failed — continue without recording
-        mediaRecorderRef.current = null;
-      }
-    }
-
     capturingRef.current = true;
     setIsCapturing(true);
   }, [releaseResources]);
 
   const stopCapture = useCallback((): void => {
-    // Stop MediaRecorder if active (fire-and-forget)
-    const recorder = mediaRecorderRef.current;
-    if (recorder !== null && recorder.state !== "inactive") {
-      recorder.stop();
-    }
-    mediaRecorderRef.current = null;
-    recordingChunksRef.current = [];
-    recordingResolverRef.current = null;
-
     releaseResources();
-  }, [releaseResources]);
-
-  const stopCaptureWithRecording = useCallback((): Promise<Blob | null> => {
-    const recorder = mediaRecorderRef.current;
-
-    if (recorder === null || recorder.state === "inactive") {
-      // No active MediaRecorder — just clean up and return null
-      mediaRecorderRef.current = null;
-      releaseResources();
-      return Promise.resolve(null);
-    }
-
-    return new Promise<Blob | null>((resolve) => {
-      recordingResolverRef.current = (blob: Blob | null) => {
-        mediaRecorderRef.current = null;
-        releaseResources();
-        resolve(blob);
-      };
-      recorder.stop();
-    });
   }, [releaseResources]);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      const recorder = mediaRecorderRef.current;
-      if (recorder !== null && recorder.state !== "inactive") {
-        recorder.stop();
-      }
-      mediaRecorderRef.current = null;
       releaseResources();
     };
   }, [releaseResources]);
@@ -280,7 +190,6 @@ export function useAudioInput({
   return {
     startCapture,
     stopCapture,
-    stopCaptureWithRecording,
     isCapturing,
     audioLevel,
   };

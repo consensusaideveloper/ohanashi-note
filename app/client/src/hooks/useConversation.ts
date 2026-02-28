@@ -25,14 +25,13 @@ import { listFamilyMembers, listAccessPresets } from "../lib/family-api";
 import {
   saveConversation,
   updateConversation,
-  saveAudioRecording,
   listConversations,
   getConversation,
   getUserProfile,
   saveUserProfile,
 } from "../lib/storage";
 import { isNoiseTranscript } from "../lib/audio";
-import { computeContentHash, computeBlobHash } from "../lib/integrity";
+import { computeContentHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import { requestSummarize, requestEnhancedSummarize } from "../lib/api";
 import {
@@ -918,8 +917,8 @@ export function useConversation(): UseConversationReturn {
     const category = categoryRef.current;
     const charId = characterIdRef.current;
 
-    // Stop audio capture and get the recording blob asynchronously
-    const audioBlobPromise = audioInput.stopCaptureWithRecording();
+    // Stop audio capture (no parallel MediaRecorder — see useAudioInput)
+    audioInput.stopCapture();
 
     if (convId !== null && currentTranscript.length > 0) {
       const firstEntry = currentTranscript[0];
@@ -945,32 +944,6 @@ export function useConversation(): UseConversationReturn {
       );
 
       saveConversation(record)
-        .then(() => {
-          // After conversation is saved, start audio processing
-          return audioBlobPromise.then((audioBlob) => {
-            if (audioBlob !== null && audioBlob.size > 0) {
-              return computeBlobHash(audioBlob).then((audioHash) =>
-                saveAudioRecording(convId, audioBlob, audioBlob.type).then(
-                  (result) => {
-                    // Use atomic update to avoid overwriting summary
-                    const audioUpdate: Partial<ConversationRecord> = {
-                      audioAvailable: true,
-                      audioHash,
-                    };
-                    // Include storage key if R2 upload succeeded
-                    if (result !== null) {
-                      audioUpdate.audioStorageKey = result.storageKey;
-                      audioUpdate.audioMimeType = audioBlob.type;
-                    }
-                    return updateConversation(convId, audioUpdate);
-                  },
-                ),
-              );
-            } else {
-              return Promise.resolve();
-            }
-          });
-        })
         .then(() => {
           // Request enhanced summarization (re-transcription + summarize on server).
           // Falls back to client-side summarize if enhanced endpoint fails.

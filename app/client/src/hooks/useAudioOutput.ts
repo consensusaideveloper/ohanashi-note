@@ -89,6 +89,11 @@ export function useAudioOutput(): UseAudioOutputReturn {
 
       source.onended = (): void => {
         activeSourcesRef.current.delete(source);
+        // When all sources have finished, reset streaming state so the
+        // next AI response gets pre-buffered (prevents jitter gaps).
+        if (activeSourcesRef.current.size === 0) {
+          isStreamingRef.current = false;
+        }
         updatePlayingState();
       };
     },
