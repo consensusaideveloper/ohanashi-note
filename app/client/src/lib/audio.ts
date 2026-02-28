@@ -6,6 +6,8 @@
  * These helpers bridge the two formats and handle base64 encoding.
  */
 
+import { NOISE_TRANSCRIPT_PATTERNS, NOISE_TRANSCRIPT_REGEX } from "./constants";
+
 /**
  * Convert Float32 audio samples (Web Audio API range [-1, 1]) to
  * 16-bit signed integer PCM (for sending to OpenAI).
@@ -57,4 +59,15 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+/**
+ * Check if a transcript matches known noise/hallucination patterns
+ * commonly produced by Whisper when processing silence or ambient noise.
+ */
+export function isNoiseTranscript(text: string): boolean {
+  if (NOISE_TRANSCRIPT_REGEX.test(text)) return true;
+  return NOISE_TRANSCRIPT_PATTERNS.some(
+    (pattern) => text === pattern || text.includes(pattern),
+  );
 }

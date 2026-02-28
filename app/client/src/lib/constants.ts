@@ -23,13 +23,43 @@ export const AUDIO_BUFFER_SIZE = 4096;
 
 // --- Echo suppression settings ---
 /** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
-export const POST_SPEECH_COOLDOWN_MS = 1500;
+export const POST_SPEECH_COOLDOWN_MS = 2000;
 /** Minimum character count for a user transcript to be considered valid input. */
-export const MIN_TRANSCRIPT_LENGTH = 2;
+export const MIN_TRANSCRIPT_LENGTH = 3;
 /** RMS threshold for barge-in detection during AI speech. */
 export const BARGE_IN_RMS_THRESHOLD = 0.15;
 /** Number of consecutive audio chunks above RMS threshold to confirm barge-in. */
 export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
+
+// --- Client-side noise gate settings ---
+/** Minimum RMS level to send audio to OpenAI. Chunks below this are silent/noise. */
+export const INPUT_RMS_THRESHOLD = 0.015;
+/** Number of consecutive chunks above INPUT_RMS_THRESHOLD to transition to "speech active". */
+export const SPEECH_START_CHUNKS = 3;
+/** Number of consecutive chunks below INPUT_RMS_THRESHOLD to transition out of "speech active". */
+export const SPEECH_END_CHUNKS = 8;
+
+// --- Noise transcript filter ---
+/**
+ * Transcript patterns commonly produced by noise/silence misrecognition (Whisper hallucinations).
+ * These are filtered out even if they meet the minimum length requirement.
+ */
+export const NOISE_TRANSCRIPT_PATTERNS: readonly string[] = [
+  "ご視聴ありがとうございました",
+  "ご視聴ありがとうございます",
+  "チャンネル登録お願いします",
+  "チャンネル登録よろしくお願いします",
+  "字幕は自動生成されています",
+  "おやすみなさい",
+  "お疲れ様でした",
+  "ありがとうございました",
+];
+
+/**
+ * Regex pattern to detect transcripts that consist entirely of punctuation,
+ * whitespace, or common filler sounds. These are noise artifacts.
+ */
+export const NOISE_TRANSCRIPT_REGEX = /^[\s。、！？…・〜ー～]+$/;
 
 // OpenAI Realtime API session config (voice is set dynamically per character)
 export const SESSION_CONFIG = {
@@ -39,7 +69,7 @@ export const SESSION_CONFIG = {
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
-    threshold: 0.7, // raised from 0.5 for mobile noise rejection
+    threshold: 0.8, // raised from 0.7; combined with client-side noise gate
     prefix_padding_ms: 300,
     silence_duration_ms: 1200, // raised from 1000 for natural pauses
   },
@@ -1000,3 +1030,25 @@ export const TRANSCRIPT_PREVIEW_MAX_LENGTH = 80;
 // --- Transcript disclaimer ---
 export const TRANSCRIPT_DISCLAIMER =
   "音声から自動で文字に起こしたものです。実際の会話と異なる場合がありますので、正確な内容は録音データでご確認ください。" as const;
+
+// --- Terms consent screen messages (Japanese) ---
+export const TERMS_CONSENT_MESSAGES = {
+  heading: "ご利用にあたって",
+  updateHeading: "利用規約が更新されました",
+  updateDescription:
+    "利用規約またはプライバシーポリシーが更新されました。内容をご確認のうえ、再度同意をお願いいたします。",
+  summaryTitle: "本サービスについて",
+  viewTermsButton: "利用規約を読む",
+  viewPrivacyButton: "プライバシーポリシーを読む",
+  agreeCheckbox: "利用規約とプライバシーポリシーに同意します",
+  submitButton: "同意して始める",
+  submittingButton: "確認しています...",
+  termsTitle: "利用規約",
+  privacyTitle: "プライバシーポリシー",
+  consentError: "同意の記録に失敗しました。もう一度お試しください。",
+  backButton: "戻る",
+  printButton: "印刷する",
+  settingsSectionTitle: "利用規約・プライバシーポリシー",
+  settingsViewTerms: "利用規約を見る",
+  settingsViewPrivacy: "プライバシーポリシーを見る",
+} as const;

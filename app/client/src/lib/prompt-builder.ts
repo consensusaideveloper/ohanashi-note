@@ -223,6 +223,9 @@ const TOPIC_SCOPE_GUIDED = `
 全カテゴリが対象。人生の振り返りや価値観は柔軟に受け止める。無関係な話題が長く続いたら【話題の守り方】に従って戻す。
 法的テーマでは「具体的な手続きは専門家にご相談ください」と案内する。`;
 
+/** Target number of questions to meaningfully cover per 20-minute session. */
+const TARGET_QUESTIONS_PER_SESSION = 5;
+
 // Language guardrail appended to the END of all prompts for maximum recency effect
 const LANGUAGE_GUARDRAIL = `
 【言語ルール】
@@ -290,6 +293,62 @@ export function buildSpeakingStylePrompt(
   }
 
   return parts.join("\n");
+}
+
+/**
+ * Build progress awareness prompt section for focused mode.
+ * Tells the AI how many questions remain and guides pacing.
+ */
+function buildProgressAwareness(
+  category: QuestionCategory,
+  coveredIds?: ReadonlySet<string>,
+): string {
+  const questions = getQuestionsByCategory(category);
+  const totalCount = questions.length;
+  const coveredCount =
+    coveredIds !== undefined
+      ? questions.filter((q) => coveredIds.has(q.id)).length
+      : 0;
+  const remainingCount = totalCount - coveredCount;
+
+  if (remainingCount === 0) {
+    return `\n\n【進行の目安】
+このカテゴリの質問はすべて回答済みです。更新したい内容がないか確認しつつ、ゆったりとした会話を心がけてください。`;
+  }
+
+  const targetForSession = Math.min(
+    remainingCount,
+    TARGET_QUESTIONS_PER_SESSION,
+  );
+
+  return `\n\n【進行の目安】
+- このカテゴリの未回答は${String(remainingCount)}問です（全${String(totalCount)}問中）
+- 今日のセッションでは${String(targetForSession)}問くらいを目安に、一つひとつ丁寧に聞いてください
+- 1つの質問に長くかけすぎていると感じたら、【回答の深さと進行のバランス】の基準で判断してください
+- すべてを今日中に聞く必要はありません。無理なく自然に進めてください`;
+}
+
+/**
+ * Build progress awareness prompt section for guided mode.
+ * Shows overall progress across all categories.
+ */
+function buildGuidedProgressAwareness(coveredIds: ReadonlySet<string>): string {
+  const totalQuestions = QUESTION_CATEGORIES.reduce(
+    (sum, cat) => sum + getQuestionsByCategory(cat.id).length,
+    0,
+  );
+  const coveredCount = coveredIds.size;
+  const remainingCount = totalQuestions - coveredCount;
+  const completionPercent = Math.round((coveredCount / totalQuestions) * 100);
+  const targetForSession = Math.min(
+    remainingCount,
+    TARGET_QUESTIONS_PER_SESSION,
+  );
+
+  return `\n\n【全体の進捗】
+- 全${String(totalQuestions)}問中${String(coveredCount)}問が回答済み（${String(completionPercent)}%完了）
+- 今日のセッションでは${String(targetForSession)}問くらいを目安にしてください
+- 進み具合が少ないカテゴリを優先しつつ、ユーザーの関心に合わせて柔軟に進めてください`;
 }
 
 /**
@@ -407,6 +466,8 @@ ${pastContext.crossCategorySummaries.map((s) => `- ${s.category}：${s.summary}`
   prompt += `\n\n以下の話題を、自然な会話の中で聞いてください（すべて聞く必要はありません）：
 ${questionList}`;
 
+  prompt += buildProgressAwareness(category, coveredIds);
+
   if (SENSITIVE_CATEGORIES.has(category)) {
     prompt += `\n${SECURITY_REMINDER}`;
   }
@@ -468,7 +529,14 @@ export function buildGuidedSessionPrompt(
 例：「こんにちは！今日はいくつかお話しできることがありますよ。たとえば、子供の頃の楽しかった思い出のこと、大切な人への想いのこと、それからお家のことや暮らしのこと…どれか気になるものはありますか？もちろん、他のお話でも大丈夫ですよ」
 ユーザーが選んだ話題に沿って会話を進めてください。
 「どれでもいい」「おまかせ」と言われた場合は、最も話しやすそうなものを1つ選んで始めてください。
-一つのテーマに長くこだわりすぎず、区切りの良いところで「他のテーマも少し聞いてもいいですか？」と提案してください。`;
+
+【テーマの切り替え判断】
+1つのテーマで3〜5問ほど聞いたら、区切りの良いところで他のテーマへの移行を提案してください。
+ただし以下の場合は移行しない：
+- ユーザーがまだ話したそうにしている
+- 感情的な話の途中
+- ユーザーが「もっと聞いて」と言った場合
+移行の提案は押し付けず、「他のテーマも少し聞いてもいいですか？」とやさしく聞いてください。`;
 
   // Past conversation context
   if (guidedContext.recentSummaries.length > 0) {
@@ -484,6 +552,8 @@ ${guidedContext.recentSummaries.map((s) => `- ${s.category}：${s.summary}`).joi
 以下はカテゴリごとの質問リストです。未回答の項目のIDとタイトルを表示しています。
 これらを参考に、自然な会話の中で情報を聞き出してください（すべて聞く必要はありません）。
 ${compactQuestions}`;
+
+  prompt += buildGuidedProgressAwareness(coveredIds);
 
   // Security reminder (always included — any topic may come up)
   prompt += `\n
