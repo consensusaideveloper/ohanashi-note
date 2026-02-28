@@ -11,7 +11,7 @@ export function ActiveConversationBanner({
   onReturn,
 }: ActiveConversationBannerProps): ReactNode {
   return (
-    <div className="fixed top-0 left-0 right-0 z-50">
+    <div className="flex-none">
       <button
         type="button"
         className="w-full min-h-11 bg-accent-primary text-text-on-accent flex items-center justify-center gap-2 px-4 py-3 shadow-md active:brightness-90 transition-all"

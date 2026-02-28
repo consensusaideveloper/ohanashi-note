@@ -15,6 +15,7 @@ import { DeathReportDialog } from "./DeathReportDialog";
 import { ConsentScreen } from "./ConsentScreen";
 import { ConsentProgressTracker } from "./ConsentProgressTracker";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CategoryAccessManager } from "./CategoryAccessManager";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
@@ -329,6 +330,10 @@ export function CreatorDetailView({
                     {UI_MESSAGES.todo.pageTitle}
                   </button>
                 </section>
+              )}
+
+              {isOpened && isRepresentative && (
+                <CategoryAccessManager creatorId={connection.creatorId} />
               )}
 
               {/* Leave family button (hidden during consent_gathering) */}

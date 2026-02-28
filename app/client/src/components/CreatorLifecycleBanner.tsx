@@ -27,7 +27,7 @@ export function CreatorLifecycleBanner({
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 bg-warning-light border-b border-warning px-4 py-3">
+    <div className="flex-none bg-warning-light border-b border-warning px-4 py-3">
       <p className="text-lg text-warning font-medium text-center leading-snug">
         {message}
       </p>

@@ -844,7 +844,6 @@ function AppContent(): ReactNode {
     activeCharacterName !== null;
 
   const showLifecycleBanner = myLifecycleStatus !== "active";
-  const hasTopBanner = showConversationBanner || showLifecycleBanner;
 
   return (
     <div className="min-h-dvh flex flex-col bg-bg-primary">
@@ -862,11 +861,7 @@ function AppContent(): ReactNode {
       )}
 
       {/* Main content area */}
-      <div
-        className={`flex-1 flex flex-col pb-[72px] ${hasTopBanner ? "pt-12" : ""}`}
-      >
-        {renderScreen()}
-      </div>
+      <div className="flex-1 flex flex-col pb-[72px]">{renderScreen()}</div>
 
       {/* Navigation guard dialog during summarization */}
       <ConfirmDialog
