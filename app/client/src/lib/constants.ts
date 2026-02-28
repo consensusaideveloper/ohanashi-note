@@ -33,9 +33,9 @@ export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
 
 // --- Client-side noise gate settings ---
 /** Minimum RMS level to send audio to OpenAI. Chunks below this are silent/noise. */
-export const INPUT_RMS_THRESHOLD = 0.015;
+export const INPUT_RMS_THRESHOLD = 0.005;
 /** Number of consecutive chunks above INPUT_RMS_THRESHOLD to transition to "speech active". */
-export const SPEECH_START_CHUNKS = 3;
+export const SPEECH_START_CHUNKS = 2;
 /** Number of consecutive chunks below INPUT_RMS_THRESHOLD to transition out of "speech active". */
 export const SPEECH_END_CHUNKS = 8;
 
@@ -69,7 +69,7 @@ export const SESSION_CONFIG = {
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
-    threshold: 0.8, // raised from 0.7; combined with client-side noise gate
+    threshold: 0.6, // lowered for mobile compatibility; Whisper filter handles noise
     prefix_padding_ms: 300,
     silence_duration_ms: 1200, // raised from 1000 for natural pauses
   },
