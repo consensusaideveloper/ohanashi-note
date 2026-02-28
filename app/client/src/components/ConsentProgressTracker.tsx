@@ -212,9 +212,7 @@ export function ConsentProgressTracker({
                   consented={record.consented}
                   autoResolved={record.autoResolved}
                 />
-                <p className="text-lg text-text-primary truncate">
-                  {record.memberName}
-                </p>
+                <p className="text-lg text-text-primary">{record.memberName}</p>
               </div>
               <ConsentLabel
                 consented={record.consented}

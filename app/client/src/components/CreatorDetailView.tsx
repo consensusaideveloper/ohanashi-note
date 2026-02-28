@@ -296,7 +296,7 @@ export function CreatorDetailView({
               />
             </svg>
           </button>
-          <h1 className="text-2xl font-bold text-text-primary flex-1 truncate">
+          <h1 className="text-2xl font-bold text-text-primary flex-1">
             {connection.creatorName}さん
           </h1>
           <RoleBadge role={connection.role} />

@@ -465,7 +465,7 @@ export function ConversationHistory({
                         </span>
                       )}
                     </div>
-                    <p className="text-lg text-text-secondary mt-1 truncate">
+                    <p className="text-lg text-text-secondary mt-1 line-clamp-2">
                       {getCardSummary(record)}
                     </p>
                     {/* Category tags (tappable to filter) */}

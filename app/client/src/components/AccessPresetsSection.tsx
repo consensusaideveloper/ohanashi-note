@@ -179,7 +179,7 @@ export function AccessPresetsSection({
                   aria-expanded={isSelected}
                 >
                   <div className="space-y-0.5 min-w-0">
-                    <p className="text-xl font-medium text-text-primary truncate">
+                    <p className="text-xl font-medium text-text-primary">
                       {member.name}
                     </p>
                     <p className="text-base text-text-secondary">

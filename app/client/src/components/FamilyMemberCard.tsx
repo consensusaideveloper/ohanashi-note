@@ -100,9 +100,7 @@ export function FamilyMemberCard({
     <div className="rounded-card border border-border-light bg-bg-surface p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
-          <p className="text-xl font-medium text-text-primary truncate">
-            {member.name}
-          </p>
+          <p className="text-xl font-medium text-text-primary">{member.name}</p>
           <div className="flex items-center gap-2">
             <p className="text-lg text-text-secondary">
               {member.relationshipLabel}

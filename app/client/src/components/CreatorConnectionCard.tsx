@@ -39,7 +39,7 @@ export function CreatorConnectionCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
-          <p className="text-xl font-medium text-text-primary truncate">
+          <p className="text-xl font-medium text-text-primary">
             {connection.creatorName}さん
           </p>
           <p className="text-lg text-text-secondary">
