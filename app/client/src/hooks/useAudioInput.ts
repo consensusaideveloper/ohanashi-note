@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AUDIO_SAMPLE_RATE, AUDIO_BUFFER_SIZE } from "../lib/constants";
-import { float32ToPcm16, arrayBufferToBase64 } from "../lib/audio";
+import { AUDIO_BUFFER_SIZE, AUDIO_SAMPLE_RATE } from "../lib/constants";
+import {
+  float32ToPcm16,
+  arrayBufferToBase64,
+  getSharedAudioContext,
+} from "../lib/audio";
 
 /** Callback invoked with a base64-encoded PCM16 audio chunk and its RMS level. */
 type AudioChunkCallback = (base64: string, rmsLevel: number) => void;
@@ -23,16 +27,6 @@ interface UseAudioInputReturn {
   /** RMS audio level in the range [0.0, 1.0] for visualisation. */
   audioLevel: number;
 }
-
-// Safari compatibility: webkitAudioContext fallback
-// The `as unknown` cast is necessary because `window` does not have an index
-// signature that satisfies `Record<string, unknown>` directly.
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
-const AudioContextClass: typeof AudioContext =
-  window.AudioContext ||
-  ((window as unknown as Record<string, unknown>)
-    .webkitAudioContext as typeof AudioContext);
-/* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
 /**
  * Calculate the RMS (root-mean-square) level of an audio buffer.
@@ -67,6 +61,10 @@ function getSupportedMimeType(): string {
  * Additionally, a MediaRecorder runs in parallel on the same MediaStream
  * to produce a compressed audio recording (webm/opus) for persistence.
  *
+ * Uses a shared AudioContext (from lib/audio.ts) to avoid resource
+ * contention on mobile browsers where multiple AudioContexts cause
+ * choppy playback and suspended states.
+ *
  * iOS Safari notes:
  * - AudioContext must be created / resumed inside a user gesture handler.
  * - `startCapture()` handles this requirement.
@@ -83,10 +81,10 @@ export function useAudioInput({
   const onAudioChunkRef = useRef<AudioChunkCallback>(onAudioChunk);
   onAudioChunkRef.current = onAudioChunk;
 
-  const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const capturingRef = useRef(false);
 
   // MediaRecorder for parallel audio recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -95,7 +93,7 @@ export function useAudioInput({
     null,
   );
 
-  /** Release all audio resources (except MediaRecorder which is handled separately). */
+  /** Release capture resources (nodes, stream). Does NOT close the shared AudioContext. */
   const releaseResources = useCallback((): void => {
     const processorNode = processorNodeRef.current;
     if (processorNode !== null) {
@@ -118,19 +116,14 @@ export function useAudioInput({
       mediaStreamRef.current = null;
     }
 
-    const audioContext = audioContextRef.current;
-    if (audioContext !== null) {
-      void audioContext.close();
-      audioContextRef.current = null;
-    }
-
+    capturingRef.current = false;
     setIsCapturing(false);
     setAudioLevel(0);
   }, []);
 
   const startCapture = useCallback(async (): Promise<void> => {
     // Prevent double-start
-    if (audioContextRef.current !== null) {
+    if (capturingRef.current) {
       return;
     }
 
@@ -144,16 +137,11 @@ export function useAudioInput({
     });
     mediaStreamRef.current = stream;
 
-    // Create AudioContext inside user gesture handler (required for iOS Safari)
-    const audioContext = new AudioContextClass({
-      sampleRate: AUDIO_SAMPLE_RATE,
-    });
-
-    // iOS Safari: AudioContext may start in "suspended" state
+    // Use the shared AudioContext (created/resumed inside user gesture handler for iOS)
+    const audioContext = getSharedAudioContext();
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
-    audioContextRef.current = audioContext;
 
     // Create source from microphone stream
     const sourceNode = audioContext.createMediaStreamSource(stream);
@@ -170,6 +158,10 @@ export function useAudioInput({
 
     processorNode.onaudioprocess = (event: AudioProcessingEvent): void => {
       const inputData = event.inputBuffer.getChannelData(0);
+
+      // Zero the output buffer to prevent mic audio from playing through speakers.
+      // Without this, some browsers pass input through to output (causing feedback).
+      event.outputBuffer.getChannelData(0).fill(0);
 
       // Calculate RMS level for visualisation
       const rms = calculateRms(inputData);
@@ -225,6 +217,7 @@ export function useAudioInput({
       }
     }
 
+    capturingRef.current = true;
     setIsCapturing(true);
   }, [releaseResources]);
 

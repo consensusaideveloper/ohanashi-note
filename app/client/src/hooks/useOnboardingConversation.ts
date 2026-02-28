@@ -15,9 +15,6 @@ import {
   SPEAKING_SPEED_LABELS,
   SILENCE_DURATION_LABELS,
   CONFIRMATION_LEVEL_LABELS,
-  INPUT_RMS_THRESHOLD,
-  SPEECH_START_CHUNKS,
-  SPEECH_END_CHUNKS,
 } from "../lib/constants";
 import { isNoiseTranscript } from "../lib/audio";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
@@ -152,10 +149,6 @@ export function useOnboardingConversation({
   const bargeInCountRef = useRef(0);
 
   // Client-side noise gate: track whether user speech is actively detected
-  const speechActiveRef = useRef(false);
-  const aboveThresholdCountRef = useRef(0);
-  const belowThresholdCountRef = useRef(0);
-
   // End-conversation countdown
   const endConversationCountdownRef = useRef<number | null>(null);
 
@@ -194,46 +187,13 @@ export function useOnboardingConversation({
             audioOutput.stopPlayback();
             endConversationCountdownRef.current = null;
             ws.send({ type: "input_audio_buffer.clear" });
-            // Fall through to noise gate check below
+            // Fall through to send audio below
           } else {
             return;
           }
         } else {
           bargeInCountRef.current = 0;
           return;
-        }
-      }
-
-      // Client-side noise gate: prevent ambient noise from reaching OpenAI VAD
-      if (speechActiveRef.current) {
-        // Speech is active — send all chunks, but track silence for exit
-        if (rmsLevel < INPUT_RMS_THRESHOLD) {
-          belowThresholdCountRef.current += 1;
-          if (belowThresholdCountRef.current >= SPEECH_END_CHUNKS) {
-            // Sustained silence — deactivate speech
-            speechActiveRef.current = false;
-            belowThresholdCountRef.current = 0;
-            aboveThresholdCountRef.current = 0;
-            return;
-          }
-        } else {
-          belowThresholdCountRef.current = 0;
-        }
-      } else {
-        // Speech is not active — require sustained above-threshold audio to start
-        if (rmsLevel >= INPUT_RMS_THRESHOLD) {
-          aboveThresholdCountRef.current += 1;
-          if (aboveThresholdCountRef.current >= SPEECH_START_CHUNKS) {
-            // Confirmed speech start
-            speechActiveRef.current = true;
-            aboveThresholdCountRef.current = 0;
-            belowThresholdCountRef.current = 0;
-          } else {
-            return; // Not yet confirmed as speech
-          }
-        } else {
-          aboveThresholdCountRef.current = 0;
-          return; // Below noise floor — skip
         }
       }
 
@@ -463,10 +423,6 @@ export function useOnboardingConversation({
           }
           audioGatedRef.current = true;
           bargeInCountRef.current = 0;
-          // Reset noise gate state when AI starts speaking
-          speechActiveRef.current = false;
-          aboveThresholdCountRef.current = 0;
-          belowThresholdCountRef.current = 0;
           clearCooldownTimer();
           audioOutput.enqueueAudio(event.delta);
           break;
@@ -589,12 +545,6 @@ export function useOnboardingConversation({
     clearCooldownTimer();
     audioGatedRef.current = false;
     bargeInCountRef.current = 0;
-
-    // Reset noise gate state
-    speechActiveRef.current = false;
-    aboveThresholdCountRef.current = 0;
-    belowThresholdCountRef.current = 0;
-
     endConversationCountdownRef.current = null;
 
     audioInput.stopCapture();

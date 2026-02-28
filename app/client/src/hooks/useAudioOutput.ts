@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AUDIO_SAMPLE_RATE } from "../lib/constants";
-import { base64ToArrayBuffer, pcm16ToFloat32 } from "../lib/audio";
-
-// Safari compatibility: webkitAudioContext fallback
-// The `as unknown` cast is necessary because `window` does not have an index
-// signature that satisfies `Record<string, unknown>` directly.
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
-const AudioContextClass: typeof AudioContext =
-  window.AudioContext ||
-  ((window as unknown as Record<string, unknown>)
-    .webkitAudioContext as typeof AudioContext);
-/* eslint-enable @typescript-eslint/no-unnecessary-condition */
+import {
+  base64ToArrayBuffer,
+  pcm16ToFloat32,
+  getSharedAudioContext,
+} from "../lib/audio";
 
 interface UseAudioOutputReturn {
   /** Decode and enqueue a base64-encoded PCM16 audio chunk for gapless playback. */
@@ -28,23 +22,15 @@ interface UseAudioOutputReturn {
  * Accepts base64-encoded PCM16 audio, converts it to Float32 samples,
  * creates AudioBufferSourceNodes, and schedules them for gapless playback
  * using precise timing (nextStartTime tracking).
+ *
+ * Uses a shared AudioContext (from lib/audio.ts) to avoid resource
+ * contention on mobile browsers.
  */
 export function useAudioOutput(): UseAudioOutputReturn {
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-
-  /** Lazily initialise the playback AudioContext. */
-  const getAudioContext = useCallback((): AudioContext => {
-    let ctx = audioContextRef.current;
-    if (ctx === null) {
-      ctx = new AudioContextClass({ sampleRate: AUDIO_SAMPLE_RATE });
-      audioContextRef.current = ctx;
-    }
-    return ctx;
-  }, []);
 
   /** Update isPlaying based on the number of active sources. */
   const updatePlayingState = useCallback((): void => {
@@ -53,7 +39,7 @@ export function useAudioOutput(): UseAudioOutputReturn {
 
   const enqueueAudio = useCallback(
     (base64: string): void => {
-      const audioContext = getAudioContext();
+      const audioContext = getSharedAudioContext();
 
       // Resume if suspended (e.g. iOS Safari autoplay policy)
       if (audioContext.state === "suspended") {
@@ -94,7 +80,7 @@ export function useAudioOutput(): UseAudioOutputReturn {
         updatePlayingState();
       };
     },
-    [getAudioContext, updatePlayingState],
+    [updatePlayingState],
   );
 
   const stopPlayback = useCallback((): void => {
@@ -111,10 +97,9 @@ export function useAudioOutput(): UseAudioOutputReturn {
     setIsPlaying(false);
   }, []);
 
-  // Clean up on unmount
+  // Clean up on unmount — stop sources but do NOT close the shared AudioContext
   useEffect(() => {
     return () => {
-      // Stop all sources
       for (const source of activeSourcesRef.current) {
         try {
           source.stop();
@@ -123,12 +108,6 @@ export function useAudioOutput(): UseAudioOutputReturn {
         }
       }
       activeSourcesRef.current.clear();
-
-      const ctx = audioContextRef.current;
-      if (ctx !== null) {
-        void ctx.close();
-        audioContextRef.current = null;
-      }
     };
   }, []);
 

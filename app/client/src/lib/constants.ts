@@ -31,14 +31,6 @@ export const BARGE_IN_RMS_THRESHOLD = 0.15;
 /** Number of consecutive audio chunks above RMS threshold to confirm barge-in. */
 export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
 
-// --- Client-side noise gate settings ---
-/** Minimum RMS level to send audio to OpenAI. Chunks below this are silent/noise. */
-export const INPUT_RMS_THRESHOLD = 0.005;
-/** Number of consecutive chunks above INPUT_RMS_THRESHOLD to transition to "speech active". */
-export const SPEECH_START_CHUNKS = 2;
-/** Number of consecutive chunks below INPUT_RMS_THRESHOLD to transition out of "speech active". */
-export const SPEECH_END_CHUNKS = 4;
-
 // --- Noise transcript filter ---
 /**
  * Transcript patterns commonly produced by noise/silence misrecognition (Whisper hallucinations).
