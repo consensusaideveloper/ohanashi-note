@@ -6,41 +6,19 @@
  * These helpers bridge the two formats and handle base64 encoding.
  */
 
-import {
-  AUDIO_SAMPLE_RATE,
-  NOISE_TRANSCRIPT_PATTERNS,
-  NOISE_TRANSCRIPT_REGEX,
-} from "./constants";
+import { NOISE_TRANSCRIPT_PATTERNS, NOISE_TRANSCRIPT_REGEX } from "./constants";
 
-// Safari compatibility: webkitAudioContext fallback
+/**
+ * Safari compatibility: webkitAudioContext fallback.
+ * Exported so useAudioInput and useAudioOutput can each create their own
+ * AudioContext (separate contexts for input/output as per OpenAI best practices).
+ */
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-const AudioContextClass: typeof AudioContext =
+export const AudioContextClass: typeof AudioContext =
   window.AudioContext ||
   ((window as unknown as Record<string, unknown>)
     .webkitAudioContext as typeof AudioContext);
 /* eslint-enable @typescript-eslint/no-unnecessary-condition */
-
-/**
- * Module-level shared AudioContext for mobile compatibility.
- * Mobile browsers have limited AudioContext resources; sharing a single
- * context between input and output prevents resource contention and
- * choppy playback.
- */
-let sharedAudioContext: AudioContext | null = null;
-
-/**
- * Get or create the shared AudioContext. Both useAudioInput and
- * useAudioOutput should use this instead of creating their own.
- * The context is never closed — it lives for the page session.
- */
-export function getSharedAudioContext(): AudioContext {
-  if (sharedAudioContext === null || sharedAudioContext.state === "closed") {
-    sharedAudioContext = new AudioContextClass({
-      sampleRate: AUDIO_SAMPLE_RATE,
-    });
-  }
-  return sharedAudioContext;
-}
 
 /**
  * Convert Float32 audio samples (Web Audio API range [-1, 1]) to

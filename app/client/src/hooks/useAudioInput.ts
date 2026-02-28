@@ -4,7 +4,7 @@ import { AUDIO_BUFFER_SIZE, AUDIO_SAMPLE_RATE } from "../lib/constants";
 import {
   float32ToPcm16,
   arrayBufferToBase64,
-  getSharedAudioContext,
+  AudioContextClass,
 } from "../lib/audio";
 
 /** Callback invoked with a base64-encoded PCM16 audio chunk and its RMS level. */
@@ -61,9 +61,9 @@ function getSupportedMimeType(): string {
  * Additionally, a MediaRecorder runs in parallel on the same MediaStream
  * to produce a compressed audio recording (webm/opus) for persistence.
  *
- * Uses a shared AudioContext (from lib/audio.ts) to avoid resource
- * contention on mobile browsers where multiple AudioContexts cause
- * choppy playback and suspended states.
+ * Uses a dedicated AudioContext for input, separate from the output
+ * context. This follows the OpenAI official demo pattern and avoids
+ * iOS "playAndRecord" audio session mode that degrades speaker quality.
  *
  * iOS Safari notes:
  * - AudioContext must be created / resumed inside a user gesture handler.
@@ -81,6 +81,7 @@ export function useAudioInput({
   const onAudioChunkRef = useRef<AudioChunkCallback>(onAudioChunk);
   onAudioChunkRef.current = onAudioChunk;
 
+  const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
@@ -127,18 +128,28 @@ export function useAudioInput({
       return;
     }
 
-    // Request microphone access
+    // Request microphone access.
+    // Do NOT specify sampleRate — iOS Safari ignores it and defaults to native rate.
+    // The AudioContext's sampleRate handles resampling to 24kHz.
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        sampleRate: AUDIO_SAMPLE_RATE,
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
       },
     });
     mediaStreamRef.current = stream;
 
-    // Use the shared AudioContext (created/resumed inside user gesture handler for iOS)
-    const audioContext = getSharedAudioContext();
+    // Create a dedicated AudioContext for input (separate from output).
+    // Using separate contexts avoids iOS "playAndRecord" session mode
+    // that degrades speaker volume and audio quality.
+    // Reuse existing context if available (iOS limits AudioContext count).
+    let audioContext = audioContextRef.current;
+    if (audioContext === null || audioContext.state === "closed") {
+      audioContext = new AudioContextClass({ sampleRate: AUDIO_SAMPLE_RATE });
+      audioContextRef.current = audioContext;
+    }
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }

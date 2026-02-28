@@ -22,14 +22,16 @@ export const AUDIO_SAMPLE_RATE = 24000;
 export const AUDIO_BUFFER_SIZE = 4096;
 
 // --- Echo suppression settings ---
-/** Minimum RMS level to send audio to OpenAI. Simple per-chunk filter (no state machine). */
-export const NOISE_FLOOR_RMS = 0.01;
+/** Minimum RMS level to send audio to OpenAI. Simple per-chunk filter (no state machine).
+ * Lowered from 0.01 to 0.003 for mobile: soft speech on mobile produces RMS 0.008-0.015. */
+export const NOISE_FLOOR_RMS = 0.003;
 /** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
 export const POST_SPEECH_COOLDOWN_MS = 500;
 /** Minimum character count for a user transcript to be considered valid input. */
 export const MIN_TRANSCRIPT_LENGTH = 3;
-/** RMS threshold for barge-in detection during AI speech. */
-export const BARGE_IN_RMS_THRESHOLD = 0.15;
+/** RMS threshold for barge-in detection during AI speech.
+ * Lowered from 0.15 to 0.08: normal mobile speech RMS is 0.02-0.08. */
+export const BARGE_IN_RMS_THRESHOLD = 0.08;
 /** Number of consecutive audio chunks above RMS threshold to confirm barge-in. */
 export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
 
@@ -63,9 +65,9 @@ export const SESSION_CONFIG = {
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
-    threshold: 0.7, // balanced: client noise floor + server VAD + Whisper filter
+    threshold: 0.5, // OpenAI default; previous 0.7 was too high for mobile
     prefix_padding_ms: 300,
-    silence_duration_ms: 600, // lowered for faster response
+    silence_duration_ms: 800, // allow natural pauses for elderly speakers
   },
   temperature: 0.7,
 } as const;
@@ -474,11 +476,12 @@ export const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
 export const DEFAULT_SILENCE_DURATION: SilenceDuration = "normal";
 export const DEFAULT_CONFIRMATION_LEVEL: ConfirmationLevel = "normal";
 
-/** Map silence duration preference to VAD silence_duration_ms values. */
+/** Map silence duration preference to VAD silence_duration_ms values.
+ * Base value (normal) matches SESSION_CONFIG.turn_detection.silence_duration_ms. */
 export const SILENCE_DURATION_MS_MAP: Record<SilenceDuration, number> = {
-  short: 800,
-  normal: 1200,
-  long: 2000,
+  short: 500,
+  normal: 800,
+  long: 1500,
 };
 
 /** Screen names the voice AI can navigate to, mapped to AppScreen values and Japanese labels. */
