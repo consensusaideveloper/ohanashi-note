@@ -440,6 +440,7 @@ export function FamilyScreen({
               <AccessPresetsSection
                 members={members}
                 membersLoading={membersLoading}
+                lifecycleStatus={myLifecycleStatus}
               />
             </>
           )}

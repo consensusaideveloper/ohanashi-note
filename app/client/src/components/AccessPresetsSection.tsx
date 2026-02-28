@@ -16,12 +16,15 @@ import type { FamilyMember, AccessPreset } from "../lib/family-api";
 interface AccessPresetsSectionProps {
   members: FamilyMember[];
   membersLoading: boolean;
+  lifecycleStatus: string;
 }
 
 export function AccessPresetsSection({
   members,
   membersLoading,
+  lifecycleStatus,
 }: AccessPresetsSectionProps): ReactNode {
+  const isReadonly = lifecycleStatus !== "active";
   const [presets, setPresets] = useState<AccessPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -132,6 +135,12 @@ export function AccessPresetsSection({
         {UI_MESSAGES.family.accessPresetsDescription}
       </p>
 
+      {isReadonly && (
+        <p className="text-lg text-text-secondary">
+          {UI_MESSAGES.family.accessPresetsNotActive}
+        </p>
+      )}
+
       {loading && <p className="text-lg text-text-secondary">読み込み中...</p>}
 
       {error && (
@@ -210,10 +219,15 @@ export function AccessPresetsSection({
                           type="button"
                           role="checkbox"
                           aria-checked={isChecked}
-                          className="flex items-center gap-3 w-full min-h-11 text-left"
-                          onClick={() =>
-                            handleToggleCategory(member.id, cat.id)
-                          }
+                          aria-disabled={isReadonly}
+                          className={`flex items-center gap-3 w-full min-h-11 text-left ${
+                            isReadonly ? "opacity-50 pointer-events-none" : ""
+                          }`}
+                          onClick={() => {
+                            if (!isReadonly) {
+                              handleToggleCategory(member.id, cat.id);
+                            }
+                          }}
                         >
                           <span
                             className={`flex-none w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
