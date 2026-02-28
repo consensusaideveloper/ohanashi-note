@@ -1,6 +1,6 @@
 # Ohanashi Note (おはなしノート)
 
-A voice conversation web app that helps elderly Japanese users (60-80 years old) create ending notes through natural dialogue with an AI assistant named Midori-san.
+A voice conversation web app that helps elderly Japanese users (60-80 years old) create ending notes through natural dialogue with an AI assistant.
 
 ## Tech Stack
 

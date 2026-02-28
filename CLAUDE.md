@@ -3,7 +3,7 @@
 ## Project Overview
 
 Voice conversation web app for elderly Japanese users (60-80 years old).
-AI assistant "Midori-san" helps create ending notes through natural conversation.
+AI assistant helps create ending notes through natural voice conversation.
 Monorepo: `app/client/` (React + Vite) and `app/server/` (Hono + Node.js).
 
 ## Commands

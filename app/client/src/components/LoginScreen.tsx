@@ -35,7 +35,7 @@ export function LoginScreen({ inviteToken }: LoginScreenProps): ReactNode {
     <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
       {/* App logo / title area */}
       <div className="flex flex-col items-center gap-4 mb-12">
-        {/* Leaf icon representing "Midori" */}
+        {/* App logo icon */}
         <div className="w-20 h-20 rounded-full bg-accent-secondary flex items-center justify-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"

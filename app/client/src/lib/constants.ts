@@ -781,7 +781,7 @@ export const ONBOARDING_TOOLS = REALTIME_TOOLS.filter((t) =>
 );
 
 export const ONBOARDING_CONVERSATION_MESSAGES = {
-  title: "みどりさんがご案内します",
+  title: "AIがご案内します",
   subtitle: "マイクを使って会話しながら設定を行います",
   startButton: "会話をはじめる",
   reconnectPrompt: "接続が切れました。もう一度お試しください。",
@@ -794,7 +794,7 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   fontSizeLabel: "文字の大きさ",
   speakingSpeedLabel: "話し方",
   description:
-    "みどりさんとお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
+    "AIとお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
   startButton: "はじめる",
 } as const;
 
@@ -806,7 +806,7 @@ export const SETTINGS_MESSAGES = {
   },
   speakingPreferences: {
     title: "AIの話し方",
-    description: "みどりさんの話し方を調整できます",
+    description: "AIの話し方を調整できます",
     speedLabel: "話す速さ",
     silenceLabel: "待ち時間",
     confirmationLabel: "確認の頻度",
@@ -823,8 +823,7 @@ export const SETTINGS_MESSAGES = {
     generatedAt: "作成日",
     printButton: "印刷する",
     closeButton: "戻る",
-    noEntries:
-      "まだ記録がありません。みどりさんとお話しして、ノートを作りましょう。",
+    noEntries: "まだ記録がありません。AIとお話しして、ノートを作りましょう。",
     footer: "おはなしエンディングノートで作成",
     disclaimer: "この文書は記録として保管用です。法的効力はありません。",
     sectionTitle: "ノートの印刷",
