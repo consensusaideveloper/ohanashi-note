@@ -643,6 +643,17 @@ export const UI_MESSAGES = {
     assigneeTitle: "担当者を選択",
     categoryTitle: "カテゴリを選択",
   },
+  datePicker: {
+    title: "期限を選択",
+    today: "今日",
+    tomorrow: "明日",
+    nextWeek: "1週間後",
+    clear: "期限なし",
+    confirm: "決定",
+    cancel: "キャンセル",
+    placeholder: "日付を選んでください",
+    weekdays: ["日", "月", "火", "水", "木", "金", "土"] as readonly string[],
+  },
   todoError: {
     loadFailed: "やることリストの読み込みに失敗しました",
     createFailed: "やることの追加に失敗しました",

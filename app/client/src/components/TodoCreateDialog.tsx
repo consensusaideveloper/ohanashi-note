@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
 import { QUESTION_CATEGORIES } from "../lib/questions";
+import { DatePicker } from "./DatePicker";
 import { WheelPicker } from "./WheelPicker";
 import { WheelPickerTrigger } from "./WheelPickerTrigger";
 
@@ -57,6 +58,7 @@ export function TodoCreateDialog({
   const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false);
   const [sourceCategory, setSourceCategory] = useState("");
   const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const assigneeOptions: readonly WheelPickerOption[] = useMemo(
     () => [
@@ -101,6 +103,7 @@ export function TodoCreateDialog({
       setIsAssigneePickerOpen(false);
       setSourceCategory("");
       setIsCategoryPickerOpen(false);
+      setIsDatePickerOpen(false);
     }
   }, [isOpen]);
 
@@ -208,12 +211,18 @@ export function TodoCreateDialog({
     [],
   );
 
-  const handleDueDateChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>): void => {
-      setDueDate(e.target.value);
-    },
-    [],
-  );
+  const handleOpenDatePicker = useCallback((): void => {
+    setIsDatePickerOpen(true);
+  }, []);
+
+  const handleCloseDatePicker = useCallback((): void => {
+    setIsDatePickerOpen(false);
+  }, []);
+
+  const handleDatePickerConfirm = useCallback((selectedDate: string): void => {
+    setDueDate(selectedDate);
+    setIsDatePickerOpen(false);
+  }, []);
 
   const handleClose = useCallback((): void => {
     onClose();
@@ -355,12 +364,25 @@ export function TodoCreateDialog({
           >
             {UI_MESSAGES.todo.dueDateLabel}
           </label>
-          <input
+          <WheelPickerTrigger
             id="todo-due-date"
-            type="date"
-            className="w-full min-h-11 border border-border-light bg-bg-surface px-4 py-3 text-lg rounded-card focus:border-accent-primary focus:outline-none"
-            value={dueDate}
-            onChange={handleDueDateChange}
+            displayValue={
+              dueDate.length > 0
+                ? new Date(dueDate).toLocaleDateString("ja-JP", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : ""
+            }
+            placeholder={UI_MESSAGES.datePicker.placeholder}
+            onClick={handleOpenDatePicker}
+          />
+          <DatePicker
+            isOpen={isDatePickerOpen}
+            selectedDate={dueDate}
+            onConfirm={handleDatePickerConfirm}
+            onCancel={handleCloseDatePicker}
           />
         </div>
 
