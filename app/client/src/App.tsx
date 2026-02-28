@@ -18,7 +18,14 @@ import {
 } from "./lib/constants";
 import { QUESTION_CATEGORIES } from "./lib/questions";
 import { getUserProfile, saveUserProfile } from "./lib/storage";
-import { createInvitation, getLifecycleState } from "./lib/family-api";
+import {
+  createInvitation,
+  getLifecycleState,
+  listFamilyMembers,
+  listAccessPresets,
+  createAccessPreset,
+  deleteAccessPreset,
+} from "./lib/family-api";
 import { getInviteTokenFromUrl } from "./lib/inviteUrl";
 import {
   getPendingInviteToken,
@@ -697,6 +704,83 @@ function AppContent(): ReactNode {
           return {
             success: false,
             message: "話し方の設定の変更に失敗しました",
+          };
+        }
+      },
+      // Tier 1: Access preset management
+      updateAccessPreset: async (params: {
+        familyMemberName: string;
+        category: string;
+        action: "grant" | "revoke";
+      }) => {
+        try {
+          const { members } = await listFamilyMembers();
+          const activeMembers = members.filter((m) => m.isActive);
+
+          // Resolve family member by name or relationship label
+          const member = activeMembers.find(
+            (m) =>
+              m.name === params.familyMemberName ||
+              m.relationshipLabel === params.familyMemberName,
+          );
+          if (member === undefined) {
+            return {
+              success: false,
+              message: `「${params.familyMemberName}」${UI_MESSAGES.familyError.accessPresetVoiceMemberNotFound}`,
+            };
+          }
+
+          const categoryInfo = QUESTION_CATEGORIES.find(
+            (c) => c.id === params.category,
+          );
+          if (categoryInfo === undefined) {
+            return { success: false, message: "そのカテゴリは見つかりません" };
+          }
+
+          const presets = await listAccessPresets();
+
+          if (params.action === "grant") {
+            const existing = presets.find(
+              (p) =>
+                p.familyMemberId === member.id &&
+                p.categoryId === params.category,
+            );
+            if (existing !== undefined) {
+              return {
+                success: true,
+                message: `${member.name}さんには「${categoryInfo.label}」はすでに見せる設定になっています`,
+              };
+            }
+            await createAccessPreset({
+              familyMemberId: member.id,
+              categoryId: params.category,
+            });
+            return {
+              success: true,
+              message: `${member.name}さんに「${categoryInfo.label}」を見せる設定にしました`,
+            };
+          } else {
+            const existing = presets.find(
+              (p) =>
+                p.familyMemberId === member.id &&
+                p.categoryId === params.category,
+            );
+            if (existing === undefined) {
+              return {
+                success: true,
+                message: `${member.name}さんには「${categoryInfo.label}」の設定はまだありません`,
+              };
+            }
+            await deleteAccessPreset(existing.id);
+            return {
+              success: true,
+              message: `${member.name}さんの「${categoryInfo.label}」を見せない設定にしました`,
+            };
+          }
+        } catch {
+          return {
+            success: false,
+            message: UI_MESSAGES.familyError.accessPresetVoiceUpdateFailed,
           };
         }
       },

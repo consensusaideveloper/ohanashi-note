@@ -20,6 +20,7 @@ import {
   buildSessionPrompt,
   buildGuidedSessionPrompt,
 } from "../lib/prompt-builder";
+import { listFamilyMembers, listAccessPresets } from "../lib/family-api";
 import {
   saveConversation,
   updateConversation,
@@ -46,6 +47,7 @@ import { useAudioOutput } from "./useAudioOutput";
 import type {
   PastConversationContext,
   GuidedPastContext,
+  FamilyContext,
 } from "../lib/prompt-builder";
 import type { ServerEvent } from "../lib/websocket-protocol";
 import type {
@@ -290,6 +292,19 @@ function dispatchVoiceAction(
         confirmationLevel: args.confirmation_level,
       });
     }
+    // Tier 1: Access preset management
+    case "update_access_preset": {
+      const args = JSON.parse(argsJson) as {
+        family_member_name: string;
+        category: string;
+        action: string;
+      };
+      return callbacks.updateAccessPreset({
+        familyMemberName: args.family_member_name,
+        category: args.category,
+        action: args.action as "grant" | "revoke",
+      });
+    }
     // Tier 2: Confirmation-required
     case "start_focused_conversation": {
       const args = JSON.parse(argsJson) as { category: string };
@@ -343,6 +358,9 @@ export function useConversation(): UseConversationReturn {
 
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
+
+  // Family context (loaded on start, used in session.update for access preset management)
+  const familyContextRef = useRef<FamilyContext | null>(null);
 
   // Speaking preferences (loaded on start, used in session.update)
   const speakingPrefsRef = useRef<SpeakingPreferences>({
@@ -514,6 +532,7 @@ export function useConversation(): UseConversationReturn {
             const charId = characterIdRef.current ?? "character-a";
             const character = getCharacterById(charId);
             const prefs = speakingPrefsRef.current;
+            const familyCtx = familyContextRef.current ?? undefined;
             let instructions: string;
             if (categoryRef.current !== null) {
               // Focused mode: category-specific prompt
@@ -523,6 +542,7 @@ export function useConversation(): UseConversationReturn {
                 pastContextRef.current ?? undefined,
                 userNameRef.current ?? undefined,
                 prefs,
+                familyCtx,
               );
             } else {
               // Guided mode: cross-category prompt
@@ -534,6 +554,7 @@ export function useConversation(): UseConversationReturn {
                 },
                 userNameRef.current ?? undefined,
                 prefs,
+                familyCtx,
               );
             }
             const silenceDurationMs =
@@ -690,9 +711,14 @@ export function useConversation(): UseConversationReturn {
       dispatch({ type: "CONNECT" });
       sessionConfigSentRef.current = false;
 
-      // Load all conversations and user profile (partial failure safe)
-      Promise.allSettled([listConversations(), getUserProfile()])
-        .then(([recordsResult, profileResult]) => {
+      // Load all conversations, user profile, and family context (partial failure safe)
+      Promise.allSettled([
+        listConversations(),
+        getUserProfile(),
+        listFamilyMembers(),
+        listAccessPresets(),
+      ])
+        .then(([recordsResult, profileResult, familyResult, presetsResult]) => {
           const allRecords =
             recordsResult.status === "fulfilled" ? recordsResult.value : [];
           if (recordsResult.status === "rejected") {
@@ -787,6 +813,41 @@ export function useConversation(): UseConversationReturn {
                 ? profileConfirmation
                 : "normal",
           };
+
+          // Build family context for access preset voice management
+          const familyMembers =
+            familyResult.status === "fulfilled"
+              ? familyResult.value.members
+              : [];
+          if (familyResult.status === "rejected") {
+            console.error("Failed to load family members for session:", {
+              error: familyResult.reason as unknown,
+            });
+          }
+          const accessPresets =
+            presetsResult.status === "fulfilled" ? presetsResult.value : [];
+          if (presetsResult.status === "rejected") {
+            console.error("Failed to load access presets for session:", {
+              error: presetsResult.reason as unknown,
+            });
+          }
+
+          if (familyMembers.length > 0) {
+            familyContextRef.current = {
+              members: familyMembers
+                .filter((m) => m.isActive)
+                .map((m) => ({
+                  name: m.name,
+                  relationshipLabel: m.relationshipLabel,
+                })),
+              presets: accessPresets.map((p) => ({
+                memberName: p.memberName,
+                categoryId: p.categoryId,
+              })),
+            };
+          } else {
+            familyContextRef.current = null;
+          }
         })
         .finally(() => {
           ws.connect();
@@ -986,6 +1047,7 @@ export function useConversation(): UseConversationReturn {
     guidedContextRef.current = null;
     userNameRef.current = null;
     allRecordsRef.current = [];
+    familyContextRef.current = null;
     speakingPrefsRef.current = {
       speakingSpeed: "normal",
       silenceDuration: "normal",
@@ -1016,6 +1078,7 @@ export function useConversation(): UseConversationReturn {
       speakingPrefsRef.current = preferences;
       const charId = characterIdRef.current ?? "character-a";
       const character = getCharacterById(charId);
+      const familyCtx = familyContextRef.current ?? undefined;
 
       let instructions: string;
       if (categoryRef.current !== null) {
@@ -1025,6 +1088,7 @@ export function useConversation(): UseConversationReturn {
           pastContextRef.current ?? undefined,
           userNameRef.current ?? undefined,
           preferences,
+          familyCtx,
         );
       } else {
         instructions = buildGuidedSessionPrompt(
@@ -1035,6 +1099,7 @@ export function useConversation(): UseConversationReturn {
           },
           userNameRef.current ?? undefined,
           preferences,
+          familyCtx,
         );
       }
 

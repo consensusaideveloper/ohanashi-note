@@ -22,6 +22,18 @@ export interface GuidedPastContext {
   recentSummaries: Array<{ category: string; summary: string }>;
 }
 
+/** Family member info for access preset voice management. */
+export interface FamilyContextMember {
+  name: string;
+  relationshipLabel: string;
+}
+
+/** Family context injected into the AI prompt for access preset management. */
+export interface FamilyContext {
+  members: FamilyContextMember[];
+  presets: Array<{ memberName: string; categoryId: string }>;
+}
+
 /** Context from past conversations in the same category. */
 export interface PastConversationContext {
   coveredQuestionIds: string[];
@@ -115,7 +127,8 @@ const TOOL_AWARENESS_PROMPT = `
 9. update_speaking_preferences：話し相手の話し方を変更。「もっとゆっくり話して」「待ち時間を長くして」「確認を増やして」など
 10. start_focused_conversation：特定テーマで新しい会話を開始（確認画面を表示）。「お金のことで話したい」など
 11. create_family_invitation：家族の招待リンクを作成（確認画面を表示）。「妻を招待して」など
-12. end_conversation：会話を終了して保存。ユーザーが終わりたい意思を示したとき（「疲れた」「また今度」「もういいかな」「今日はここまで」など）
+12. update_access_preset：開封設定を変更。ユーザーが「この話は息子に見せて」「お金のことは妻には見せないで」と言った場合に使用
+13. end_conversation：会話を終了して保存。ユーザーが終わりたい意思を示したとき（「疲れた」「また今度」「もういいかな」「今日はここまで」など）
 
 【ツール使用ルール】
 - ツールの存在をユーザーに説明しない。「ツールで操作できます」のような案内はしない。ユーザーの要望に応じて自然に活用する。
@@ -132,6 +145,72 @@ const TOOL_AWARENESS_PROMPT = `
 - 同意書の提出 →「同意の手続きは画面から行えます。該当画面に移動しましょうか？」
 - ノートの印刷 →「設定画面からノートを印刷できます。設定画面に移動しましょうか？」
 画面移動の提案にユーザーが同意したら、navigate_to_screenで該当画面に移動する。`;
+
+// Access preset behavioral instructions for the AI
+const ACCESS_PRESET_INSTRUCTIONS = `
+【開封設定について】
+会話の中で話題にしたカテゴリについて、自然な形で「この内容はご家族に見てもらいたいですか？」と聞くことができます。
+
+ルール：
+- 開封設定の話題は、カテゴリの会話がひと区切りついた場合のみ提案する
+- 1回の会話で開封設定について聞くのは最大2回まで。しつこくしない
+- 「この内容はご家族にも伝えたいですか？どなたに見せたいですか？」と自然に聞く
+- ユーザーが「わからない」「あとで考える」と言った場合は深追いせず、「いつでも変更できますから、ゆっくり考えてくださいね」と安心させて次の話題へ
+- すでに設定済みのカテゴリ-家族の組み合わせについては重複して聞かない
+- ユーザーが明確に「見せたい」「見せたくない」と言った場合にのみ update_access_preset を呼ぶ
+- 「みんなに見せて」「全部見せて」のような包括的な指示の場合は確認してから各メンバーに対してツールを呼ぶ
+- 「家族に見せたい」で複数メンバーがいる場合は「どなたに見せますか？」と確認する`;
+
+/**
+ * Build family context prompt section.
+ * Returns empty string if no family members are registered.
+ */
+function buildFamilyContextPrompt(familyContext: FamilyContext): string {
+  if (familyContext.members.length === 0) {
+    return "";
+  }
+
+  const memberLines = familyContext.members
+    .map((m) => `- ${m.name}さん（${m.relationshipLabel}）`)
+    .join("\n");
+
+  // Group presets by member name
+  const presetsByMember = new Map<string, string[]>();
+  for (const member of familyContext.members) {
+    presetsByMember.set(member.name, []);
+  }
+  for (const preset of familyContext.presets) {
+    const existing = presetsByMember.get(preset.memberName);
+    if (existing !== undefined) {
+      const categoryInfo = QUESTION_CATEGORIES.find(
+        (c) => c.id === preset.categoryId,
+      );
+      if (categoryInfo !== undefined) {
+        existing.push(categoryInfo.label);
+      }
+    }
+  }
+
+  const presetLines = familyContext.members
+    .map((m) => {
+      const categories = presetsByMember.get(m.name);
+      const categoryText =
+        categories !== undefined && categories.length > 0
+          ? categories.join("、")
+          : "（まだ設定なし）";
+      return `- ${m.name}さん: ${categoryText}`;
+    })
+    .join("\n");
+
+  return `
+
+【登録されている家族】
+${memberLines}
+
+【現在の開封設定（各家族に見せるカテゴリ）】
+${presetLines}
+${ACCESS_PRESET_INSTRUCTIONS}`;
+}
 
 // Topic scope reminder for category-focused mode
 const TOPIC_SCOPE_FOCUSED = `
@@ -276,6 +355,7 @@ export function buildSessionPrompt(
   pastContext?: PastConversationContext,
   userName?: string,
   speakingPreferences?: SpeakingPreferences,
+  familyContext?: FamilyContext,
 ): string {
   const character = getCharacterById(characterId);
   const categoryInstruction = CATEGORY_INSTRUCTIONS[category];
@@ -335,6 +415,11 @@ ${questionList}`;
 
   prompt += `\n\n今日のカテゴリは「${categoryLabel}」です。このテーマに沿って会話を進めてください。`;
 
+  // Inject family context for access preset management
+  if (familyContext !== undefined) {
+    prompt += buildFamilyContextPrompt(familyContext);
+  }
+
   prompt += TOOL_AWARENESS_PROMPT;
 
   prompt += LANGUAGE_GUARDRAIL;
@@ -351,6 +436,7 @@ export function buildGuidedSessionPrompt(
   guidedContext: GuidedPastContext,
   userName?: string,
   speakingPreferences?: SpeakingPreferences,
+  familyContext?: FamilyContext,
 ): string {
   const character = getCharacterById(characterId);
   const coveredIds = new Set(guidedContext.allCoveredQuestionIds);
@@ -405,6 +491,11 @@ ${compactQuestions}`;
 パスワード・暗証番号・カード番号・口座番号は絶対に聞かない。会社名・サービス名のレベルまで。番号を言いそうになったらやんわり止める。`;
 
   prompt += TOPIC_SCOPE_GUIDED;
+
+  // Inject family context for access preset management
+  if (familyContext !== undefined) {
+    prompt += buildFamilyContextPrompt(familyContext);
+  }
 
   prompt += TOOL_AWARENESS_PROMPT;
 

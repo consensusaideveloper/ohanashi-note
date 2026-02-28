@@ -321,6 +321,46 @@ export const REALTIME_TOOLS = [
       required: ["relationship", "relationship_label"],
     },
   },
+  // --- Tier 1: Access preset tool ---
+  {
+    type: "function" as const,
+    name: "update_access_preset",
+    description:
+      "エンディングノートの開封設定（どの家族にどのカテゴリを見せるか）を変更します。ユーザーが「医療のことは妻に見せて」「お金の話は太郎には見せないで」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        family_member_name: {
+          type: "string",
+          description:
+            "対象の家族メンバーの名前または関係名（例：「太郎」「妻」）。プロンプトの家族リストから特定してください。",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "memories",
+            "people",
+            "house",
+            "medical",
+            "funeral",
+            "money",
+            "work",
+            "digital",
+            "legal",
+            "trust",
+            "support",
+          ],
+          description: "対象のカテゴリ",
+        },
+        action: {
+          type: "string",
+          enum: ["grant", "revoke"],
+          description: "grant=見せる設定を追加、revoke=見せる設定を削除",
+        },
+      },
+      required: ["family_member_name", "category", "action"],
+    },
+  },
   // --- Lifecycle tools ---
   {
     type: "function" as const,
@@ -556,6 +596,9 @@ export const UI_MESSAGES = {
     removeButton: "削除",
     editMemberDescription: "さんの情報を編集します",
     noNotifications: "通知はありません",
+    notificationBellLabel: "お知らせ",
+    notificationCloseLabel: "閉じる",
+    notificationCriticalLabel: "要確認",
     myFamilyTab: "わたしの家族",
     familyNotesTab: "家族のノート",
     pendingActionsCount: "件の対応",
@@ -703,6 +746,9 @@ export const UI_MESSAGES = {
     accessPresetAddFailed: "設定の追加に失敗しました。",
     accessPresetRemoveFailed: "設定の削除に失敗しました。",
     accessPresetsRecommendationsFailed: "推奨設定の取得に失敗しました。",
+    accessPresetVoiceUpdateFailed:
+      "開封設定の変更に失敗しました。あとで画面から設定できます。",
+    accessPresetVoiceMemberNotFound: "その名前の方が家族に見つかりません。",
     removeBlockedByLifecycle:
       "現在の状態では削除できません。しばらくしてからもう一度お試しください。",
     leaveFailed: "脱退に失敗しました。",

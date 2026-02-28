@@ -23,6 +23,13 @@ export interface VoiceActionCallbacks {
     confirmationLevel?: string;
   }) => Promise<VoiceActionResult>;
 
+  // Tier 1: Access preset management
+  updateAccessPreset: (params: {
+    familyMemberName: string;
+    category: string;
+    action: "grant" | "revoke";
+  }) => Promise<VoiceActionResult>;
+
   // Tier 2: Significant actions (UI confirmation dialog required)
   requestStartConversation: (category: string) => VoiceActionResult;
   requestCreateInvitation: (params: {

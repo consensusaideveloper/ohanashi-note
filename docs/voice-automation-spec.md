@@ -29,7 +29,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 | `contexts/VoiceActionContext.tsx` | アクションコールバックのRefを保持するContext |
 | `hooks/useConversation.ts` | OpenAI接続・function call処理（AppContentレベルで呼び出し） |
 | `App.tsx` | コールバックの実装を登録、確認ダイアログ管理 |
-| `lib/constants.ts` | REALTIME_TOOLS定義（全12ツール） |
+| `lib/constants.ts` | REALTIME_TOOLS定義（全13ツール） |
 | `lib/prompt-builder.ts` | AIへの指示プロンプト（ツール使用ルール含む） |
 | `components/ActiveConversationBanner.tsx` | 他画面での「会話中」バナー表示 |
 
@@ -110,6 +110,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 | 7 | `change_character` | キャラクター変更 | 「話し相手を変えたい」 | 「次回の会話からのんびりがお相手します」 |
 | 8 | `update_user_name` | 表示名変更 | 「太郎と呼んで」 | 「お名前を太郎に変更しました」 |
 | 9 | `update_speaking_preferences` | 話し方設定変更 | 「もっとゆっくり話して」 | 「話す速さをゆっくりに変更しました」 |
+| 10 | `update_access_preset` | 開封設定変更 | 「医療のことは妻に見せて」 | 「花子さんに医療・介護を見せる設定にしました」 |
 
 #### change_font_size パラメータ
 
@@ -153,6 +154,25 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 
 **動作**: 設定変更はプロフィールに永続化され、現在の会話セッションにも即時反映される（`session.update` 再送信による prompt + VAD 更新）。
 
+#### update_access_preset パラメータ
+
+| パラメータ | 型 | 必須 | 値 | 説明 |
+|-----------|------|------|-----|------|
+| `family_member_name` | string | はい | 任意テキスト | 家族メンバーの名前または関係名（例：「太郎」「妻」） |
+| `category` | string | はい | カテゴリID | 対象カテゴリ（view_note_categoryと同じカテゴリ一覧） |
+| `action` | string | はい | `grant` | 見せる設定を追加 |
+| | | | `revoke` | 見せる設定を削除 |
+
+**動作**: 開封設定（accessPresets）をサーバーに永続化。会話開始時に家族メンバー一覧と現在のプリセット状態がAIのシステムプロンプトに注入される。家族未登録の場合はプロンプトに情報が含まれないため、AIがこの機能に言及することはない。
+
+**名前解決**: AIは名前（「太郎」）または関係名（「妻」）で指定し、コールバック内で `FamilyMember.name` と `FamilyMember.relationshipLabel` の両方でマッチングを行う。一致しない場合はエラーメッセージを返却し、AIが再確認する。
+
+**AI行動ルール**:
+- カテゴリの会話がひと区切りついた時のみ、自然に「この内容はご家族に見てもらいたいですか？」と聞く
+- 1回の会話で最大2回まで。しつこくしない
+- ユーザーが曖昧な回答をした場合はツールを呼ばず、明確な意思表示がある場合のみ実行
+- 「みんなに見せて」は確認後、メンバーごとに順次ツールを呼び出す
+
 ---
 
 ### Tier 2: 重要操作（UI確認ダイアログ必須）
@@ -162,8 +182,8 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 
 | # | ツール名 | 説明 | 発話例 |
 |---|---------|------|--------|
-| 10 | `start_focused_conversation` | テーマ指定で新しい会話開始 | 「お金のことで話したい」 |
-| 11 | `create_family_invitation` | 家族招待リンク作成 | 「妻を招待して」 |
+| 11 | `start_focused_conversation` | テーマ指定で新しい会話開始 | 「お金のことで話したい」 |
+| 12 | `create_family_invitation` | 家族招待リンク作成 | 「妻を招待して」 |
 
 #### 確認フロー
 
@@ -219,7 +239,7 @@ OpenAI Realtime API の function calling を利用し、ユーザーの発話意
 
 | # | ツール名 | 説明 | 発話例 |
 |---|---------|------|--------|
-| 12 | `end_conversation` | 会話を終了してデータを保存 | 「もう疲れた」「また今度」「今日はここまで」 |
+| 13 | `end_conversation` | 会話を終了してデータを保存 | 「もう疲れた」「また今度」「今日はここまで」 |
 
 #### end_conversation の動作
 
@@ -343,7 +363,29 @@ AI: update_speaking_preferences({silence_duration: "long"})
 AI: 「待ち時間を長めに変更しました。ゆっくりお考えくださいね」
 ```
 
-### シナリオ7: テーマ指定会話開始（確認あり）
+### シナリオ7: 開封設定変更（音声で）
+
+```
+（医療テーマの会話が一区切りついた後）
+AI: 「今お話しいただいた医療のことですが、ご家族に見てもらいたい方はいますか？」
+ユーザー: 「妻の花子には見せたいけど、息子の太郎には見せなくていいかな」
+AI: update_access_preset({family_member_name: "花子", category: "medical", action: "grant"})
+→ サーバーに開封設定を保存
+AI: 「花子さんに医療・介護を見せる設定にしました」
+AI: update_access_preset({family_member_name: "太郎", category: "medical", action: "revoke"})
+→ 既存設定を削除（設定がなければ何もしない）
+AI: 「太郎さんには医療・介護を見せない設定にしました」
+```
+
+```
+ユーザー: 「やっぱり思い出はみんなに見せたいな」
+AI: 「全員に見せる設定にしますね」
+AI: update_access_preset({family_member_name: "花子", category: "memories", action: "grant"})
+AI: update_access_preset({family_member_name: "太郎", category: "memories", action: "grant"})
+AI: 「花子さんと太郎さんに思い出を見せる設定にしました」
+```
+
+### シナリオ8: テーマ指定会話開始（確認あり）
 
 ```
 ユーザー: 「お金のことで相談したいんだけど」
@@ -353,7 +395,7 @@ AI: 「確認画面を出しました。よろしければ画面の『はい』�
 → ユーザーが「はい」タップ → 現在の会話終了 → お金テーマの新規会話開始
 ```
 
-### シナリオ8: 家族招待（確認あり）
+### シナリオ9: 家族招待（確認あり）
 
 ```
 ユーザー: 「妻を招待したい」
@@ -363,7 +405,7 @@ AI: 「確認画面を出しました。よろしければ画面の『はい』�
 → ユーザーが「はい」タップ → 招待リンク作成 → 家族ダッシュボードに移動
 ```
 
-### シナリオ9: 禁止操作（画面案内）
+### シナリオ10: 禁止操作（画面案内）
 
 ```
 ユーザー: 「全部消して」
@@ -374,7 +416,7 @@ AI: navigate_to_screen({screen: "settings"})
 AI: 「設定画面に移動しました」
 ```
 
-### シナリオ10: 過去会話検索
+### シナリオ11: 過去会話検索
 
 ```
 ユーザー: 「前に旅行の話したよね？何て言ったか覚えてる？」
@@ -383,7 +425,7 @@ AI: search_past_conversations({query: "旅行"})
 AI: 「以前の会話で、北海道に旅行に行った思い出をお話しされていましたね。…」
 ```
 
-### シナリオ11: 会話終了（意図検出）
+### シナリオ12: 会話終了（意図検出）
 
 ```
 ユーザー: 「もう疲れちゃったから、また今度にしようかな」
@@ -393,7 +435,7 @@ AI: 「今日もたくさんお話しできてよかったです。ゆっくり�
 → 3秒後に会話自動停止、データ保存・要約開始
 ```
 
-### シナリオ12: 話題変更（ツール不使用）
+### シナリオ13: 話題変更（ツール不使用）
 
 ```
 ユーザー: （医療テーマの会話中に）「お金のことも気になるんだけど」
@@ -409,7 +451,7 @@ AI: 「お金のことも気になりますよね。どんなことが心配で�
 
 - すべてのツール呼び出しは try/catch で囲まれている
 - 同期ツール（Tier 0, Tier 1のchangeFontSize）はエラー時に `{error: "..."}`を返却
-- 非同期ツール（changeCharacter, updateUserName）はPromise.catchで `{error: "操作中にエラーが発生しました"}` を返却
+- 非同期ツール（changeCharacter, updateUserName, updateAccessPreset）はPromise.catchで `{error: "操作中にエラーが発生しました"}` を返却
 - エラー時のメッセージはすべて日本語
 
 ### 画面ナビゲーション中のまとめ作成ガード
