@@ -10,7 +10,25 @@ interface ConsentProgressTrackerProps {
   creatorId: string;
 }
 
-function ConsentIcon({ consented }: { consented: boolean | null }): ReactNode {
+interface ConsentIconProps {
+  consented: boolean | null;
+  autoResolved?: boolean;
+}
+
+function ConsentIcon({ consented, autoResolved }: ConsentIconProps): ReactNode {
+  if (consented === true && autoResolved) {
+    return (
+      <svg
+        className="w-6 h-6 text-text-secondary flex-none"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    );
+  }
   if (consented === true) {
     return (
       <svg
@@ -55,7 +73,22 @@ function ConsentIcon({ consented }: { consented: boolean | null }): ReactNode {
   );
 }
 
-function ConsentLabel({ consented }: { consented: boolean | null }): ReactNode {
+interface ConsentLabelProps {
+  consented: boolean | null;
+  autoResolved?: boolean;
+}
+
+function ConsentLabel({
+  consented,
+  autoResolved,
+}: ConsentLabelProps): ReactNode {
+  if (consented === true && autoResolved) {
+    return (
+      <span className="text-base text-text-secondary">
+        {UI_MESSAGES.family.consentAutoResolved}
+      </span>
+    );
+  }
   if (consented === true) {
     return (
       <span className="text-base text-success">
@@ -175,12 +208,18 @@ export function ConsentProgressTracker({
               className="flex items-center justify-between gap-3 py-2 border-b border-border-light last:border-b-0"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <ConsentIcon consented={record.consented} />
+                <ConsentIcon
+                  consented={record.consented}
+                  autoResolved={record.autoResolved}
+                />
                 <p className="text-lg text-text-primary truncate">
                   {record.memberName}
                 </p>
               </div>
-              <ConsentLabel consented={record.consented} />
+              <ConsentLabel
+                consented={record.consented}
+                autoResolved={record.autoResolved}
+              />
             </li>
           ))}
         </ul>

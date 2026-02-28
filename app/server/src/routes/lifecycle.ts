@@ -19,9 +19,12 @@ import { logger } from "../lib/logger.js";
 import {
   getCreatorName,
   getActiveFamilyMembers,
+  getConsentEligibleMembers,
   hasActiveRepresentative,
   notifyFamilyMembers,
   logLifecycleAction,
+  autoResolveDeceasedMemberConsent,
+  revertAutoResolvedConsent,
 } from "../lib/lifecycle-helpers.js";
 import { deleteUserAudioFiles } from "../lib/r2-cleanup.js";
 
@@ -185,6 +188,21 @@ lifecycleRoute.post(
         creatorId,
       );
 
+      // Auto-resolve any pending consent records this deceased user holds
+      // as a family member in other creators' consent processes (best-effort)
+      try {
+        await autoResolveDeceasedMemberConsent(creatorId);
+      } catch (resolveError: unknown) {
+        const msg =
+          resolveError instanceof Error
+            ? resolveError.message
+            : "Unknown error";
+        logger.error("Failed to auto-resolve deceased member consent records", {
+          deceasedUserId: creatorId,
+          error: msg,
+        });
+      }
+
       return c.json({
         id: record.id,
         status: record.status,
@@ -287,6 +305,19 @@ lifecycleRoute.post(
       // Log action
       await logLifecycleAction(existing.id, "death_report_cancelled", userId);
 
+      // Revert any auto-resolved consent records in other creators' lifecycles
+      // that were triggered by this user's death report (best-effort)
+      try {
+        await revertAutoResolvedConsent(creatorId);
+      } catch (revertError: unknown) {
+        const msg =
+          revertError instanceof Error ? revertError.message : "Unknown error";
+        logger.error(
+          "Failed to revert auto-resolved consent records after death report cancellation",
+          { cancelledUserId: creatorId, error: msg },
+        );
+      }
+
       // Create notifications for all family members
       const creatorName = await getCreatorName(creatorId);
       const members = await getActiveFamilyMembers(creatorId);
@@ -382,10 +413,44 @@ lifecycleRoute.post(
         );
       }
 
-      // Check for active family members before transitioning status
-      const members = await getActiveFamilyMembers(creatorId);
+      // Check for consent-eligible (living) family members
+      const { eligible, deceased } = await getConsentEligibleMembers(creatorId);
 
-      if (members.length === 0) {
+      if (eligible.length === 0) {
+        if (deceased.length > 0) {
+          // All family members are deceased — auto-open without consent
+          const now = new Date();
+          const [autoOpened] = await db
+            .update(noteLifecycle)
+            .set({
+              status: "opened",
+              openedAt: now,
+              consentInitiatedBy: userId,
+              updatedAt: now,
+            })
+            .where(eq(noteLifecycle.id, existing.id))
+            .returning();
+
+          if (autoOpened) {
+            await logLifecycleAction(existing.id, "note_auto_opened", userId, {
+              reason: "all_consent_members_deceased",
+              deceasedCount: deceased.length,
+            });
+          }
+
+          return c.json({
+            id: existing.id,
+            status: "opened",
+            deathReportedAt: existing.deathReportedAt
+              ? existing.deathReportedAt.toISOString()
+              : null,
+            openedAt: now.toISOString(),
+            createdAt: existing.createdAt.toISOString(),
+            consentRecordsCount: 0,
+            autoOpened: true,
+          });
+        }
+
         return c.json(
           {
             error:
@@ -418,8 +483,8 @@ lifecycleRoute.post(
         );
       }
 
-      // Create consent_records for all active family members
-      const consentValues = members.map((m) => ({
+      // Create consent_records only for eligible (living) members
+      const consentValues = eligible.map((m) => ({
         lifecycleId: existing.id,
         familyMemberId: m.familyMemberId,
         consented: null as boolean | null,
@@ -427,14 +492,15 @@ lifecycleRoute.post(
 
       await db.insert(consentRecords).values(consentValues);
 
-      // Log action
+      // Log action with deceased member info
       await logLifecycleAction(existing.id, "consent_initiated", userId, {
-        memberCount: members.length,
+        memberCount: eligible.length,
+        skippedDeceasedCount: deceased.length,
       });
 
-      // Create notifications
+      // Create notifications for eligible members only
       const creatorName = await getCreatorName(creatorId);
-      const memberUserIds = members.map((m) => m.memberId);
+      const memberUserIds = eligible.map((m) => m.memberId);
 
       await notifyFamilyMembers(
         memberUserIds,
@@ -452,7 +518,7 @@ lifecycleRoute.post(
           : null,
         openedAt: updated.openedAt ? updated.openedAt.toISOString() : null,
         createdAt: updated.createdAt.toISOString(),
-        consentRecordsCount: members.length,
+        consentRecordsCount: eligible.length,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -738,6 +804,7 @@ lifecycleRoute.get(
             memberName: users.name,
             consented: consentRecords.consented,
             consentedAt: consentRecords.consentedAt,
+            autoResolved: consentRecords.autoResolved,
             createdAt: consentRecords.createdAt,
           })
           .from(consentRecords)
@@ -754,6 +821,7 @@ lifecycleRoute.get(
           memberName: r.memberName,
           consented: r.consented,
           consentedAt: r.consentedAt ? r.consentedAt.toISOString() : null,
+          autoResolved: r.autoResolved,
           createdAt: r.createdAt.toISOString(),
         }));
 
@@ -778,6 +846,7 @@ lifecycleRoute.get(
           familyMemberId: consentRecords.familyMemberId,
           consented: consentRecords.consented,
           consentedAt: consentRecords.consentedAt,
+          autoResolved: consentRecords.autoResolved,
           createdAt: consentRecords.createdAt,
         })
         .from(consentRecords)
@@ -799,6 +868,7 @@ lifecycleRoute.get(
               consentedAt: own.consentedAt
                 ? own.consentedAt.toISOString()
                 : null,
+              autoResolved: own.autoResolved,
               createdAt: own.createdAt.toISOString(),
             },
           ]
@@ -990,9 +1060,40 @@ lifecycleRoute.post(
         );
       }
 
-      // Get all active family members
-      const members = await getActiveFamilyMembers(creatorId);
-      if (members.length === 0) {
+      // Get consent-eligible (living) family members
+      const { eligible, deceased } = await getConsentEligibleMembers(creatorId);
+
+      if (eligible.length === 0) {
+        if (deceased.length > 0) {
+          // All family members are deceased — auto-execute deletion
+          await logLifecycleAction(
+            lifecycle.id,
+            "data_deletion_auto_executed",
+            userId,
+            {
+              reason: "all_consent_members_deceased",
+              deceasedCount: deceased.length,
+            },
+          );
+
+          await deleteUserAudioFiles(creatorId);
+          await db
+            .delete(conversations)
+            .where(eq(conversations.userId, creatorId));
+          await db
+            .delete(consentRecords)
+            .where(eq(consentRecords.lifecycleId, lifecycle.id));
+          await db
+            .delete(noteLifecycle)
+            .where(eq(noteLifecycle.id, lifecycle.id));
+
+          return c.json({
+            success: true,
+            deletionStatus: "completed",
+            autoDeleted: true,
+          });
+        }
+
         return c.json(
           {
             error: "家族メンバーが登録されていません",
@@ -1012,7 +1113,7 @@ lifecycleRoute.post(
           })
           .where(eq(noteLifecycle.id, lifecycle.id));
 
-        const consentValues = members.map((m) => ({
+        const consentValues = eligible.map((m) => ({
           lifecycleId: lifecycle.id,
           familyMemberId: m.familyMemberId,
         }));
@@ -1025,11 +1126,14 @@ lifecycleRoute.post(
         lifecycle.id,
         "data_deletion_initiated",
         userId,
-        { memberCount: members.length },
+        {
+          memberCount: eligible.length,
+          skippedDeceasedCount: deceased.length,
+        },
       );
 
       const creatorName = await getCreatorName(creatorId);
-      const memberUserIds = members.map((m) => m.memberId);
+      const memberUserIds = eligible.map((m) => m.memberId);
       await notifyFamilyMembers(
         memberUserIds,
         "deletion_consent_requested",
@@ -1399,6 +1503,7 @@ lifecycleRoute.get(
           familyMemberId: deletionConsentRecords.familyMemberId,
           consented: deletionConsentRecords.consented,
           consentedAt: deletionConsentRecords.consentedAt,
+          autoResolved: deletionConsentRecords.autoResolved,
           memberName: users.name,
         })
         .from(deletionConsentRecords)
@@ -1420,6 +1525,7 @@ lifecycleRoute.get(
               memberName: r.memberName,
               consented: r.consented,
               consentedAt: r.consentedAt ? r.consentedAt.toISOString() : null,
+              autoResolved: r.autoResolved,
             }))
           : [];
 

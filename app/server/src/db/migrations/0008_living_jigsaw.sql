@@ -1,0 +1,2 @@
+ALTER TABLE "consent_records" ADD COLUMN "auto_resolved" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "deletion_consent_records" ADD COLUMN "auto_resolved" boolean DEFAULT false NOT NULL;

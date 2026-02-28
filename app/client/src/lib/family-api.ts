@@ -156,6 +156,7 @@ export interface ConsentRecord {
   memberName?: string;
   consented: boolean | null;
   consentedAt: string | null;
+  autoResolved?: boolean;
 }
 
 export interface ConsentStatus {
@@ -421,6 +422,7 @@ export interface DeletionConsentRecord {
   memberName: string;
   consented: boolean | null;
   consentedAt: string | null;
+  autoResolved?: boolean;
 }
 
 export interface DeletionConsentStatus {

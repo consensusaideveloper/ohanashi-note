@@ -513,6 +513,7 @@ export const UI_MESSAGES = {
     consentDetailExplanation:
       "同意するとノートが開封され、中身を見ることができるようになります。一度同意すると取り消すことはできませんのでご注意ください。",
     consentGiven: "同意しました",
+    consentAutoResolved: "逝去のため自動同意",
     consentDeclined: "同意しませんでした",
     consentPending: "未回答",
     noteOpened: "ノートが開封されました",

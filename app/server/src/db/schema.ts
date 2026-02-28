@@ -161,6 +161,7 @@ export const consentRecords = pgTable(
       .references(() => familyMembers.id, { onDelete: "cascade" }),
     consented: boolean("consented"),
     consentedAt: timestamp("consented_at", tz),
+    autoResolved: boolean("auto_resolved").notNull().default(false),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (table) => [
@@ -186,6 +187,7 @@ export const deletionConsentRecords = pgTable(
       .references(() => familyMembers.id, { onDelete: "cascade" }),
     consented: boolean("consented"),
     consentedAt: timestamp("consented_at", tz),
+    autoResolved: boolean("auto_resolved").notNull().default(false),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (table) => [

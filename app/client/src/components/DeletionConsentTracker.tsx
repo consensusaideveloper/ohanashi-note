@@ -16,11 +16,28 @@ interface DeletionConsentTrackerProps {
   creatorName: string;
 }
 
+interface DeletionConsentIconProps {
+  consented: boolean | null;
+  autoResolved?: boolean;
+}
+
 function DeletionConsentIcon({
   consented,
-}: {
-  consented: boolean | null;
-}): ReactNode {
+  autoResolved,
+}: DeletionConsentIconProps): ReactNode {
+  if (consented === true && autoResolved) {
+    return (
+      <svg
+        className="w-6 h-6 text-text-secondary flex-none"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    );
+  }
   if (consented === true) {
     return (
       <svg
@@ -265,10 +282,20 @@ export function DeletionConsentTracker({
                       key={record.memberName}
                       className="flex items-center gap-3 px-3 py-2 rounded-card bg-bg-primary"
                     >
-                      <DeletionConsentIcon consented={record.consented} />
-                      <p className="text-lg text-text-primary">
-                        {record.memberName}
-                      </p>
+                      <DeletionConsentIcon
+                        consented={record.consented}
+                        autoResolved={record.autoResolved}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-lg text-text-primary">
+                          {record.memberName}
+                        </p>
+                        {record.autoResolved && record.consented === true && (
+                          <p className="text-base text-text-secondary">
+                            逝去のため自動同意
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
