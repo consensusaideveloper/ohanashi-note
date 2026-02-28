@@ -22,6 +22,8 @@ export const AUDIO_SAMPLE_RATE = 24000;
 export const AUDIO_BUFFER_SIZE = 4096;
 
 // --- Echo suppression settings ---
+/** Minimum RMS level to send audio to OpenAI. Simple per-chunk filter (no state machine). */
+export const NOISE_FLOOR_RMS = 0.01;
 /** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
 export const POST_SPEECH_COOLDOWN_MS = 500;
 /** Minimum character count for a user transcript to be considered valid input. */
@@ -61,7 +63,7 @@ export const SESSION_CONFIG = {
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
-    threshold: 0.6, // lowered for mobile compatibility; Whisper filter handles noise
+    threshold: 0.7, // balanced: client noise floor + server VAD + Whisper filter
     prefix_padding_ms: 300,
     silence_duration_ms: 600, // lowered for faster response
   },

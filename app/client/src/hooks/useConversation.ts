@@ -13,6 +13,7 @@ import {
   MIN_TRANSCRIPT_LENGTH,
   BARGE_IN_RMS_THRESHOLD,
   BARGE_IN_CONSECUTIVE_CHUNKS,
+  NOISE_FLOOR_RMS,
   SILENCE_DURATION_MS_MAP,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
@@ -419,6 +420,12 @@ export function useConversation(): UseConversationReturn {
           bargeInCountRef.current = 0;
           return; // Below threshold — skip (echo or noise)
         }
+      }
+
+      // Simple noise floor: skip chunks that are clearly silence/ambient noise.
+      // No state machine — just a per-chunk threshold check.
+      if (rmsLevel < NOISE_FLOOR_RMS) {
+        return;
       }
 
       ws.send({

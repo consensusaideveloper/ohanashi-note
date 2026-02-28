@@ -11,6 +11,7 @@ import {
   MIN_TRANSCRIPT_LENGTH,
   BARGE_IN_RMS_THRESHOLD,
   BARGE_IN_CONSECUTIVE_CHUNKS,
+  NOISE_FLOOR_RMS,
   FONT_SIZE_LABELS,
   SPEAKING_SPEED_LABELS,
   SILENCE_DURATION_LABELS,
@@ -195,6 +196,11 @@ export function useOnboardingConversation({
           bargeInCountRef.current = 0;
           return;
         }
+      }
+
+      // Simple noise floor: skip chunks that are clearly silence/ambient noise.
+      if (rmsLevel < NOISE_FLOOR_RMS) {
+        return;
       }
 
       ws.send({ type: "input_audio_buffer.append", audio: base64 });
