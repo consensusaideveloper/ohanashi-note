@@ -487,6 +487,11 @@ export const UI_MESSAGES = {
     inviteCreated: "招待リンクを作成しました",
     memberRemoved: "家族を削除しました",
     representativeSet: "代表者に指定しました",
+    noRepresentativeWarning: "代表者がまだ指定されていません",
+    noRepresentativeHint:
+      "代表者を指定しておくと、将来ノートの開封手続きをスムーズに行えます。ご家族のどなたかを代表者に指定することをおすすめします。",
+    noRepresentativeFallbackNote:
+      "代表者が指定されていないため、家族メンバーとしてこの操作を行えます。",
     noFamilyMembers: "まだ家族が登録されていません",
     inviteExpired: "この招待リンクは期限切れです",
     inviteAccepted: "家族として登録されました",
@@ -537,6 +542,8 @@ export const UI_MESSAGES = {
     accessPresetsRecommendationHint:
       "この方はこのカテゴリを見せたいと設定していました",
     accessPresetsApplyAll: "推奨どおりに設定する",
+    representativeFullAccess:
+      "代表者はすべてのカテゴリに常にアクセスできます。",
     removeButton: "削除",
     editMemberDescription: "さんの情報を編集します",
     noNotifications: "通知はありません",

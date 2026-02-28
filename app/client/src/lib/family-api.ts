@@ -37,6 +37,7 @@ export interface FamilyConnection {
   role: "representative" | "member";
   lifecycleStatus: string;
   hasPendingConsent: boolean;
+  hasRepresentative: boolean;
 }
 
 export interface FamilyMemberListResponse {
@@ -121,6 +122,7 @@ export interface LifecycleState {
   deathReportedAt: string | null;
   openedAt: string | null;
   createdAt?: string;
+  hasRepresentative: boolean;
 }
 
 export async function getLifecycleState(
@@ -258,7 +260,7 @@ export interface FamilyConversation {
   keyPoints: unknown;
 }
 
-export interface CategoryNoteData {
+export interface FamilyCategoryNoteResponse {
   categoryId: string;
   conversations: FamilyConversation[];
 }
@@ -295,11 +297,11 @@ export async function revokeCategoryAccess(
 export async function getCategoryNote(
   creatorId: string,
   categoryId: string,
-): Promise<CategoryNoteData> {
+): Promise<FamilyCategoryNoteResponse> {
   const response = await fetchWithAuth(
     `/api/access/${creatorId}/note/${categoryId}`,
   );
-  return response.json() as Promise<CategoryNoteData>;
+  return response.json() as Promise<FamilyCategoryNoteResponse>;
 }
 
 export async function getFamilyConversations(

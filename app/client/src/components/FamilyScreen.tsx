@@ -406,6 +406,19 @@ export function FamilyScreen({
                             {String(MAX_REPRESENTATIVES)}名
                           </p>
                         )}
+                        {representativeCount === 0 && (
+                          <div
+                            className="rounded-card border border-warning/30 bg-warning-light p-4 space-y-2"
+                            role="alert"
+                          >
+                            <p className="text-lg text-warning font-medium">
+                              {UI_MESSAGES.family.noRepresentativeWarning}
+                            </p>
+                            <p className="text-base text-text-secondary">
+                              {UI_MESSAGES.family.noRepresentativeHint}
+                            </p>
+                          </div>
+                        )}
                         {members.map((member) => (
                           <FamilyMemberCard
                             key={member.id}

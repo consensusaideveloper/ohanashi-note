@@ -17,6 +17,7 @@ import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
 import {
   getCreatorName,
+  hasActiveRepresentative,
   logLifecycleAction,
 } from "../lib/lifecycle-helpers.js";
 
@@ -783,6 +784,15 @@ familyRoute.get("/api/family/my-connections", async (c: Context) => {
         ),
       );
 
+    // Collect unique creator IDs to check representative status
+    const creatorIds = [...new Set(rows.map((row) => row.creatorId))];
+    const repStatusMap = new Map<string, boolean>();
+    await Promise.all(
+      creatorIds.map(async (cid) => {
+        repStatusMap.set(cid, await hasActiveRepresentative(cid));
+      }),
+    );
+
     const result = rows.map((row) => {
       const lifecycleStatus = row.lifecycleStatus ?? "active";
       const hasPendingConsent =
@@ -796,6 +806,7 @@ familyRoute.get("/api/family/my-connections", async (c: Context) => {
         role: row.role,
         lifecycleStatus,
         hasPendingConsent,
+        hasRepresentative: repStatusMap.get(row.creatorId) ?? false,
       };
     });
 

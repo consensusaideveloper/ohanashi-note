@@ -17,6 +17,7 @@ import { logger } from "../lib/logger.js";
 import {
   getCreatorName,
   getActiveFamilyMembers,
+  hasActiveRepresentative,
   notifyFamilyMembers,
   logLifecycleAction,
 } from "../lib/lifecycle-helpers.js";
@@ -49,9 +50,11 @@ lifecycleRoute.get("/api/lifecycle/:creatorId", async (c: Context) => {
       where: eq(noteLifecycle.creatorId, creatorId),
     });
 
+    const hasRep = await hasActiveRepresentative(creatorId);
+
     // If no record exists, return implicit default
     if (!record) {
-      return c.json({ status: "active" });
+      return c.json({ status: "active", hasRepresentative: hasRep });
     }
 
     return c.json({
@@ -62,6 +65,7 @@ lifecycleRoute.get("/api/lifecycle/:creatorId", async (c: Context) => {
         : null,
       openedAt: record.openedAt ? record.openedAt.toISOString() : null,
       createdAt: record.createdAt.toISOString(),
+      hasRepresentative: hasRep,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -212,13 +216,26 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: representative ONLY
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
 
       if (role !== "representative") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "cancel-death-report" },
         );
       }
 
@@ -315,13 +332,26 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: representative ONLY
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
 
       if (role !== "representative") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "initiate-consent" },
         );
       }
 
@@ -667,7 +697,12 @@ lifecycleRoute.get(
         );
       }
 
-      if (role === "representative") {
+      // Representatives see all records; members also see all when no representative exists
+      const showAllRecords =
+        role === "representative" ||
+        !(await hasActiveRepresentative(creatorId));
+
+      if (showAllRecords) {
         // Return ALL consent records with member names
         const records = await db
           .select({
@@ -775,13 +810,26 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: representative ONLY
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
 
       if (role !== "representative") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "reset-consent" },
         );
       }
 

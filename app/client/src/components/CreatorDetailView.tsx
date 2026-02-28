@@ -42,6 +42,9 @@ export function CreatorDetailView({
   const [lifecycleStatus, setLifecycleStatus] = useState(
     connection.lifecycleStatus,
   );
+  const [hasRepresentative, setHasRepresentative] = useState(
+    connection.hasRepresentative,
+  );
   const [isLoadingLifecycle, setIsLoadingLifecycle] = useState(false);
   const [showDeathReportDialog, setShowDeathReportDialog] = useState(false);
   const [showCancelDeathConfirm, setShowCancelDeathConfirm] = useState(false);
@@ -54,12 +57,15 @@ export function CreatorDetailView({
     useToast();
 
   const isRepresentative = connection.role === "representative";
+  const canPerformRepresentativeActions =
+    isRepresentative || (!hasRepresentative && connection.role === "member");
 
   const refreshLifecycle = useCallback((): void => {
     setIsLoadingLifecycle(true);
     void getLifecycleState(connection.creatorId)
       .then((state) => {
         setLifecycleStatus(state.status);
+        setHasRepresentative(state.hasRepresentative);
       })
       .catch((err: unknown) => {
         console.error("Failed to refresh lifecycle state:", {
@@ -247,56 +253,65 @@ export function CreatorDetailView({
           {/* Actions based on lifecycle status and role */}
           {!isLoadingLifecycle && (
             <>
-              {/* Active state: representative can report death */}
-              {lifecycleStatus === "active" && isRepresentative && (
-                <section className="space-y-3">
+              {/* Active state: representative (or fallback member) can report death */}
+              {lifecycleStatus === "active" &&
+                canPerformRepresentativeActions && (
+                  <section className="space-y-3">
+                    <p className="text-lg text-text-secondary">
+                      {UI_MESSAGES.family.noteNotOpened}
+                    </p>
+                    <button
+                      type="button"
+                      className="w-full min-h-11 rounded-full border border-error text-error bg-bg-surface text-lg transition-colors active:bg-error-light disabled:opacity-50"
+                      onClick={handleOpenDeathReport}
+                      disabled={isProcessing}
+                    >
+                      {UI_MESSAGES.family.reportDeathButton}
+                    </button>
+                  </section>
+                )}
+
+              {lifecycleStatus === "active" &&
+                !canPerformRepresentativeActions && (
                   <p className="text-lg text-text-secondary">
                     {UI_MESSAGES.family.noteNotOpened}
                   </p>
-                  <button
-                    type="button"
-                    className="w-full min-h-11 rounded-full border border-error text-error bg-bg-surface text-lg transition-colors active:bg-error-light disabled:opacity-50"
-                    onClick={handleOpenDeathReport}
-                    disabled={isProcessing}
-                  >
-                    {UI_MESSAGES.family.reportDeathButton}
-                  </button>
-                </section>
-              )}
+                )}
 
-              {lifecycleStatus === "active" && !isRepresentative && (
-                <p className="text-lg text-text-secondary">
-                  {UI_MESSAGES.family.noteNotOpened}
-                </p>
-              )}
+              {/* Death reported: representative (or fallback member) can initiate consent or cancel */}
+              {lifecycleStatus === "death_reported" &&
+                canPerformRepresentativeActions && (
+                  <section className="space-y-3">
+                    {!isRepresentative && (
+                      <p className="text-base text-text-secondary">
+                        {UI_MESSAGES.family.noRepresentativeFallbackNote}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="w-full min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg transition-colors active:bg-accent-primary-hover disabled:opacity-50"
+                      onClick={handleOpenInitiateConsent}
+                      disabled={isProcessing}
+                    >
+                      {UI_MESSAGES.family.initiateConsentButton}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full min-h-11 rounded-full border border-border text-text-secondary bg-bg-surface text-lg transition-colors active:bg-bg-surface-hover disabled:opacity-50"
+                      onClick={handleOpenCancelDeath}
+                      disabled={isProcessing}
+                    >
+                      {UI_MESSAGES.family.cancelDeathReportButton}
+                    </button>
+                  </section>
+                )}
 
-              {/* Death reported: representative can initiate consent or cancel */}
-              {lifecycleStatus === "death_reported" && isRepresentative && (
-                <section className="space-y-3">
-                  <button
-                    type="button"
-                    className="w-full min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg transition-colors active:bg-accent-primary-hover disabled:opacity-50"
-                    onClick={handleOpenInitiateConsent}
-                    disabled={isProcessing}
-                  >
-                    {UI_MESSAGES.family.initiateConsentButton}
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full min-h-11 rounded-full border border-border text-text-secondary bg-bg-surface text-lg transition-colors active:bg-bg-surface-hover disabled:opacity-50"
-                    onClick={handleOpenCancelDeath}
-                    disabled={isProcessing}
-                  >
-                    {UI_MESSAGES.family.cancelDeathReportButton}
-                  </button>
-                </section>
-              )}
-
-              {lifecycleStatus === "death_reported" && !isRepresentative && (
-                <p className="text-lg text-text-secondary">
-                  {UI_MESSAGES.family.waitingForRepresentative}
-                </p>
-              )}
+              {lifecycleStatus === "death_reported" &&
+                !canPerformRepresentativeActions && (
+                  <p className="text-lg text-text-secondary">
+                    {UI_MESSAGES.family.waitingForRepresentative}
+                  </p>
+                )}
 
               {/* Consent gathering: show consent UI for all members */}
               {lifecycleStatus === "consent_gathering" && (
@@ -306,7 +321,7 @@ export function CreatorDetailView({
                     creatorName={connection.creatorName}
                     onLifecycleChanged={refreshLifecycle}
                   />
-                  {isRepresentative && (
+                  {canPerformRepresentativeActions && (
                     <ConsentProgressTracker creatorId={connection.creatorId} />
                   )}
                 </section>
@@ -332,7 +347,7 @@ export function CreatorDetailView({
                 </section>
               )}
 
-              {isOpened && isRepresentative && (
+              {isOpened && canPerformRepresentativeActions && (
                 <CategoryAccessManager creatorId={connection.creatorId} />
               )}
 

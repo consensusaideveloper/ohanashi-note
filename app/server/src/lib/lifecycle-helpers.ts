@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import {
@@ -22,6 +22,28 @@ export async function getCreatorName(creatorId: string): Promise<string> {
     columns: { name: true },
   });
   return user?.name || "ご利用者";
+}
+
+// --- Representative check ---
+
+/**
+ * Check whether a creator has at least one active family member
+ * with the "representative" role.
+ */
+export async function hasActiveRepresentative(
+  creatorId: string,
+): Promise<boolean> {
+  const [result] = await db
+    .select({ value: count() })
+    .from(familyMembers)
+    .where(
+      and(
+        eq(familyMembers.creatorId, creatorId),
+        eq(familyMembers.role, "representative"),
+        eq(familyMembers.isActive, true),
+      ),
+    );
+  return (result?.value ?? 0) > 0;
 }
 
 // --- Active family members ---

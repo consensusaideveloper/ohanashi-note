@@ -331,9 +331,16 @@ function MemberAccessCard({
   recommendedSet,
   onToggle,
 }: MemberAccessCardProps): ReactNode {
+  const isRepresentativeMember = member.role === "representative";
+
   return (
     <div className="rounded-card border border-border-light bg-bg-surface p-4 space-y-3">
       <p className="text-xl font-medium text-text-primary">{member.name}</p>
+      {isRepresentativeMember && (
+        <p className="text-base text-text-secondary">
+          {UI_MESSAGES.family.representativeFullAccess}
+        </p>
+      )}
 
       <div className="space-y-2">
         {QUESTION_CATEGORIES.map((category) => {
@@ -349,7 +356,7 @@ function MemberAccessCard({
               label={category.label}
               icon={category.icon}
               checked={hasAccess}
-              disabled={isToggling}
+              disabled={isToggling || isRepresentativeMember}
               isRecommended={isRecommended}
               member={member}
               onToggle={onToggle}
@@ -410,7 +417,7 @@ function CategoryCheckbox({
         {isRecommended && !checked && (
           <span className="ml-auto text-base text-accent-secondary">推奨</span>
         )}
-        {disabled && (
+        {disabled && member.role !== "representative" && (
           <span className="ml-auto">
             <span className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin inline-block" />
           </span>
