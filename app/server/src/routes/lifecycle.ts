@@ -9,6 +9,8 @@ import {
   deletionConsentRecords,
   users,
   conversations,
+  accessPresets,
+  categoryAccess,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
@@ -585,6 +587,31 @@ lifecycleRoute.post("/api/lifecycle/:creatorId/consent", async (c: Context) => {
           .returning();
 
         autoOpened = !!openedRecord;
+
+        // Auto-apply creator's access presets to categoryAccess
+        if (autoOpened) {
+          const presets = await tx
+            .select({
+              familyMemberId: accessPresets.familyMemberId,
+              categoryId: accessPresets.categoryId,
+            })
+            .from(accessPresets)
+            .where(eq(accessPresets.creatorId, creatorId));
+
+          if (presets.length > 0) {
+            await tx
+              .insert(categoryAccess)
+              .values(
+                presets.map((p) => ({
+                  lifecycleId: lifecycle.id,
+                  familyMemberId: p.familyMemberId,
+                  categoryId: p.categoryId,
+                  grantedBy: null,
+                })),
+              )
+              .onConflictDoNothing();
+          }
+        }
       }
 
       return {

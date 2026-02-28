@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
+import { QUESTION_CATEGORIES } from "../lib/questions";
 import { WheelPicker } from "./WheelPicker";
 import { WheelPickerTrigger } from "./WheelPickerTrigger";
 
@@ -54,6 +55,8 @@ export function TodoCreateDialog({
   const [assigneeId, setAssigneeId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [isAssigneePickerOpen, setIsAssigneePickerOpen] = useState(false);
+  const [sourceCategory, setSourceCategory] = useState("");
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
 
   const assigneeOptions: readonly WheelPickerOption[] = useMemo(
     () => [
@@ -64,6 +67,17 @@ export function TodoCreateDialog({
       })),
     ],
     [familyMembers],
+  );
+
+  const categoryOptions: readonly WheelPickerOption[] = useMemo(
+    () => [
+      { value: "", label: UI_MESSAGES.todo.noCategory },
+      ...QUESTION_CATEGORIES.map((cat) => ({
+        value: cat.id,
+        label: `${cat.icon} ${cat.label}`,
+      })),
+    ],
+    [],
   );
 
   useEffect(() => {
@@ -85,6 +99,8 @@ export function TodoCreateDialog({
       setAssigneeId("");
       setDueDate("");
       setIsAssigneePickerOpen(false);
+      setSourceCategory("");
+      setIsCategoryPickerOpen(false);
     }
   }, [isOpen]);
 
@@ -112,6 +128,7 @@ export function TodoCreateDialog({
     const data: {
       title: string;
       description?: string;
+      sourceCategory?: string;
       priority?: TodoPriority;
       assigneeId?: string;
       dueDate?: string;
@@ -120,6 +137,9 @@ export function TodoCreateDialog({
     const trimmedDescription = description.trim();
     if (trimmedDescription.length > 0) {
       data.description = trimmedDescription;
+    }
+    if (sourceCategory.length > 0) {
+      data.sourceCategory = sourceCategory;
     }
     if (priority !== "medium") {
       data.priority = priority;
@@ -132,7 +152,15 @@ export function TodoCreateDialog({
     }
 
     onCreate(data);
-  }, [title, description, priority, assigneeId, dueDate, onCreate]);
+  }, [
+    title,
+    description,
+    sourceCategory,
+    priority,
+    assigneeId,
+    dueDate,
+    onCreate,
+  ]);
 
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -160,6 +188,22 @@ export function TodoCreateDialog({
     (selectedValue: string): void => {
       setAssigneeId(selectedValue);
       setIsAssigneePickerOpen(false);
+    },
+    [],
+  );
+
+  const handleOpenCategoryPicker = useCallback((): void => {
+    setIsCategoryPickerOpen(true);
+  }, []);
+
+  const handleCloseCategoryPicker = useCallback((): void => {
+    setIsCategoryPickerOpen(false);
+  }, []);
+
+  const handleCategoryPickerConfirm = useCallback(
+    (selectedValue: string): void => {
+      setSourceCategory(selectedValue);
+      setIsCategoryPickerOpen(false);
     },
     [],
   );
@@ -218,6 +262,33 @@ export function TodoCreateDialog({
             value={description}
             onChange={handleDescriptionChange}
             rows={3}
+          />
+        </div>
+
+        {/* Category */}
+        <div className="space-y-1">
+          <label
+            htmlFor="todo-category"
+            className="text-base font-medium text-text-primary"
+          >
+            {UI_MESSAGES.todo.categoryLabel}
+          </label>
+          <WheelPickerTrigger
+            id="todo-category"
+            displayValue={
+              categoryOptions.find((o) => o.value === sourceCategory)?.label ??
+              ""
+            }
+            placeholder={UI_MESSAGES.todo.noCategory}
+            onClick={handleOpenCategoryPicker}
+          />
+          <WheelPicker
+            isOpen={isCategoryPickerOpen}
+            options={categoryOptions}
+            selectedValue={sourceCategory}
+            title={UI_MESSAGES.wheelPicker.categoryTitle}
+            onConfirm={handleCategoryPickerConfirm}
+            onCancel={handleCloseCategoryPicker}
           />
         </div>
 

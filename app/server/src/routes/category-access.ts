@@ -13,6 +13,11 @@ import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { getUserRole } from "../middleware/role.js";
 import { logger } from "../lib/logger.js";
+import {
+  getCreatorName,
+  notifyFamilyMembers,
+} from "../lib/lifecycle-helpers.js";
+import { r2 } from "../lib/r2.js";
 
 import type { Context } from "hono";
 
@@ -32,6 +37,21 @@ const ALL_CATEGORIES = [
   "trust",
   "support",
 ] as const;
+
+/** Category ID to Japanese label mapping for notification messages. */
+const CATEGORY_LABELS: Record<string, string> = {
+  memories: "思い出",
+  people: "大事な人・ペット",
+  house: "生活",
+  medical: "医療・介護",
+  funeral: "葬儀・供養",
+  money: "お金・資産",
+  work: "仕事・事業",
+  digital: "デジタル",
+  legal: "相続・遺言",
+  trust: "信託・委任",
+  support: "支援制度",
+};
 
 // --- Helpers ---
 
@@ -90,6 +110,51 @@ function formatConversation(
     coveredQuestionIds: row.coveredQuestionIds ?? [],
     keyPoints: row.keyPoints ?? null,
   };
+}
+
+/**
+ * Extract the category prefix from a question ID (e.g. "memories-01" → "memories").
+ */
+function questionCategoryId(questionId: string): string | undefined {
+  const idx = questionId.lastIndexOf("-");
+  return idx > 0 ? questionId.slice(0, idx) : undefined;
+}
+
+/**
+ * Check whether a conversation contains content belonging to any of
+ * the accessible categories.  Checks three sources: the conversation's
+ * own category field, the noteEntries question IDs, and coveredQuestionIds.
+ */
+function hasAccessibleContent(
+  row: Pick<
+    typeof conversations.$inferSelect,
+    "category" | "noteEntries" | "coveredQuestionIds"
+  >,
+  accessibleCategories: Set<string>,
+): boolean {
+  if (row.category !== null && accessibleCategories.has(row.category)) {
+    return true;
+  }
+  if (Array.isArray(row.noteEntries)) {
+    for (const entry of row.noteEntries) {
+      const typed = entry as { questionId?: string };
+      if (typeof typed.questionId === "string") {
+        const catId = questionCategoryId(typed.questionId);
+        if (catId !== undefined && accessibleCategories.has(catId)) {
+          return true;
+        }
+      }
+    }
+  }
+  if (Array.isArray(row.coveredQuestionIds)) {
+    for (const qId of row.coveredQuestionIds) {
+      const catId = questionCategoryId(qId);
+      if (catId !== undefined && accessibleCategories.has(catId)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // --- Route ---
@@ -234,6 +299,23 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
       );
     }
 
+    // Send notification to the affected member (best-effort)
+    const member = await db.query.familyMembers.findFirst({
+      where: eq(familyMembers.id, familyMemberId),
+      columns: { memberId: true },
+    });
+    if (member) {
+      const creatorName = await getCreatorName(creatorId);
+      const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
+      await notifyFamilyMembers(
+        [member.memberId],
+        "category_access_granted",
+        "カテゴリへのアクセスが許可されました",
+        `${creatorName}さんのノートの「${categoryLabel}」カテゴリが閲覧可能になりました`,
+        creatorId,
+      );
+    }
+
     return c.json(
       {
         id: created.id,
@@ -337,6 +419,23 @@ categoryAccessRoute.delete(
             code: "NOT_FOUND",
           },
           404,
+        );
+      }
+
+      // Send notification to the affected member (best-effort)
+      const member = await db.query.familyMembers.findFirst({
+        where: eq(familyMembers.id, familyMemberId),
+        columns: { memberId: true },
+      });
+      if (member) {
+        const creatorName = await getCreatorName(creatorId);
+        const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
+        await notifyFamilyMembers(
+          [member.memberId],
+          "category_access_revoked",
+          "カテゴリへのアクセスが変更されました",
+          `${creatorName}さんのノートの「${categoryLabel}」カテゴリへのアクセスが変更されました`,
+          creatorId,
         );
       }
 
@@ -531,9 +630,8 @@ categoryAccessRoute.get(
         accessRows.map((row) => row.categoryId),
       );
 
-      const filtered = allRows.filter(
-        (row) =>
-          row.category !== null && accessibleCategories.has(row.category),
+      const filtered = allRows.filter((row) =>
+        hasAccessibleContent(row, accessibleCategories),
       );
 
       return c.json({
@@ -549,6 +647,266 @@ categoryAccessRoute.get(
         {
           error: "会話一覧の取得に失敗しました",
           code: "GET_CONVERSATIONS_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** Format a conversation DB row with full detail (transcript, emotions, etc.). */
+function formatConversationDetail(
+  row: typeof conversations.$inferSelect,
+): Record<string, unknown> {
+  return {
+    id: row.id,
+    category: row.category,
+    startedAt: row.startedAt.getTime(),
+    endedAt: row.endedAt ? row.endedAt.getTime() : null,
+    transcript: row.transcript ?? [],
+    summary: row.summary,
+    summaryStatus: row.summaryStatus,
+    oneLinerSummary: row.oneLinerSummary,
+    emotionAnalysis: row.emotionAnalysis,
+    discussedCategories: row.discussedCategories,
+    keyPoints: row.keyPoints ?? null,
+    noteEntries: row.noteEntries ?? [],
+    coveredQuestionIds: row.coveredQuestionIds ?? [],
+    audioAvailable: row.audioAvailable,
+  };
+}
+
+/** GET /api/access/:creatorId/conversations/:conversationId — Single conversation detail for family. */
+categoryAccessRoute.get(
+  "/api/access/:creatorId/conversations/:conversationId",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+      const conversationId = c.req.param("conversationId");
+
+      const role = await getUserRole(userId, creatorId);
+
+      if (
+        role !== "creator" &&
+        role !== "representative" &&
+        role !== "member"
+      ) {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      const lifecycleResult = await requireOpenedLifecycle(c, creatorId, role);
+      if (!lifecycleResult.ok) {
+        return lifecycleResult.response;
+      }
+
+      const row = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, conversationId),
+          eq(conversations.userId, creatorId),
+        ),
+      });
+
+      if (!row) {
+        return c.json(
+          { error: "会話が見つかりません", code: "NOT_FOUND" },
+          404,
+        );
+      }
+
+      // Representatives and creators can view any conversation
+      if (role === "representative" || role === "creator") {
+        return c.json(formatConversationDetail(row));
+      }
+
+      // Members: verify the conversation contains content in accessible categories
+      const membership = await db.query.familyMembers.findFirst({
+        where: and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.memberId, userId),
+          eq(familyMembers.isActive, true),
+        ),
+        columns: { id: true },
+      });
+
+      if (!membership) {
+        return c.json(
+          { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+          404,
+        );
+      }
+
+      const accessRows = await db
+        .select({ categoryId: categoryAccess.categoryId })
+        .from(categoryAccess)
+        .where(
+          and(
+            eq(categoryAccess.lifecycleId, lifecycleResult.lifecycle.id),
+            eq(categoryAccess.familyMemberId, membership.id),
+          ),
+        );
+
+      const accessibleCategories = new Set(accessRows.map((r) => r.categoryId));
+
+      if (!hasAccessibleContent(row, accessibleCategories)) {
+        return c.json(
+          { error: "この会話を閲覧する権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      return c.json(formatConversationDetail(row));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to get conversation detail", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+        conversationId: c.req.param("conversationId"),
+      });
+      return c.json(
+        {
+          error: "会話の取得に失敗しました",
+          code: "GET_CONVERSATION_DETAIL_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
+
+/** GET /api/access/:creatorId/conversations/:conversationId/audio-url — Signed audio download URL for family. */
+categoryAccessRoute.get(
+  "/api/access/:creatorId/conversations/:conversationId/audio-url",
+  async (c: Context) => {
+    try {
+      if (r2 === null) {
+        return c.json(
+          {
+            error: "音声ストレージが設定されていません",
+            code: "R2_NOT_CONFIGURED",
+          },
+          503,
+        );
+      }
+
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const creatorId = c.req.param("creatorId");
+      const conversationId = c.req.param("conversationId");
+
+      const role = await getUserRole(userId, creatorId);
+
+      if (
+        role !== "creator" &&
+        role !== "representative" &&
+        role !== "member"
+      ) {
+        return c.json(
+          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+          403,
+        );
+      }
+
+      const lifecycleResult = await requireOpenedLifecycle(c, creatorId, role);
+      if (!lifecycleResult.ok) {
+        return lifecycleResult.response;
+      }
+
+      const row = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, conversationId),
+          eq(conversations.userId, creatorId),
+        ),
+        columns: {
+          id: true,
+          audioAvailable: true,
+          audioStorageKey: true,
+          category: true,
+          noteEntries: true,
+          coveredQuestionIds: true,
+        },
+      });
+
+      if (!row) {
+        return c.json(
+          { error: "会話が見つかりません", code: "NOT_FOUND" },
+          404,
+        );
+      }
+
+      if (!row.audioAvailable || row.audioStorageKey === null) {
+        return c.json(
+          {
+            error: "この会話には録音データがありません",
+            code: "NO_AUDIO",
+          },
+          404,
+        );
+      }
+
+      // Members: verify category access
+      if (role === "member") {
+        const membership = await db.query.familyMembers.findFirst({
+          where: and(
+            eq(familyMembers.creatorId, creatorId),
+            eq(familyMembers.memberId, userId),
+            eq(familyMembers.isActive, true),
+          ),
+          columns: { id: true },
+        });
+
+        if (!membership) {
+          return c.json(
+            {
+              error: "家族メンバーが見つかりません",
+              code: "MEMBER_NOT_FOUND",
+            },
+            404,
+          );
+        }
+
+        const accessRows = await db
+          .select({ categoryId: categoryAccess.categoryId })
+          .from(categoryAccess)
+          .where(
+            and(
+              eq(categoryAccess.lifecycleId, lifecycleResult.lifecycle.id),
+              eq(categoryAccess.familyMemberId, membership.id),
+            ),
+          );
+
+        const accessibleCategories = new Set(
+          accessRows.map((r) => r.categoryId),
+        );
+
+        if (!hasAccessibleContent(row, accessibleCategories)) {
+          return c.json(
+            {
+              error: "この会話の音声を再生する権限がありません",
+              code: "FORBIDDEN",
+            },
+            403,
+          );
+        }
+      }
+
+      const downloadUrl = await r2.generateDownloadUrl(row.audioStorageKey);
+      return c.json({ downloadUrl });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to generate family audio download URL", {
+        error: message,
+        creatorId: c.req.param("creatorId"),
+        conversationId: c.req.param("conversationId"),
+      });
+      return c.json(
+        {
+          error: "録音データの取得に失敗しました",
+          code: "FAMILY_AUDIO_URL_FAILED",
         },
         500,
       );
@@ -584,6 +942,7 @@ categoryAccessRoute.get("/api/access/:creatorId/matrix", async (c: Context) => {
         familyMemberId: familyMembers.id,
         name: users.name,
         role: familyMembers.role,
+        relationshipLabel: familyMembers.relationshipLabel,
       })
       .from(familyMembers)
       .innerJoin(users, eq(users.id, familyMembers.memberId))
@@ -619,6 +978,7 @@ categoryAccessRoute.get("/api/access/:creatorId/matrix", async (c: Context) => {
       familyMemberId: member.familyMemberId,
       name: member.name,
       role: member.role,
+      relationshipLabel: member.relationshipLabel,
       categories:
         member.role === "representative"
           ? [...ALL_CATEGORIES]

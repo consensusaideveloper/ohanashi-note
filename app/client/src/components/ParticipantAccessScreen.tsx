@@ -9,6 +9,7 @@ import {
 } from "../lib/family-api";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { useToast } from "../hooks/useToast";
+import { RoleBadge } from "./RoleBadge";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
@@ -18,13 +19,20 @@ import type {
   AccessPresetRecommendation,
 } from "../lib/family-api";
 
-interface CategoryAccessManagerProps {
+/** Total number of categories for access summary display. */
+const TOTAL_CATEGORIES = QUESTION_CATEGORIES.length;
+
+interface ParticipantAccessScreenProps {
   creatorId: string;
+  creatorName: string;
+  onBack: () => void;
 }
 
-export function CategoryAccessManager({
+export function ParticipantAccessScreen({
   creatorId,
-}: CategoryAccessManagerProps): ReactNode {
+  creatorName,
+  onBack,
+}: ParticipantAccessScreenProps): ReactNode {
   const [matrix, setMatrix] = useState<AccessMatrix | null>(null);
   const [recommendations, setRecommendations] = useState<
     AccessPresetRecommendation[]
@@ -33,6 +41,9 @@ export function CategoryAccessManager({
   const [error, setError] = useState(false);
   const [togglingCells, setTogglingCells] = useState<Set<string>>(new Set());
   const [isApplyingAll, setIsApplyingAll] = useState(false);
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(
+    new Set(),
+  );
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
     useToast();
 
@@ -71,9 +82,25 @@ export function CategoryAccessManager({
     loadMatrix();
   }, [loadMatrix]);
 
+  const handleBack = useCallback((): void => {
+    onBack();
+  }, [onBack]);
+
   const handleRetry = useCallback((): void => {
     loadMatrix();
   }, [loadMatrix]);
+
+  const handleToggleExpand = useCallback((familyMemberId: string): void => {
+    setExpandedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(familyMemberId)) {
+        next.delete(familyMemberId);
+      } else {
+        next.add(familyMemberId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleToggleAccess = useCallback(
     (member: AccessMatrixMember, categoryId: string): void => {
@@ -88,7 +115,6 @@ export function CategoryAccessManager({
 
       void operation
         .then(() => {
-          // Update local state
           setMatrix((prev) => {
             if (prev === null) {
               return null;
@@ -147,7 +173,6 @@ export function CategoryAccessManager({
       return;
     }
 
-    // Find recommendations that haven't been granted yet
     const pendingGrants: { familyMemberId: string; categoryId: string }[] = [];
     for (const rec of recommendations) {
       const member = matrix.members.find(
@@ -218,7 +243,7 @@ export function CategoryAccessManager({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex-1 flex items-center justify-center">
         <p className="text-lg text-text-secondary">読み込み中...</p>
       </div>
     );
@@ -226,16 +251,23 @@ export function CategoryAccessManager({
 
   if (error) {
     return (
-      <div className="rounded-card border border-error-light bg-error-light p-4 space-y-3">
-        <p className="text-lg text-error">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
+        <p className="text-xl text-text-primary text-center leading-relaxed">
           {UI_MESSAGES.familyError.loadFailed}
         </p>
         <button
           type="button"
-          className="min-h-11 rounded-full border border-error text-error bg-bg-surface px-6 text-lg transition-colors active:bg-error-light"
+          className="min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg px-6 py-3"
           onClick={handleRetry}
         >
           もう一度読み込む
+        </button>
+        <button
+          type="button"
+          className="min-h-11 rounded-full border border-border text-text-secondary text-lg px-6 py-3"
+          onClick={handleBack}
+        >
+          戻る
         </button>
       </div>
     );
@@ -243,12 +275,10 @@ export function CategoryAccessManager({
 
   const members = matrix?.members ?? [];
 
-  // Build a set of recommended (familyMemberId, categoryId) pairs for quick lookup
   const recommendedSet = new Set(
     recommendations.map((r) => `${r.familyMemberId}-${r.categoryId}`),
   );
 
-  // Check if there are any un-applied recommendations
   const hasUnappliedRecommendations =
     recommendations.length > 0 &&
     matrix !== null &&
@@ -262,49 +292,81 @@ export function CategoryAccessManager({
     });
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">
-          {UI_MESSAGES.family.accessManagerTitle}
-        </h2>
-        <p className="text-lg text-text-secondary mt-1">
-          {UI_MESSAGES.family.accessManagerDescription}
+    <div className="flex-1 flex flex-col w-full overflow-hidden">
+      {/* Header */}
+      <div className="flex-none px-4 pt-6 pb-4">
+        <button
+          type="button"
+          className="min-h-11 flex items-center gap-2 text-lg text-accent-primary mb-3 transition-colors active:text-accent-primary-hover"
+          onClick={handleBack}
+          aria-label="戻る"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 19.5 8.25 12l7.5-7.5"
+            />
+          </svg>
+          戻る
+        </button>
+
+        <h1 className="text-2xl font-bold text-text-primary mb-1">
+          {UI_MESSAGES.family.participantAccessTitle}
+        </h1>
+        <p className="text-base text-text-secondary">
+          {creatorName}さんのノート — {members.length}人の参加者
         </p>
       </div>
 
-      {recommendations.length > 0 && hasUnappliedRecommendations && (
-        <div className="rounded-card border border-accent-secondary bg-accent-secondary/10 p-4 space-y-3">
-          <p className="text-lg text-text-primary">
-            {UI_MESSAGES.family.accessPresetsRecommendationHint}
-          </p>
-          <button
-            type="button"
-            className="w-full min-h-11 rounded-full bg-accent-secondary text-text-on-accent text-lg transition-colors disabled:opacity-50"
-            disabled={isApplyingAll}
-            onClick={handleApplyRecommendations}
-          >
-            {isApplyingAll
-              ? "設定中..."
-              : UI_MESSAGES.family.accessPresetsApplyAll}
-          </button>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 pb-8">
+        <div className="space-y-3 max-w-lg mx-auto">
+          {/* Recommendation banner */}
+          {hasUnappliedRecommendations && (
+            <div className="rounded-card border border-accent-secondary bg-accent-secondary/10 p-4 space-y-3">
+              <p className="text-lg text-text-primary">
+                {UI_MESSAGES.family.accessPresetsRecommendationHint}
+              </p>
+              <button
+                type="button"
+                className="w-full min-h-11 rounded-full bg-accent-secondary text-text-on-accent text-lg transition-colors disabled:opacity-50"
+                disabled={isApplyingAll}
+                onClick={handleApplyRecommendations}
+              >
+                {isApplyingAll
+                  ? "設定中..."
+                  : UI_MESSAGES.family.accessPresetsApplyAll}
+              </button>
+            </div>
+          )}
+
+          {members.length === 0 && (
+            <p className="text-lg text-text-secondary">
+              {UI_MESSAGES.family.noFamilyMembers}
+            </p>
+          )}
+
+          {members.map((member) => (
+            <ParticipantCard
+              key={member.familyMemberId}
+              member={member}
+              isExpanded={expandedMembers.has(member.familyMemberId)}
+              togglingCells={togglingCells}
+              recommendedSet={recommendedSet}
+              onToggleExpand={handleToggleExpand}
+              onToggleAccess={handleToggleAccess}
+            />
+          ))}
         </div>
-      )}
-
-      {members.length === 0 && (
-        <p className="text-lg text-text-secondary">
-          {UI_MESSAGES.family.noFamilyMembers}
-        </p>
-      )}
-
-      {members.map((member) => (
-        <MemberAccessCard
-          key={member.familyMemberId}
-          member={member}
-          togglingCells={togglingCells}
-          recommendedSet={recommendedSet}
-          onToggle={handleToggleAccess}
-        />
-      ))}
+      </div>
 
       <Toast
         message={toastMessage}
@@ -312,58 +374,120 @@ export function CategoryAccessManager({
         isVisible={isToastVisible}
         onDismiss={hideToast}
       />
-    </section>
+    </div>
   );
 }
 
-// --- MemberAccessCard sub-component ---
+// --- ParticipantCard sub-component ---
 
-interface MemberAccessCardProps {
+interface ParticipantCardProps {
   member: AccessMatrixMember;
+  isExpanded: boolean;
   togglingCells: Set<string>;
   recommendedSet: Set<string>;
-  onToggle: (member: AccessMatrixMember, categoryId: string) => void;
+  onToggleExpand: (familyMemberId: string) => void;
+  onToggleAccess: (member: AccessMatrixMember, categoryId: string) => void;
 }
 
-function MemberAccessCard({
+function ParticipantCard({
   member,
+  isExpanded,
   togglingCells,
   recommendedSet,
-  onToggle,
-}: MemberAccessCardProps): ReactNode {
+  onToggleExpand,
+  onToggleAccess,
+}: ParticipantCardProps): ReactNode {
   const isRepresentativeMember = member.role === "representative";
+  const accessCount = member.categories.length;
+
+  const handleExpand = useCallback((): void => {
+    onToggleExpand(member.familyMemberId);
+  }, [onToggleExpand, member.familyMemberId]);
 
   return (
-    <div className="rounded-card border border-border-light bg-bg-surface p-4 space-y-3">
-      <p className="text-xl font-medium text-text-primary">{member.name}</p>
-      {isRepresentativeMember && (
-        <p className="text-base text-text-secondary">
-          {UI_MESSAGES.family.representativeFullAccess}
-        </p>
-      )}
-
-      <div className="space-y-2">
-        {QUESTION_CATEGORIES.map((category) => {
-          const hasAccess = member.categories.includes(category.id);
-          const cellKey = `${member.familyMemberId}-${category.id}`;
-          const isToggling = togglingCells.has(cellKey);
-          const isRecommended = recommendedSet.has(cellKey);
-
-          return (
-            <CategoryCheckbox
-              key={category.id}
-              categoryId={category.id}
-              label={category.label}
-              icon={category.icon}
-              checked={hasAccess}
-              disabled={isToggling || isRepresentativeMember}
-              isRecommended={isRecommended}
-              member={member}
-              onToggle={onToggle}
+    <div className="rounded-card border border-border-light bg-bg-surface overflow-hidden">
+      {/* Card header — always visible */}
+      <button
+        type="button"
+        className={`w-full min-h-11 p-4 flex items-center gap-3 text-left transition-colors ${
+          isRepresentativeMember
+            ? ""
+            : "active:bg-bg-surface-hover cursor-pointer"
+        }`}
+        onClick={isRepresentativeMember ? undefined : handleExpand}
+        disabled={isRepresentativeMember}
+        aria-expanded={isRepresentativeMember ? undefined : isExpanded}
+        aria-label={
+          isRepresentativeMember
+            ? undefined
+            : `${member.name}のアクセス設定を${isExpanded ? "閉じる" : "開く"}`
+        }
+      >
+        {/* Expand/collapse indicator for members */}
+        {!isRepresentativeMember && (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className={`h-5 w-5 text-text-secondary flex-none transition-transform ${
+              isExpanded ? "rotate-90" : ""
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="m8.25 4.5 7.5 7.5-7.5 7.5"
             />
-          );
-        })}
-      </div>
+          </svg>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xl font-medium text-text-primary">
+              {member.name}
+            </span>
+            <RoleBadge
+              role={isRepresentativeMember ? "representative" : "member"}
+            />
+            <span className="text-base text-text-secondary">
+              ({member.relationshipLabel})
+            </span>
+          </div>
+          <p className="text-base text-text-secondary mt-1">
+            {isRepresentativeMember
+              ? UI_MESSAGES.family.allCategoriesAccessible
+              : `${accessCount}/${TOTAL_CATEGORIES}${UI_MESSAGES.family.accessSummary}`}
+          </p>
+        </div>
+      </button>
+
+      {/* Expanded category checkboxes for non-representative members */}
+      {!isRepresentativeMember && isExpanded && (
+        <div className="px-4 pb-4 space-y-2 border-t border-border-light pt-3">
+          {QUESTION_CATEGORIES.map((category) => {
+            const hasAccess = member.categories.includes(category.id);
+            const cellKey = `${member.familyMemberId}-${category.id}`;
+            const isToggling = togglingCells.has(cellKey);
+            const isRecommended = recommendedSet.has(cellKey);
+
+            return (
+              <CategoryCheckbox
+                key={category.id}
+                categoryId={category.id}
+                label={category.label}
+                icon={category.icon}
+                checked={hasAccess}
+                disabled={isToggling}
+                isRecommended={isRecommended}
+                member={member}
+                onToggle={onToggleAccess}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -417,7 +541,7 @@ function CategoryCheckbox({
         {isRecommended && !checked && (
           <span className="ml-auto text-base text-accent-secondary">推奨</span>
         )}
-        {disabled && member.role !== "representative" && (
+        {disabled && (
           <span className="ml-auto">
             <span className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin inline-block" />
           </span>

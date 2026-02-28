@@ -37,6 +37,7 @@ import { ConversationHistory } from "./components/ConversationHistory";
 import { ConversationDetail } from "./components/ConversationDetail";
 import { EndingNoteView } from "./components/EndingNoteView";
 import { PrintableEndingNote } from "./components/PrintableEndingNote";
+import { PrintableFamilyNote } from "./components/PrintableFamilyNote";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { FamilyScreen } from "./components/FamilyScreen";
@@ -44,6 +45,8 @@ import { FamilyNoteView } from "./components/FamilyNoteView";
 import { CreatorDetailView } from "./components/CreatorDetailView";
 import { TodoListScreen } from "./components/TodoListScreen";
 import { TodoDetailScreen } from "./components/TodoDetailScreen";
+import { FamilyConversationDetail } from "./components/FamilyConversationDetail";
+import { ParticipantAccessScreen } from "./components/ParticipantAccessScreen";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type {
@@ -65,7 +68,9 @@ type AppScreen =
   | "family-creator-detail"
   | "family-note"
   | "family-todos"
-  | "family-todo-detail";
+  | "family-todo-detail"
+  | "family-conversation-detail"
+  | "family-access-management";
 
 /** Pending voice action that requires UI confirmation before executing. */
 interface VoiceConfirmAction {
@@ -246,6 +251,7 @@ function AppContent(): ReactNode {
 
   // Print view overlay
   const [showPrintView, setShowPrintView] = useState(false);
+  const [showFamilyPrintView, setShowFamilyPrintView] = useState(false);
 
   // Creator lifecycle status (for the logged-in user as a creator)
   const [myLifecycleStatus, setMyLifecycleStatus] = useState("active");
@@ -297,6 +303,14 @@ function AppContent(): ReactNode {
 
   const handleClosePrintNote = useCallback((): void => {
     setShowPrintView(false);
+  }, []);
+
+  const handleOpenFamilyPrintNote = useCallback((): void => {
+    setShowFamilyPrintView(true);
+  }, []);
+
+  const handleCloseFamilyPrintNote = useCallback((): void => {
+    setShowFamilyPrintView(false);
   }, []);
 
   // Summarization guard state
@@ -473,6 +487,32 @@ function AppContent(): ReactNode {
   const handleBackFromTodoDetail = useCallback((): void => {
     setSelectedTodoId(null);
     setScreen("family-todos");
+  }, []);
+
+  const handleViewAccessManagement = useCallback(
+    (creatorId: string, creatorName: string): void => {
+      setSelectedCreatorId(creatorId);
+      setSelectedCreatorName(creatorName);
+      setScreen("family-access-management");
+    },
+    [],
+  );
+
+  const handleBackFromAccessManagement = useCallback((): void => {
+    setScreen("family-creator-detail");
+  }, []);
+
+  const handleViewConversationFromFamilyNote = useCallback(
+    (id: string): void => {
+      setSelectedConversationId(id);
+      setScreen("family-conversation-detail");
+    },
+    [],
+  );
+
+  const handleBackFromFamilyConversationDetail = useCallback((): void => {
+    setSelectedConversationId(null);
+    setScreen("family-note");
   }, []);
 
   // --- Voice action callbacks registration ---
@@ -772,6 +812,7 @@ function AppContent(): ReactNode {
             onBack={handleBackFromCreatorDetail}
             onViewNote={handleViewNoteFromDetail}
             onViewTodos={handleViewTodosFromDetail}
+            onViewAccessManagement={handleViewAccessManagement}
             onLeave={handleLeaveFamily}
           />
         );
@@ -786,6 +827,20 @@ function AppContent(): ReactNode {
             creatorId={selectedCreatorId}
             creatorName={selectedCreatorName}
             onBack={handleBackFromFamilyNote}
+            onViewConversation={handleViewConversationFromFamilyNote}
+            onPrintNote={handleOpenFamilyPrintNote}
+          />
+        );
+      case "family-conversation-detail":
+        if (selectedCreatorId === null || selectedConversationId === null) {
+          setScreen("family-note");
+          return null;
+        }
+        return (
+          <FamilyConversationDetail
+            creatorId={selectedCreatorId}
+            conversationId={selectedConversationId}
+            onBack={handleBackFromFamilyConversationDetail}
           />
         );
       case "family-todos":
@@ -815,6 +870,18 @@ function AppContent(): ReactNode {
             onBack={handleBackFromTodoDetail}
           />
         );
+      case "family-access-management":
+        if (selectedCreatorId === null) {
+          setScreen("family-creator-detail");
+          return null;
+        }
+        return (
+          <ParticipantAccessScreen
+            creatorId={selectedCreatorId}
+            creatorName={selectedCreatorName}
+            onBack={handleBackFromAccessManagement}
+          />
+        );
       default:
         return (
           <ConversationScreen
@@ -830,13 +897,17 @@ function AppContent(): ReactNode {
   const isTabHidden =
     screen === "detail" ||
     screen === "family-creator-detail" ||
-    screen === "family-todo-detail";
+    screen === "family-todo-detail" ||
+    screen === "family-conversation-detail" ||
+    screen === "family-access-management";
   const isFamilyScreen =
     screen === "family-dashboard" ||
     screen === "family-creator-detail" ||
     screen === "family-note" ||
     screen === "family-todos" ||
-    screen === "family-todo-detail";
+    screen === "family-todo-detail" ||
+    screen === "family-conversation-detail" ||
+    screen === "family-access-management";
 
   const showConversationBanner =
     isConversationActive &&
@@ -1029,6 +1100,13 @@ function AppContent(): ReactNode {
       )}
 
       {showPrintView && <PrintableEndingNote onClose={handleClosePrintNote} />}
+      {showFamilyPrintView && selectedCreatorId !== null && (
+        <PrintableFamilyNote
+          creatorId={selectedCreatorId}
+          creatorName={selectedCreatorName}
+          onClose={handleCloseFamilyPrintNote}
+        />
+      )}
     </div>
   );
 }

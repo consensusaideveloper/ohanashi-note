@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-import { getConversation, getAudioRecording } from "../lib/storage";
+import {
+  getFamilyConversationDetail,
+  getFamilyAudioUrl,
+} from "../lib/family-api";
 import { QUESTION_CATEGORIES } from "../lib/questions";
-import { verifyRecordIntegrity } from "../lib/integrity";
-import { TRANSCRIPT_DISCLAIMER } from "../lib/constants";
+import { TRANSCRIPT_DISCLAIMER, UI_MESSAGES } from "../lib/constants";
 import { PrintableConversationDetail } from "./PrintableConversationDetail";
 
 import type { ReactNode } from "react";
-import type {
-  ConversationRecord,
-  IntegrityStatus,
-  QuestionCategory,
-} from "../types/conversation";
+import type { FamilyConversationDetail as FamilyConversationDetailData } from "../lib/family-api";
+import type { QuestionCategory } from "../types/conversation";
 
-export interface ConversationDetailProps {
+interface FamilyConversationDetailProps {
+  creatorId: string;
   conversationId: string;
   onBack: () => void;
 }
@@ -33,17 +33,19 @@ function getCategoryLabel(categoryId: QuestionCategory): string | null {
   return info !== undefined ? info.label : null;
 }
 
-export function ConversationDetail({
+export function FamilyConversationDetail({
+  creatorId,
   conversationId,
   onBack,
-}: ConversationDetailProps): ReactNode {
-  const [record, setRecord] = useState<ConversationRecord | null>(null);
+}: FamilyConversationDetailProps): ReactNode {
+  const [record, setRecord] = useState<FamilyConversationDetailData | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const audioUrlRef = useRef<string | null>(null);
-  const [integrityStatus, setIntegrityStatus] =
-    useState<IntegrityStatus | null>(null);
   const [showPrint, setShowPrint] = useState(false);
 
   const handleOpenPrint = useCallback((): void => {
@@ -54,75 +56,66 @@ export function ConversationDetail({
     setShowPrint(false);
   }, []);
 
-  useEffect(() => {
+  const loadData = useCallback((): void => {
     setIsLoading(true);
-    getConversation(conversationId)
-      .then((result) => {
-        setRecord(result);
+    setError(false);
+    void getFamilyConversationDetail(creatorId, conversationId)
+      .then((data) => {
+        setRecord(data);
       })
-      .catch((error: unknown) => {
-        console.error("Failed to load conversation:", error);
+      .catch((err: unknown) => {
+        console.error("Failed to load family conversation detail:", {
+          error: err,
+          creatorId,
+          conversationId,
+        });
+        setError(true);
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [conversationId]);
+  }, [creatorId, conversationId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Load audio recording if available
   useEffect(() => {
-    if (record === null || record.audioAvailable !== true) return;
+    if (record === null || !record.audioAvailable) return;
 
     setAudioLoading(true);
-    getAudioRecording(conversationId)
-      .then((audioRecord) => {
-        if (audioRecord !== null) {
-          const url = URL.createObjectURL(audioRecord.blob);
+    void getFamilyAudioUrl(creatorId, conversationId)
+      .then(({ downloadUrl }) => fetch(downloadUrl))
+      .then((response) => {
+        if (!response.ok) return;
+        return response.blob();
+      })
+      .then((blob) => {
+        if (blob !== undefined) {
+          const url = URL.createObjectURL(blob);
           audioUrlRef.current = url;
           setAudioUrl(url);
         }
       })
-      .catch((error: unknown) => {
-        console.error("Failed to load audio recording:", error);
+      .catch((err: unknown) => {
+        console.error("Failed to load family audio recording:", {
+          error: err,
+          creatorId,
+          conversationId,
+        });
       })
       .finally(() => {
         setAudioLoading(false);
       });
 
     return () => {
-      // Clean up object URL on unmount or when conversationId changes
       if (audioUrlRef.current !== null) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
     };
-  }, [record, conversationId]);
-
-  // Verify record integrity if hash is available
-  useEffect(() => {
-    if (record === null || record.integrityHash === undefined) return;
-
-    const audioPromise =
-      record.audioHash !== undefined
-        ? getAudioRecording(conversationId)
-        : Promise.resolve(null);
-
-    audioPromise
-      .then((audioRecording) => verifyRecordIntegrity(record, audioRecording))
-      .then((result) => {
-        // Show tampered if either content or audio is tampered
-        if (
-          result.contentStatus === "tampered" ||
-          result.audioStatus === "tampered"
-        ) {
-          setIntegrityStatus("tampered");
-        } else {
-          setIntegrityStatus("verified");
-        }
-      })
-      .catch(() => {
-        // Verification itself failed; do not show status
-      });
-  }, [record, conversationId]);
+  }, [record, creatorId, conversationId]);
 
   if (isLoading) {
     return (
@@ -132,21 +125,53 @@ export function ConversationDetail({
     );
   }
 
-  if (record === null) {
+  if (error || record === null) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-        <p className="text-lg text-text-secondary">
-          記録が見つかりませんでした。
+      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
+        <p className="text-xl text-text-primary text-center leading-relaxed">
+          {UI_MESSAGES.familyError.noteFetchFailed}
         </p>
         <button
           type="button"
-          className="min-h-11 min-w-30 bg-accent-primary text-text-on-accent rounded-full text-lg px-6 py-3"
+          className="min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg px-6 py-3"
+          onClick={loadData}
+        >
+          もう一度読み込む
+        </button>
+        <button
+          type="button"
+          className="min-h-11 rounded-full border border-border text-text-secondary text-lg px-6 py-3"
           onClick={onBack}
         >
           戻る
         </button>
       </div>
     );
+  }
+
+  // Parse noteEntries safely
+  const noteEntries: {
+    questionId: string;
+    questionTitle: string;
+    answer: string;
+  }[] = [];
+  if (Array.isArray(record.noteEntries)) {
+    for (const entry of record.noteEntries) {
+      if (typeof entry === "object" && entry !== null) {
+        const typed = entry as Record<string, unknown>;
+        if (
+          typeof typed["questionId"] === "string" &&
+          typeof typed["questionTitle"] === "string" &&
+          typeof typed["answer"] === "string"
+        ) {
+          noteEntries.push({
+            questionId: typed["questionId"],
+            questionTitle: typed["questionTitle"],
+            answer: typed["answer"],
+          });
+        }
+      }
+    }
   }
 
   return (
@@ -200,42 +225,6 @@ export function ConversationDetail({
         </button>
       </div>
 
-      {/* Integrity verification status */}
-      {integrityStatus === "verified" && (
-        <div className="flex-none flex items-center gap-2 px-4 py-2 bg-success-light/50 border-b border-border-light">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-success flex-none"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <p className="text-lg text-success">記録の整合性が確認されました</p>
-        </div>
-      )}
-      {integrityStatus === "tampered" && (
-        <div className="flex-none flex items-center gap-2 px-4 py-2 bg-error-light/50 border-b border-border-light">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-error flex-none"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fillRule="evenodd"
-              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <p className="text-lg text-error">記録が変更された可能性があります</p>
-        </div>
-      )}
-
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto">
         {/* Summary pending indicator */}
@@ -248,7 +237,7 @@ export function ConversationDetail({
         )}
 
         {/* Emotion/atmosphere analysis */}
-        {record.emotionAnalysis !== undefined && (
+        {record.emotionAnalysis !== null && (
           <div className="px-4 py-4 border-b border-border-light">
             <h3 className="text-lg font-semibold text-text-secondary mb-2">
               会話の雰囲気
@@ -260,7 +249,7 @@ export function ConversationDetail({
         )}
 
         {/* Discussed category tags */}
-        {record.discussedCategories !== undefined &&
+        {record.discussedCategories !== null &&
           record.discussedCategories.length > 0 && (
             <div className="px-4 py-3 border-b border-border-light">
               <h3 className="text-lg font-semibold text-text-secondary mb-2">
@@ -268,7 +257,7 @@ export function ConversationDetail({
               </h3>
               <div className="flex flex-wrap gap-2">
                 {record.discussedCategories.map((catId) => {
-                  const label = getCategoryLabel(catId);
+                  const label = getCategoryLabel(catId as QuestionCategory);
                   return label !== null ? (
                     <span
                       key={catId}
@@ -283,7 +272,7 @@ export function ConversationDetail({
           )}
 
         {/* Structured key points */}
-        {record.keyPoints !== undefined && (
+        {record.keyPoints !== null && (
           <div className="px-4 py-4 border-b border-border-light space-y-4">
             {record.keyPoints.importantStatements.length > 0 && (
               <div>
@@ -345,7 +334,7 @@ export function ConversationDetail({
         )}
 
         {/* Fallback: show old free-text summary for records without keyPoints */}
-        {record.keyPoints === undefined && record.summary !== null && (
+        {record.keyPoints === null && record.summary !== null && (
           <div className="px-4 py-4 border-b border-border-light">
             <h3 className="text-lg font-semibold text-text-secondary mb-2">
               会話のまとめ
@@ -357,27 +346,26 @@ export function ConversationDetail({
         )}
 
         {/* Conversation contribution summary */}
-        {record.coveredQuestionIds !== undefined &&
-          record.coveredQuestionIds.length > 0 && (
-            <div className="px-4 py-3 border-b border-border-light bg-accent-primary-light/20">
-              <p className="text-lg text-text-primary">
-                この会話で{" "}
-                <span className="font-semibold">
-                  {record.coveredQuestionIds.length}項目
-                </span>{" "}
-                に回答しました
-              </p>
-            </div>
-          )}
+        {record.coveredQuestionIds.length > 0 && (
+          <div className="px-4 py-3 border-b border-border-light bg-accent-primary-light/20">
+            <p className="text-lg text-text-primary">
+              この会話で{" "}
+              <span className="font-semibold">
+                {record.coveredQuestionIds.length}項目
+              </span>{" "}
+              に回答しました
+            </p>
+          </div>
+        )}
 
         {/* Recorded note entries for this conversation */}
-        {record.noteEntries !== undefined && record.noteEntries.length > 0 && (
+        {noteEntries.length > 0 && (
           <div className="px-4 py-4 border-b border-border-light">
             <h3 className="text-lg font-semibold text-text-secondary mb-3">
               この会話で記録された内容
             </h3>
             <div className="space-y-3">
-              {record.noteEntries.map((entry) => (
+              {noteEntries.map((entry) => (
                 <div key={entry.questionId}>
                   <p className="text-lg font-medium text-text-secondary">
                     {entry.questionTitle}
@@ -391,16 +379,14 @@ export function ConversationDetail({
           </div>
         )}
 
-        {/* Audio recording player */}
-        {record.audioAvailable === true && (
+        {/* Audio recording */}
+        {record.audioAvailable && (
           <div className="px-4 py-4 border-b border-border-light">
             <h3 className="text-lg font-semibold text-text-secondary mb-2">
               会話の録音
             </h3>
             {audioLoading && (
-              <p className="text-lg text-text-secondary animate-pulse">
-                読み込み中...
-              </p>
+              <p className="text-lg text-text-secondary">読み込み中...</p>
             )}
             {!audioLoading && audioUrl !== null && (
               <audio
@@ -408,9 +394,7 @@ export function ConversationDetail({
                 src={audioUrl}
                 className="w-full"
                 preload="metadata"
-              >
-                お使いのブラウザは音声再生に対応していません。
-              </audio>
+              />
             )}
             {!audioLoading && audioUrl === null && (
               <p className="text-lg text-text-secondary">
@@ -420,7 +404,7 @@ export function ConversationDetail({
           </div>
         )}
 
-        {/* Transcript — notebook ruled lines for "reading your notes" feel */}
+        {/* Transcript */}
         <div className="w-full max-w-lg mx-auto px-4 py-4 notebook-lines">
           {record.transcript.length > 0 && (
             <div className="flex gap-2.5 items-start mb-4 px-2 py-3 bg-bg-surface rounded-xl">
@@ -473,13 +457,13 @@ export function ConversationDetail({
         <PrintableConversationDetail
           data={{
             startedAt: record.startedAt,
-            emotionAnalysis: record.emotionAnalysis ?? null,
-            discussedCategories: record.discussedCategories ?? null,
-            keyPoints: record.keyPoints ?? null,
+            emotionAnalysis: record.emotionAnalysis,
+            discussedCategories: record.discussedCategories,
+            keyPoints: record.keyPoints,
             summary: record.summary,
-            noteEntries: record.noteEntries ?? [],
+            noteEntries,
             transcript: record.transcript,
-            coveredQuestionIds: record.coveredQuestionIds ?? [],
+            coveredQuestionIds: record.coveredQuestionIds,
           }}
           onClose={handleClosePrint}
         />

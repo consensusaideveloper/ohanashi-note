@@ -15,7 +15,6 @@ import { DeathReportDialog } from "./DeathReportDialog";
 import { ConsentScreen } from "./ConsentScreen";
 import { ConsentProgressTracker } from "./ConsentProgressTracker";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { CategoryAccessManager } from "./CategoryAccessManager";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
@@ -29,6 +28,7 @@ interface CreatorDetailViewProps {
   onBack: () => void;
   onViewNote: (creatorId: string, creatorName: string) => void;
   onViewTodos: (creatorId: string, creatorName: string) => void;
+  onViewAccessManagement: (creatorId: string, creatorName: string) => void;
   onLeave: (creatorId: string) => void;
 }
 
@@ -37,6 +37,7 @@ export function CreatorDetailView({
   onBack,
   onViewNote,
   onViewTodos,
+  onViewAccessManagement,
   onLeave,
 }: CreatorDetailViewProps): ReactNode {
   const [lifecycleStatus, setLifecycleStatus] = useState(
@@ -158,6 +159,11 @@ export function CreatorDetailView({
   const handleViewNote = useCallback((): void => {
     onViewNote(connection.creatorId, connection.creatorName);
   }, [onViewNote, connection.creatorId, connection.creatorName]);
+
+  // --- View access management handler ---
+  const handleViewAccessManagement = useCallback((): void => {
+    onViewAccessManagement(connection.creatorId, connection.creatorName);
+  }, [onViewAccessManagement, connection.creatorId, connection.creatorName]);
 
   // --- View todos handler ---
   const handleViewTodos = useCallback((): void => {
@@ -348,7 +354,13 @@ export function CreatorDetailView({
               )}
 
               {isOpened && canPerformRepresentativeActions && (
-                <CategoryAccessManager creatorId={connection.creatorId} />
+                <button
+                  type="button"
+                  className="w-full min-h-11 rounded-full border border-accent-primary text-accent-primary bg-bg-surface text-lg transition-colors active:bg-accent-primary-light/30"
+                  onClick={handleViewAccessManagement}
+                >
+                  {UI_MESSAGES.family.participantAccessButton}
+                </button>
               )}
 
               {/* Leave family button (hidden during consent_gathering) */}

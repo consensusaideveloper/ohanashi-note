@@ -17,6 +17,7 @@ import type {
 
 interface UseFamilyEndingNoteReturn {
   categories: CategoryNoteData[];
+  isRepresentative: boolean;
   isLoading: boolean;
   error: boolean;
   refresh: () => void;
@@ -53,13 +54,9 @@ export function buildFamilyCategoryData(
     const questions = getQuestionsByCategory(cat.id);
     const questionIdSet = new Set(questions.map((q) => q.id));
 
-    // Filter conversations belonging to this category
-    const categoryConversations = conversations.filter(
-      (c) => c.category === cat.id,
-    );
-
-    // Sort oldest-first for version tracking (same pattern as buildCategoryData)
-    const oldestFirst = [...categoryConversations].sort(
+    // Search ALL conversations — noteEntries' questionId determines category
+    // membership, not conversation.category (same approach as buildCategoryData)
+    const oldestFirst = [...conversations].sort(
       (a, b) => a.startedAt - b.startedAt,
     );
 
@@ -116,9 +113,9 @@ export function buildFamilyCategoryData(
       });
     }
 
-    // Compute answered/unanswered from coveredQuestionIds
+    // Compute answered/unanswered from coveredQuestionIds across ALL conversations
     const coveredIds = new Set<string>();
-    for (const conv of categoryConversations) {
+    for (const conv of conversations) {
       for (const id of conv.coveredQuestionIds) {
         if (questionIdSet.has(id)) {
           coveredIds.add(id);
@@ -148,6 +145,7 @@ export function useFamilyEndingNote(
   creatorId: string,
 ): UseFamilyEndingNoteReturn {
   const [categories, setCategories] = useState<CategoryNoteData[]>([]);
+  const [isRepresentative, setIsRepresentative] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const loadData = useCallback((): void => {
@@ -159,6 +157,7 @@ export function useFamilyEndingNote(
       getFamilyConversations(creatorId),
     ])
       .then(([accessInfo, conversations]) => {
+        setIsRepresentative(accessInfo.isRepresentative);
         setCategories(
           buildFamilyCategoryData(accessInfo.categories, conversations),
         );
@@ -179,5 +178,5 @@ export function useFamilyEndingNote(
     loadData();
   }, [loadData]);
 
-  return { categories, isLoading, error, refresh: loadData };
+  return { categories, isRepresentative, isLoading, error, refresh: loadData };
 }

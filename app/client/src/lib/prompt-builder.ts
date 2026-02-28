@@ -112,7 +112,7 @@ const TOOL_AWARENESS_PROMPT = `
 6. change_font_size：文字の大きさを変更。「文字を大きくして」「元のサイズに戻して」など
 7. change_character：話し相手キャラクターを変更（次回会話から適用）。「話し相手を変えたい」など
 8. update_user_name：ユーザーの表示名を変更。「名前を変えて」「〇〇と呼んで」など
-9. update_speaking_preferences：AIの話し方を変更。「もっとゆっくり話して」「待ち時間を長くして」「確認を増やして」など
+9. update_speaking_preferences：話し相手の話し方を変更。「もっとゆっくり話して」「待ち時間を長くして」「確認を増やして」など
 10. start_focused_conversation：特定テーマで新しい会話を開始（確認画面を表示）。「お金のことで話したい」など
 11. create_family_invitation：家族の招待リンクを作成（確認画面を表示）。「妻を招待して」など
 12. end_conversation：会話を終了して保存。ユーザーが終わりたい意思を示したとき（「疲れた」「また今度」「もういいかな」「今日はここまで」など）
@@ -419,7 +419,7 @@ const ONBOARDING_TOOL_AWARENESS = `
 1. update_user_name：ユーザーのお名前を設定します
 2. change_character：話し相手のキャラクターを設定します（次回会話から適用）
 3. change_font_size：文字の大きさを設定します
-4. update_speaking_preferences：AIの話し方の設定を変更します
+4. update_speaking_preferences：話し相手の話し方の設定を変更します
 5. end_conversation：すべての設定完了後、会話を終了します
 
 【ツール使用ルール】

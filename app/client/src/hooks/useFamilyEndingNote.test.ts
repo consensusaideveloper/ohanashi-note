@@ -217,6 +217,89 @@ describe("buildFamilyCategoryData", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("finds noteEntries from conversations with null category", () => {
+    const conversations = [
+      makeConversation({
+        id: "conv-null-cat",
+        category: null,
+        startedAt: 1000,
+        noteEntries: [
+          {
+            questionId: "memories-01",
+            questionTitle: "大切な思い出",
+            answer: "nullカテゴリからの回答",
+          },
+        ],
+        coveredQuestionIds: ["memories-01"],
+      }),
+    ];
+
+    const result = buildFamilyCategoryData(["memories"], conversations);
+    expect(result[0]?.answeredCount).toBe(1);
+    expect(result[0]?.noteEntries).toHaveLength(1);
+    expect(result[0]?.noteEntries[0]?.answer).toBe("nullカテゴリからの回答");
+  });
+
+  it("finds noteEntries from conversations with a different category", () => {
+    const conversations = [
+      makeConversation({
+        id: "conv-cross",
+        category: "people",
+        startedAt: 1000,
+        noteEntries: [
+          {
+            questionId: "memories-01",
+            questionTitle: "大切な思い出",
+            answer: "別カテゴリ会話からの回答",
+          },
+          {
+            questionId: "people-01",
+            questionTitle: "大切な人",
+            answer: "家族",
+          },
+        ],
+        coveredQuestionIds: ["memories-01", "people-01"],
+      }),
+    ];
+
+    const result = buildFamilyCategoryData(
+      ["memories", "people"],
+      conversations,
+    );
+    const memoriesCategory = result.find((c) => c.category === "memories");
+    const peopleCategory = result.find((c) => c.category === "people");
+
+    expect(memoriesCategory?.noteEntries).toHaveLength(1);
+    expect(memoriesCategory?.noteEntries[0]?.answer).toBe(
+      "別カテゴリ会話からの回答",
+    );
+    expect(memoriesCategory?.answeredCount).toBe(1);
+
+    expect(peopleCategory?.noteEntries).toHaveLength(1);
+    expect(peopleCategory?.noteEntries[0]?.answer).toBe("家族");
+    expect(peopleCategory?.answeredCount).toBe(1);
+  });
+
+  it("collects coveredQuestionIds across all conversations regardless of category", () => {
+    const conversations = [
+      makeConversation({
+        category: "people",
+        startedAt: 1000,
+        noteEntries: [],
+        coveredQuestionIds: ["memories-01", "memories-02"],
+      }),
+      makeConversation({
+        category: null,
+        startedAt: 2000,
+        noteEntries: [],
+        coveredQuestionIds: ["memories-06"],
+      }),
+    ];
+
+    const result = buildFamilyCategoryData(["memories"], conversations);
+    expect(result[0]?.answeredCount).toBe(3);
+  });
+
   it("sets audioAvailable to false for all entries", () => {
     const conversations = [
       makeConversation({

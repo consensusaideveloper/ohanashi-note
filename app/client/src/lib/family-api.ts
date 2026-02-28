@@ -242,6 +242,7 @@ export interface AccessMatrixMember {
   familyMemberId: string;
   name: string;
   role: string;
+  relationshipLabel: string;
   categories: string[];
 }
 
@@ -258,6 +259,27 @@ export interface FamilyConversation {
   noteEntries: unknown[];
   coveredQuestionIds: string[];
   keyPoints: unknown;
+}
+
+export interface FamilyConversationDetail {
+  id: string;
+  category: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  transcript: { role: "user" | "assistant"; text: string; timestamp: number }[];
+  summary: string | null;
+  summaryStatus: string;
+  oneLinerSummary: string | null;
+  emotionAnalysis: string | null;
+  discussedCategories: string[] | null;
+  keyPoints: {
+    importantStatements: string[];
+    decisions: string[];
+    undecidedItems: string[];
+  } | null;
+  noteEntries: unknown[];
+  coveredQuestionIds: string[];
+  audioAvailable: boolean;
 }
 
 export interface FamilyCategoryNoteResponse {
@@ -314,6 +336,26 @@ export async function getFamilyConversations(
     conversations: FamilyConversation[];
   };
   return data.conversations;
+}
+
+export async function getFamilyConversationDetail(
+  creatorId: string,
+  conversationId: string,
+): Promise<FamilyConversationDetail> {
+  const response = await fetchWithAuth(
+    `/api/access/${creatorId}/conversations/${conversationId}`,
+  );
+  return response.json() as Promise<FamilyConversationDetail>;
+}
+
+export async function getFamilyAudioUrl(
+  creatorId: string,
+  conversationId: string,
+): Promise<{ downloadUrl: string }> {
+  const response = await fetchWithAuth(
+    `/api/access/${creatorId}/conversations/${conversationId}/audio-url`,
+  );
+  return response.json() as Promise<{ downloadUrl: string }>;
 }
 
 export async function getAccessMatrix(

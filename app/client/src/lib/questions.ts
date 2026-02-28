@@ -725,9 +725,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "digital-08",
     category: "digital",
-    title: "AIによる再現",
+    title: "デジタル技術による再現",
     question:
-      "将来、AIであなたの声や姿を再現することについてどう思いますか？（OK・NGなど、希望を教えてください）",
+      "将来、デジタル技術であなたの声や姿を再現することについてどう思いますか？（OK・NGなど、希望を教えてください）",
     sensitive: false,
   },
 

@@ -244,7 +244,7 @@ export const REALTIME_TOOLS = [
     type: "function" as const,
     name: "update_speaking_preferences",
     description:
-      "AIの話し方の設定を変更します。ユーザーが「もっとゆっくり話して」「もう少し速く」「ちゃんと確認して」「待ち時間を長くして」などと言った場合に使用してください。",
+      "話し相手の話し方の設定を変更します。ユーザーが「もっとゆっくり話して」「もう少し速く」「ちゃんと確認して」「待ち時間を長くして」などと言った場合に使用してください。",
     parameters: {
       type: "object",
       properties: {
@@ -521,9 +521,17 @@ export const UI_MESSAGES = {
     accessManagerTitle: "アクセス管理",
     accessManagerDescription:
       "家族ごとにノートのカテゴリへのアクセス権を管理します",
+    participantAccessTitle: "参加者・アクセス管理",
+    participantAccessButton: "参加者・アクセス管理",
+    allCategoriesAccessible: "全カテゴリ閲覧可",
+    accessSummary: "カテゴリ閲覧可",
     categoryGranted: "アクセスを許可しました",
     categoryRevoked: "アクセスを取り消しました",
     noAccessibleCategories: "閲覧可能なカテゴリがありません",
+    noAccessibleCategoriesMemberHint:
+      "代表者がノートのアクセス権を管理しています。閲覧可能なカテゴリが追加されるまでお待ちください。",
+    noAccessibleCategoriesRepresentativeHint:
+      "アクセス管理画面からカテゴリの閲覧権限を設定できます。",
     noteNotOpened: "ノートはまだ開封されていません",
     backToCreatorList: "一覧に戻る",
     lifecycleActive: "活動中",
@@ -577,7 +585,7 @@ export const UI_MESSAGES = {
     pageTitle: "やることリスト",
     noTodos: "まだやることが登録されていません",
     createButton: "やることを追加",
-    generateButton: "AIで自動作成",
+    generateButton: "自動で作成",
     generateConfirmTitle: "やることリストを自動作成",
     generateConfirmMessage:
       "ノートの内容をもとに、やるべきことを自動で作成します。作成後に編集・削除ができます。",
@@ -622,6 +630,7 @@ export const UI_MESSAGES = {
     filterAll: "すべて",
     createDialogTitle: "やることを追加",
     noAssignee: "未定",
+    noCategory: "指定なし",
     startButton: "着手する",
     completeButton: "完了にする",
     reopenButton: "未着手に戻す",
@@ -632,6 +641,7 @@ export const UI_MESSAGES = {
     cancel: "キャンセル",
     relationshipTitle: "続柄を選択",
     assigneeTitle: "担当者を選択",
+    categoryTitle: "カテゴリを選択",
   },
   todoError: {
     loadFailed: "やることリストの読み込みに失敗しました",
@@ -788,7 +798,7 @@ export const ONBOARDING_TOOLS = REALTIME_TOOLS.filter((t) =>
 );
 
 export const ONBOARDING_CONVERSATION_MESSAGES = {
-  title: "AIがご案内します",
+  title: "会話でご案内します",
   subtitle: "マイクを使って会話しながら設定を行います",
   startButton: "会話をはじめる",
   reconnectPrompt: "接続が切れました。もう一度お試しください。",
@@ -801,7 +811,7 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   fontSizeLabel: "文字の大きさ",
   speakingSpeedLabel: "話し方",
   description:
-    "AIとお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
+    "話し相手とお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
   startButton: "はじめる",
 } as const;
 
@@ -812,8 +822,8 @@ export const SETTINGS_MESSAGES = {
       "お名前と話し相手を設定します。変更したら「保存する」を押してください。",
   },
   speakingPreferences: {
-    title: "AIの話し方",
-    description: "AIの話し方を調整できます",
+    title: "話し相手の話し方",
+    description: "話し相手の話し方を調整できます",
     speedLabel: "話す速さ",
     silenceLabel: "待ち時間",
     confirmationLabel: "確認の頻度",
@@ -830,13 +840,16 @@ export const SETTINGS_MESSAGES = {
     generatedAt: "作成日",
     printButton: "印刷する",
     closeButton: "戻る",
-    noEntries: "まだ記録がありません。AIとお話しして、ノートを作りましょう。",
+    noEntries: "まだ記録がありません。お話しして、ノートを作りましょう。",
     footer: "おはなしエンディングノートで作成",
     disclaimer: "この文書は記録として保管用です。法的効力はありません。",
     sectionTitle: "ノートの印刷",
     sectionDescription:
       "記録した内容をきれいな形式で印刷できます。「PDFに保存」もできます。",
     buttonLabel: "ノートを印刷する",
+  },
+  conversationPrint: {
+    title: "会話の記録",
   },
   deletion: {
     description:
