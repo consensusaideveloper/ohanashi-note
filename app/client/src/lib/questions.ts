@@ -67,30 +67,31 @@ export const QUESTION_CATEGORIES: readonly CategoryInfo[] = [
   },
   {
     id: "digital",
-    label: "デジタル",
-    description: "スマホやSNS、デジタル資産のことをお話ししましょう",
+    label: "スマホ・ネット",
+    description: "スマホやインターネット、パスワードのことをお話ししましょう",
     icon: "\u{1F4F1}",
   },
   {
     id: "legal",
-    label: "相続・遺言",
-    description: "相続や遺言書のことを整理しましょう",
+    label: "財産と遺言",
+    description: "大切な財産や遺言書のことを整理しましょう",
     icon: "\u2696\uFE0F",
     disclaimer:
-      "このアプリは法的アドバイスを提供するものではありません。記録した内容に法的効力はありません。具体的な手続きは専門家（行政書士・司法書士・弁護士等）にご相談ください。",
+      "このアプリはお気持ちや希望を記録するためのものです。法律の手続きには使えませんので、くわしいことは専門家（弁護士や司法書士など）にご相談ください。",
   },
   {
     id: "trust",
-    label: "信託・委任",
-    description: "家族信託や後見、死後の手続きの委任についてお話ししましょう",
+    label: "将来の備え",
+    description:
+      "判断が難しくなったときや、亡くなった後のことについて備えましょう",
     icon: "\u{1F4CB}",
     disclaimer:
-      "このアプリは法的アドバイスを提供するものではありません。記録した内容に法的効力はありません。具体的な手続きは専門家（行政書士・司法書士・弁護士等）にご相談ください。",
+      "このアプリはお気持ちや希望を記録するためのものです。法律の手続きには使えませんので、くわしいことは専門家（弁護士や司法書士など）にご相談ください。",
   },
   {
     id: "support",
-    label: "支援制度",
-    description: "利用できる公的支援や制度についてお話ししましょう",
+    label: "使える制度",
+    description: "暮らしに役立つ公的な制度についてお話ししましょう",
     icon: "\u{1F3DB}\uFE0F",
     disclaimer:
       "制度の詳細や申請方法は、お住まいの市区町村窓口や社会福祉協議会にご確認ください。",
@@ -119,7 +120,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     id: "memories-01",
     category: "memories",
     title: "子が生まれた日",
-    question: "私（子）が生まれた日のこと、覚えていることを教えてください。",
+    question: "お子さんが生まれた日のこと、覚えていることを教えてください。",
     sensitive: false,
   },
   {
@@ -265,9 +266,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "house-04",
     category: "house",
-    title: "見られたくないもの",
+    title: "処分してほしいもの",
     question:
-      "中を見ずに捨ててほしいもの、または自分だけの秘密の場所はありますか？",
+      "家族に見せずに処分してほしいものや、特別にしまってあるものはありますか？",
     sensitive: true,
   },
 
@@ -319,9 +320,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "medical-13",
     category: "medical",
-    title: "認知症・成年後見の備え",
+    title: "もしもの備え・財産の管理",
     question:
-      "もし認知症になった場合に備えて、後見人や財産管理を誰にお願いしたいですか？",
+      "万が一、ご自身で判断が難しくなったときに備えて、財産の管理やいろいろな手続きを誰にお願いしたいですか？",
     sensitive: true,
   },
   {
@@ -350,7 +351,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "medical-14",
     category: "medical",
-    title: "尊厳死宣言書",
+    title: "延命治療のご意思",
     question:
       "延命治療を望まない場合の「尊厳死宣言書（リヴィング・ウイル）」を作成されていますか？",
     sensitive: true,
@@ -677,17 +678,17 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "digital-01",
     category: "digital",
-    title: "暗号資産・NFT",
+    title: "仮想通貨（ネット上のお金）",
     question:
-      "ビットコインなどの仮想通貨やNFTを持っていますか？どのサービスを使っていますか？（取引所・アプリ名だけ教えてください。パスワードや秘密鍵は入力しないでください）",
+      "ビットコインなどの仮想通貨（インターネット上のお金）を持っていますか？どのサービスを使っていますか？（取引所やアプリの名前だけ教えてください。パスワードや秘密鍵は入力しないでください）",
     sensitive: true,
   },
   {
     id: "digital-02",
     category: "digital",
-    title: "ネット証券・NISA",
+    title: "ネット証券・つみたてNISA",
     question:
-      "楽天証券やSBI証券、NISA口座はありますか？（証券会社名だけ教えてください。口座番号やパスワードは入力しないでください）",
+      "楽天証券やSBI証券などのネット証券の口座や、つみたてNISA（少額から始められる非課税の投資制度）の口座はありますか？（証券会社名だけ教えてください。口座番号やパスワードは入力しないでください）",
     sensitive: true,
   },
   {
@@ -725,9 +726,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "digital-08",
     category: "digital",
-    title: "デジタル技術による再現",
+    title: "声や姿を残すこと",
     question:
-      "将来、デジタル技術であなたの声や姿を再現することについてどう思いますか？（OK・NGなど、希望を教えてください）",
+      "将来、AIなどの技術であなたの声や姿を再現して、ご家族に届けることについてどう思いますか？（OK・NGなど、希望を教えてください）",
     sensitive: false,
   },
 
@@ -759,7 +760,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-04",
     category: "legal",
-    title: "遺言執行者の指定",
+    title: "遺言を届ける人",
     question: "遺言書の内容を実行してくれる人（遺言執行者）は決めていますか？",
     sensitive: false,
   },
@@ -782,9 +783,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-07",
     category: "legal",
-    title: "相続税対策の状況",
+    title: "税金がかからない仕組みの活用",
     question:
-      "非課税制度（暦年贈与110万円、教育資金贈与など）を活用されていますか？",
+      "毎年110万円まで税金がかからずにお金を渡せる仕組み（暦年贈与）や、お孫さんの教育資金を渡す制度は使われていますか？",
     sensitive: true,
   },
   {
@@ -805,16 +806,16 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-10",
     category: "legal",
-    title: "遺贈寄付の希望",
+    title: "寄付のご希望",
     question: "財産の一部を団体や施設に寄付したいお気持ちはありますか？",
     sensitive: false,
   },
   {
     id: "legal-11",
     category: "legal",
-    title: "相続放棄の検討",
+    title: "借金の引き継ぎについて",
     question:
-      "借金などマイナスの財産がある場合、相続放棄について検討されていますか？",
+      "もしお借り入れがある場合、ご家族がそれを引き継がなくて済む方法（相続放棄）について考えたことはありますか？",
     sensitive: true,
   },
   {
@@ -916,9 +917,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "support-01",
     category: "support",
-    title: "成年後見制度の理解",
+    title: "判断が難しくなったときの支援",
     question:
-      "「成年後見制度」をご存知ですか？利用を検討されたことはありますか？",
+      "判断力が低下したときに、信頼できる方に代わりに手続きをしてもらう「成年後見制度」をご存知ですか？利用を検討されたことはありますか？",
     sensitive: false,
   },
   {
@@ -940,17 +941,17 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "support-04",
     category: "support",
-    title: "リバースモーゲージ",
+    title: "自宅を使った生活資金の仕組み",
     question:
-      "自宅に住み続けながら生活資金を得る「リバースモーゲージ」に興味はありますか？",
+      "自宅に住み続けながら、家を担保にして生活資金を借りる仕組み（リバースモーゲージ）に興味はありますか？",
     sensitive: false,
   },
   {
     id: "support-05",
     category: "support",
-    title: "リースバック",
+    title: "自宅を売って住み続ける方法",
     question:
-      "自宅を売却して賃貸として住み続ける「リースバック」をご存知ですか？",
+      "自宅を売却した後も、家賃を払ってそのまま住み続ける仕組み（リースバック）をご存知ですか？",
     sensitive: false,
   },
   {

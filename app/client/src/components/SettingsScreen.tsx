@@ -114,7 +114,7 @@ export function SettingsScreen({
     setShowDeleteConfirm(false);
     void clearAllData()
       .then(() => {
-        setDeleteMessage("すべてのデータを削除しました");
+        setDeleteMessage("すべての記録を消しました");
         setName("");
       })
       .catch((error: unknown) => {
@@ -424,7 +424,7 @@ export function SettingsScreen({
         {/* Section 3: Profile (save-gated) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
-            プロフィール
+            お名前と話し相手
           </h2>
           <p className="text-lg text-text-secondary">
             {SETTINGS_MESSAGES.profile.description}
@@ -475,7 +475,7 @@ export function SettingsScreen({
         {/* Section 4: Account (low risk, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
-            アカウント
+            ログイン情報
           </h2>
           <p className="text-lg text-text-secondary">
             {SETTINGS_MESSAGES.account.description}
@@ -496,7 +496,7 @@ export function SettingsScreen({
         <div className="flex items-center gap-3 pt-4">
           <div className="flex-1 border-t border-border" />
           <p className="text-lg text-text-secondary whitespace-nowrap">
-            データの管理
+            記録の管理
           </p>
           <div className="flex-1 border-t border-border" />
         </div>
@@ -536,7 +536,7 @@ export function SettingsScreen({
                 d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
               />
             </svg>
-            データの削除
+            記録の削除
             {/* Chevron indicator */}
             <svg
               className="h-4 w-4 text-text-secondary flex-none ml-auto transition-transform details-chevron"
@@ -563,7 +563,7 @@ export function SettingsScreen({
                   className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
                   onClick={handleClearAll}
                 >
-                  すべてのデータを削除する
+                  すべての記録を消す
                 </button>
                 {deleteMessage !== "" && (
                   <p className="text-accent-primary">{deleteMessage}</p>
@@ -596,7 +596,7 @@ export function SettingsScreen({
                 d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
               />
             </svg>
-            アカウントの削除
+            退会する
             <svg
               className="h-4 w-4 text-text-secondary flex-none ml-auto transition-transform details-chevron"
               fill="none"
@@ -622,7 +622,7 @@ export function SettingsScreen({
                   className="bg-bg-surface text-error border border-error rounded-full min-h-11 px-6 text-lg w-full"
                   onClick={handleAccountDelete}
                 >
-                  アカウントを削除する
+                  退会する
                 </button>
               </>
             ) : (
@@ -638,10 +638,10 @@ export function SettingsScreen({
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="データの削除"
+        title="記録の削除"
         message={SETTINGS_MESSAGES.deletion.confirm}
         confirmLabel="削除する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
@@ -651,16 +651,16 @@ export function SettingsScreen({
         title="ログアウト"
         message={SETTINGS_MESSAGES.account.logoutConfirm}
         confirmLabel="ログアウトする"
-        cancelLabel="やめる"
+        cancelLabel="あとにする"
         onConfirm={handleLogoutConfirm}
         onCancel={handleLogoutCancel}
       />
       <ConfirmDialog
         isOpen={showAccountDeleteFirst}
-        title="アカウントの削除"
+        title="退会の確認"
         message={SETTINGS_MESSAGES.accountDeletion.firstConfirm}
         confirmLabel="次へ"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleAccountDeleteFirstConfirm}
         onCancel={handleAccountDeleteFirstCancel}
@@ -669,8 +669,8 @@ export function SettingsScreen({
         isOpen={showAccountDeleteSecond}
         title="最終確認"
         message={SETTINGS_MESSAGES.accountDeletion.secondConfirm}
-        confirmLabel="アカウントを削除する"
-        cancelLabel="やめる"
+        confirmLabel="退会する"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleAccountDeleteSecondConfirm}
         onCancel={handleAccountDeleteSecondCancel}

@@ -114,16 +114,18 @@ export function DeletionConsentScreen({
 
   return (
     <div className="rounded-card border border-error bg-bg-surface p-6 space-y-4">
-      <h2 className="text-xl font-semibold text-error">データ削除への同意</h2>
+      <h2 className="text-xl font-semibold text-error">
+        記録を消すことへの同意
+      </h2>
 
       <p className="text-lg text-text-secondary">
         {creatorName}
-        さんのノートデータの削除について、ご家族全員の同意が必要です。
+        さんのノートの記録を消すことについて、ご家族全員の同意が必要です。
       </p>
 
       <p className="text-base text-text-secondary">
-        同意すると、すべての会話記録・ノートの内容が完全に削除されます。この操作は取り消すことができません。
-        同意しない場合は、データは引き続き保護されます。
+        すべての会話の記録・ノートの内容が消えます。一度消すと元に戻せません。
+        同意しない場合は、記録はそのまま残ります。
       </p>
 
       {hasResponded ? (
@@ -143,7 +145,7 @@ export function DeletionConsentScreen({
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              <p className="text-lg text-text-primary">削除に同意しました</p>
+              <p className="text-lg text-text-primary">同意しました</p>
             </>
           ) : (
             <>
@@ -161,7 +163,7 @@ export function DeletionConsentScreen({
                 />
               </svg>
               <p className="text-lg text-text-primary">
-                削除を拒否しました。データは保護されます。
+                同意しませんでした。記録はそのまま残ります。
               </p>
             </>
           )}
@@ -182,7 +184,7 @@ export function DeletionConsentScreen({
             disabled={isSubmitting}
             onClick={handleAgree}
           >
-            {isSubmitting ? "送信中..." : "削除に同意する"}
+            {isSubmitting ? "送信中..." : "同意する"}
           </button>
         </div>
       )}

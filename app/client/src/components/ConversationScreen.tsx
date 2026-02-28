@@ -288,7 +288,7 @@ export function ConversationScreen({
   const characterName =
     activeCharacterId !== null
       ? getCharacterById(activeCharacterId).name
-      : "アシスタント";
+      : "話し相手";
   const gradient = STATE_GRADIENTS[state] ?? STATE_GRADIENTS["idle"];
 
   return (

@@ -41,7 +41,7 @@ function formatHistoryAction(entry: TodoHistoryEntry): string {
         metadata !== null && typeof metadata["to"] === "string"
           ? metadata["to"]
           : "";
-      return `ステータスを「${to}」に変更`;
+      return `進み具合を「${to}」に変更`;
     }
     case "assigned":
       return "担当者を変更";
@@ -460,7 +460,7 @@ export function TodoDetailScreen({
         title={UI_MESSAGES.todo.deleteConfirmTitle}
         message={UI_MESSAGES.todo.deleteConfirmMessage}
         confirmLabel="削除する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={handleCloseDelete}

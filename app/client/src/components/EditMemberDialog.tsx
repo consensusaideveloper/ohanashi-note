@@ -105,7 +105,7 @@ export function EditMemberDialog({
             className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary transition-colors active:bg-bg-surface-hover"
             onClick={onClose}
           >
-            やめる
+            もどる
           </button>
           <button
             type="button"

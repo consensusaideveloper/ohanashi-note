@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
-import { createTodo } from "../lib/todo-api";
+import { createTodo, generateTodos } from "../lib/todo-api";
 import { useTodos } from "../hooks/useTodos";
 import { useToast } from "../hooks/useToast";
 import { TodoCard } from "./TodoCard";
 import { TodoCreateDialog } from "./TodoCreateDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
@@ -52,6 +53,8 @@ export function TodoListScreen({
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // --- Handlers ---
 
@@ -89,6 +92,35 @@ export function TodoListScreen({
     },
     [creatorId, showToast, refresh],
   );
+
+  const handleOpenGenerate = useCallback((): void => {
+    setShowGenerateConfirm(true);
+  }, []);
+
+  const handleCloseGenerate = useCallback((): void => {
+    setShowGenerateConfirm(false);
+  }, []);
+
+  const handleConfirmGenerate = useCallback((): void => {
+    setShowGenerateConfirm(false);
+    setIsGenerating(true);
+    void generateTodos(creatorId)
+      .then((generated) => {
+        if (generated.length === 0) {
+          showToast(UI_MESSAGES.todo.generateEmpty, "success");
+        } else {
+          showToast(UI_MESSAGES.todo.generated, "success");
+        }
+        refresh();
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to generate todos:", { error: err, creatorId });
+        showToast(UI_MESSAGES.todoError.generateFailed, "error");
+      })
+      .finally(() => {
+        setIsGenerating(false);
+      });
+  }, [creatorId, showToast, refresh]);
 
   const progressPercent =
     stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
@@ -186,10 +218,13 @@ export function TodoListScreen({
               </button>
               <button
                 type="button"
-                className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-text-secondary text-lg transition-colors disabled:opacity-50"
-                disabled
+                className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-text-secondary text-lg transition-colors active:bg-bg-surface-hover disabled:opacity-50"
+                onClick={handleOpenGenerate}
+                disabled={isGenerating}
               >
-                {UI_MESSAGES.todo.generateButton}
+                {isGenerating
+                  ? UI_MESSAGES.todo.generating
+                  : UI_MESSAGES.todo.generateButton}
               </button>
             </div>
           )}
@@ -242,6 +277,17 @@ export function TodoListScreen({
         onCreate={handleCreate}
         isSubmitting={isCreating}
         familyMembers={[]}
+      />
+
+      <ConfirmDialog
+        isOpen={showGenerateConfirm}
+        title={UI_MESSAGES.todo.generateConfirmTitle}
+        message={UI_MESSAGES.todo.generateConfirmMessage}
+        confirmLabel="作成する"
+        cancelLabel="もどる"
+        variant="default"
+        onConfirm={handleConfirmGenerate}
+        onCancel={handleCloseGenerate}
       />
 
       <Toast

@@ -396,7 +396,7 @@ export function CreatorDetailView({
         title={UI_MESSAGES.family.cancelDeathReportButton}
         message={UI_MESSAGES.family.cancelDeathReportConfirmMessage}
         confirmLabel="取り消す"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         onConfirm={handleCancelDeathConfirm}
         onCancel={handleCancelDeathClose}
       />
@@ -407,7 +407,7 @@ export function CreatorDetailView({
         title={UI_MESSAGES.family.initiateConsentButton}
         message={UI_MESSAGES.family.initiateConsentMessage}
         confirmLabel="開始する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         onConfirm={handleInitiateConsentConfirm}
         onCancel={handleInitiateConsentClose}
       />
@@ -422,7 +422,7 @@ export function CreatorDetailView({
             : UI_MESSAGES.family.leaveConfirmMessage
         }
         confirmLabel="脱退する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         onConfirm={handleLeaveConfirm}
         onCancel={handleLeaveClose}
       />

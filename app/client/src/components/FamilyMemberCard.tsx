@@ -183,7 +183,7 @@ export function FamilyMemberCard({
         title={UI_MESSAGES.family.removeConfirmTitle}
         message={getRemoveConfirmMessage(member, lifecycleStatus)}
         confirmLabel="削除する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleRemoveConfirm}
         onCancel={handleRemoveCancel}
@@ -194,7 +194,7 @@ export function FamilyMemberCard({
         title={UI_MESSAGES.family.revokeRepresentativeConfirmTitle}
         message={UI_MESSAGES.family.revokeRepresentativeConfirmMessage}
         confirmLabel="解除する"
-        cancelLabel="やめる"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleRevokeConfirm}
         onCancel={handleRevokeCancel}

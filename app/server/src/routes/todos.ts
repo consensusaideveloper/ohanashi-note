@@ -1411,8 +1411,33 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
     }
     const dedupedEntries = [...latestByQuestion.values()];
 
+    // Exclude entries that already have non-deleted TODOs
+    const existingTodos = await db
+      .select({ sourceQuestionId: todos.sourceQuestionId })
+      .from(todos)
+      .where(
+        and(
+          eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+          isNull(todos.deletedAt),
+        ),
+      );
+
+    const existingQuestionIds = new Set(
+      existingTodos
+        .map((t) => t.sourceQuestionId)
+        .filter((id): id is string => id !== null),
+    );
+
+    const newEntries = dedupedEntries.filter(
+      (entry) => !existingQuestionIds.has(entry.questionId),
+    );
+
+    if (newEntries.length === 0) {
+      return c.json({ todos: [] });
+    }
+
     // Generate TODOs via AI
-    const generatedTodos = await generateTodosFromNotes(dedupedEntries);
+    const generatedTodos = await generateTodosFromNotes(newEntries);
 
     if (generatedTodos.length === 0) {
       return c.json({ todos: [] });

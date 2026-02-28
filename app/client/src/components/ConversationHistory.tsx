@@ -60,7 +60,7 @@ function getTranscriptPreview(record: ConversationRecord): string {
   const assistantName =
     record.characterId != null
       ? getCharacterShortName(record.characterId)
-      : "アシスタント";
+      : "話し相手";
   const preview = previewLines
     .map((entry) => {
       const prefix = entry.role === "user" ? "あなた: " : `${assistantName}: `;

@@ -63,12 +63,8 @@
           "name": "access_presets_creator_id_users_id_fk",
           "tableFrom": "access_presets",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -76,12 +72,8 @@
           "name": "access_presets_family_member_id_family_members_id_fk",
           "tableFrom": "access_presets",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "family_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -91,11 +83,7 @@
         "uq_access_presets": {
           "name": "uq_access_presets",
           "nullsNotDistinct": false,
-          "columns": [
-            "creator_id",
-            "family_member_id",
-            "category_id"
-          ]
+          "columns": ["creator_id", "family_member_id", "category_id"]
         }
       },
       "policies": {},
@@ -206,12 +194,8 @@
           "name": "activity_log_creator_id_users_id_fk",
           "tableFrom": "activity_log",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -219,12 +203,8 @@
           "name": "activity_log_actor_id_users_id_fk",
           "tableFrom": "activity_log",
           "tableTo": "users",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -300,12 +280,8 @@
           "name": "category_access_lifecycle_id_note_lifecycle_id_fk",
           "tableFrom": "category_access",
           "tableTo": "note_lifecycle",
-          "columnsFrom": [
-            "lifecycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["lifecycle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -313,12 +289,8 @@
           "name": "category_access_family_member_id_family_members_id_fk",
           "tableFrom": "category_access",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "family_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -326,12 +298,8 @@
           "name": "category_access_granted_by_users_id_fk",
           "tableFrom": "category_access",
           "tableTo": "users",
-          "columnsFrom": [
-            "granted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["granted_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -341,11 +309,7 @@
         "uq_category_access": {
           "name": "uq_category_access",
           "nullsNotDistinct": false,
-          "columns": [
-            "lifecycle_id",
-            "family_member_id",
-            "category_id"
-          ]
+          "columns": ["lifecycle_id", "family_member_id", "category_id"]
         }
       },
       "policies": {},
@@ -417,12 +381,8 @@
           "name": "consent_records_lifecycle_id_note_lifecycle_id_fk",
           "tableFrom": "consent_records",
           "tableTo": "note_lifecycle",
-          "columnsFrom": [
-            "lifecycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["lifecycle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -430,12 +390,8 @@
           "name": "consent_records_family_member_id_family_members_id_fk",
           "tableFrom": "consent_records",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "family_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -445,10 +401,7 @@
         "uq_consent_lifecycle_member": {
           "name": "uq_consent_lifecycle_member",
           "nullsNotDistinct": false,
-          "columns": [
-            "lifecycle_id",
-            "family_member_id"
-          ]
+          "columns": ["lifecycle_id", "family_member_id"]
         }
       },
       "policies": {},
@@ -708,12 +661,8 @@
           "name": "conversations_user_id_users_id_fk",
           "tableFrom": "conversations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -789,12 +738,8 @@
           "name": "deletion_consent_records_lifecycle_id_note_lifecycle_id_fk",
           "tableFrom": "deletion_consent_records",
           "tableTo": "note_lifecycle",
-          "columnsFrom": [
-            "lifecycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["lifecycle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -802,12 +747,8 @@
           "name": "deletion_consent_records_family_member_id_family_members_id_fk",
           "tableFrom": "deletion_consent_records",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "family_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -817,10 +758,7 @@
         "uq_deletion_consent_lifecycle_member": {
           "name": "uq_deletion_consent_lifecycle_member",
           "nullsNotDistinct": false,
-          "columns": [
-            "lifecycle_id",
-            "family_member_id"
-          ]
+          "columns": ["lifecycle_id", "family_member_id"]
         }
       },
       "policies": {},
@@ -895,12 +833,8 @@
           "name": "family_invitations_creator_id_users_id_fk",
           "tableFrom": "family_invitations",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -910,9 +844,7 @@
         "family_invitations_token_unique": {
           "name": "family_invitations_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -1020,12 +952,8 @@
           "name": "family_members_creator_id_users_id_fk",
           "tableFrom": "family_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1033,12 +961,8 @@
           "name": "family_members_member_id_users_id_fk",
           "tableFrom": "family_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1048,10 +972,7 @@
         "uq_family_creator_member": {
           "name": "uq_family_creator_member",
           "nullsNotDistinct": false,
-          "columns": [
-            "creator_id",
-            "member_id"
-          ]
+          "columns": ["creator_id", "member_id"]
         }
       },
       "policies": {},
@@ -1123,12 +1044,8 @@
           "name": "lifecycle_action_log_lifecycle_id_note_lifecycle_id_fk",
           "tableFrom": "lifecycle_action_log",
           "tableTo": "note_lifecycle",
-          "columnsFrom": [
-            "lifecycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["lifecycle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1136,12 +1053,8 @@
           "name": "lifecycle_action_log_performed_by_users_id_fk",
           "tableFrom": "lifecycle_action_log",
           "tableTo": "users",
-          "columnsFrom": [
-            "performed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["performed_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1227,12 +1140,8 @@
           "name": "note_lifecycle_creator_id_users_id_fk",
           "tableFrom": "note_lifecycle",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1240,12 +1149,8 @@
           "name": "note_lifecycle_death_reported_by_users_id_fk",
           "tableFrom": "note_lifecycle",
           "tableTo": "users",
-          "columnsFrom": [
-            "death_reported_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["death_reported_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1253,12 +1158,8 @@
           "name": "note_lifecycle_consent_initiated_by_users_id_fk",
           "tableFrom": "note_lifecycle",
           "tableTo": "users",
-          "columnsFrom": [
-            "consent_initiated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["consent_initiated_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1268,9 +1169,7 @@
         "note_lifecycle_creator_id_unique": {
           "name": "note_lifecycle_creator_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "creator_id"
-          ]
+          "columns": ["creator_id"]
         }
       },
       "policies": {},
@@ -1361,12 +1260,8 @@
           "name": "notifications_user_id_users_id_fk",
           "tableFrom": "notifications",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1374,12 +1269,8 @@
           "name": "notifications_related_creator_id_users_id_fk",
           "tableFrom": "notifications",
           "tableTo": "users",
-          "columnsFrom": [
-            "related_creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["related_creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1433,12 +1324,8 @@
           "name": "shares_user_id_users_id_fk",
           "tableFrom": "shares",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1508,12 +1395,8 @@
           "name": "todo_comments_todo_id_todos_id_fk",
           "tableFrom": "todo_comments",
           "tableTo": "todos",
-          "columnsFrom": [
-            "todo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["todo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1521,12 +1404,8 @@
           "name": "todo_comments_author_id_users_id_fk",
           "tableFrom": "todo_comments",
           "tableTo": "users",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["author_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1602,12 +1481,8 @@
           "name": "todo_history_todo_id_todos_id_fk",
           "tableFrom": "todo_history",
           "tableTo": "todos",
-          "columnsFrom": [
-            "todo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["todo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1615,12 +1490,8 @@
           "name": "todo_history_performed_by_users_id_fk",
           "tableFrom": "todo_history",
           "tableTo": "users",
-          "columnsFrom": [
-            "performed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["performed_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1690,12 +1561,8 @@
           "name": "todo_visibility_todo_id_todos_id_fk",
           "tableFrom": "todo_visibility",
           "tableTo": "todos",
-          "columnsFrom": [
-            "todo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["todo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1703,12 +1570,8 @@
           "name": "todo_visibility_family_member_id_family_members_id_fk",
           "tableFrom": "todo_visibility",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "family_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1716,12 +1579,8 @@
           "name": "todo_visibility_hidden_by_users_id_fk",
           "tableFrom": "todo_visibility",
           "tableTo": "users",
-          "columnsFrom": [
-            "hidden_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["hidden_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1731,10 +1590,7 @@
         "uq_todo_visibility": {
           "name": "uq_todo_visibility",
           "nullsNotDistinct": false,
-          "columns": [
-            "todo_id",
-            "family_member_id"
-          ]
+          "columns": ["todo_id", "family_member_id"]
         }
       },
       "policies": {},
@@ -1932,12 +1788,8 @@
           "name": "todos_lifecycle_id_note_lifecycle_id_fk",
           "tableFrom": "todos",
           "tableTo": "note_lifecycle",
-          "columnsFrom": [
-            "lifecycle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["lifecycle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1945,12 +1797,8 @@
           "name": "todos_creator_id_users_id_fk",
           "tableFrom": "todos",
           "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1958,12 +1806,8 @@
           "name": "todos_assignee_id_family_members_id_fk",
           "tableFrom": "todos",
           "tableTo": "family_members",
-          "columnsFrom": [
-            "assignee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assignee_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1971,12 +1815,8 @@
           "name": "todos_created_by_users_id_fk",
           "tableFrom": "todos",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1984,12 +1824,8 @@
           "name": "todos_completed_by_users_id_fk",
           "tableFrom": "todos",
           "tableTo": "users",
-          "columnsFrom": [
-            "completed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["completed_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1997,12 +1833,8 @@
           "name": "todos_deleted_by_users_id_fk",
           "tableFrom": "todos",
           "tableTo": "users",
-          "columnsFrom": [
-            "deleted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["deleted_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2093,9 +1925,7 @@
         "users_firebase_uid_unique": {
           "name": "users_firebase_uid_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "firebase_uid"
-          ]
+          "columns": ["firebase_uid"]
         }
       },
       "policies": {},

@@ -206,7 +206,7 @@ export function DeletionConsentTracker({
               d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
             />
           </svg>
-          データの完全削除
+          記録をすべて消す
           <svg
             className="h-4 w-4 text-text-secondary flex-none ml-auto transition-transform details-chevron"
             fill="none"
@@ -227,7 +227,7 @@ export function DeletionConsentTracker({
             <>
               <p className="text-lg text-text-secondary">
                 {creatorName}
-                さんのデータ削除について、家族全員の同意を待っています。
+                さんの記録を消すことについて、家族全員の同意を待っています。
               </p>
 
               {/* Progress bar */}
@@ -280,15 +280,15 @@ export function DeletionConsentTracker({
                 disabled={isSubmitting}
                 onClick={handleCancel}
               >
-                削除プロセスを取り消す
+                取り消す
               </button>
             </>
           ) : (
             <>
               <p className="text-lg text-text-secondary leading-relaxed">
                 {creatorName}
-                さんのすべてのデータ（会話記録、ノート、音声）を完全に削除できます。
-                削除にはご家族全員の同意が必要です。
+                さんのすべての記録（会話、ノート、音声）を消すことができます。
+                消すにはご家族全員の同意が必要です。
               </p>
               <button
                 type="button"
@@ -296,7 +296,7 @@ export function DeletionConsentTracker({
                 disabled={isSubmitting}
                 onClick={handleInitiate}
               >
-                データ削除の同意を開始する
+                記録を消す手続きを始める
               </button>
             </>
           )}
@@ -305,18 +305,18 @@ export function DeletionConsentTracker({
 
       <ConfirmDialog
         isOpen={showInitiateConfirm}
-        title="データ削除の同意収集"
-        message={`${creatorName}さんのデータ削除について、ご家族全員に同意のお願いを送信します。全員が同意した場合、すべてのデータが完全に削除されます。\n\nよろしいですか？`}
-        confirmLabel="同意収集を開始する"
-        cancelLabel="やめる"
+        title="記録の削除について確認"
+        message={`${creatorName}さんの記録を消すことについて、ご家族全員にお知らせを送ります。全員が同意した場合、すべての記録が消えます。\n\nよろしいですか？`}
+        confirmLabel="確認を始める"
+        cancelLabel="もどる"
         variant="danger"
         onConfirm={handleInitiateConfirm}
         onCancel={handleInitiateCancel}
       />
       <ConfirmDialog
         isOpen={showCancelConfirm}
-        title="削除プロセスの取り消し"
-        message="データ削除の同意収集を取り消します。データは引き続き保護されます。"
+        title="手続きの取り消し"
+        message="記録を消す手続きを取り消します。記録はそのまま残ります。"
         confirmLabel="取り消す"
         cancelLabel="続ける"
         onConfirm={handleCancelConfirm}
