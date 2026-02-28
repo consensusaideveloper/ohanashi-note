@@ -236,8 +236,13 @@ export interface Notification {
   createdAt: string;
 }
 
-export async function listNotifications(): Promise<Notification[]> {
-  const response = await fetchWithAuth("/api/notifications");
+export async function listNotifications(
+  includeRead?: boolean,
+): Promise<Notification[]> {
+  const url = includeRead
+    ? "/api/notifications?includeRead=true"
+    : "/api/notifications";
+  const response = await fetchWithAuth(url);
   return response.json() as Promise<Notification[]>;
 }
 

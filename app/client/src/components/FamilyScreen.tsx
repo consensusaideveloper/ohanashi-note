@@ -37,6 +37,9 @@ interface FamilyScreenProps {
 
 type FamilySection = "my-family" | "family-notes";
 
+/** Interval in milliseconds between notification polling requests. */
+const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
+
 export function FamilyScreen({
   onSelectCreator,
 }: FamilyScreenProps): ReactNode {
@@ -98,7 +101,7 @@ export function FamilyScreen({
   }, []);
 
   const loadNotifications = useCallback((): void => {
-    void listNotifications()
+    void listNotifications(true)
       .then((data) => {
         setNotifications(data);
       })
@@ -112,6 +115,17 @@ export function FamilyScreen({
     loadConnections();
     loadNotifications();
   }, [loadMembers, loadConnections, loadNotifications]);
+
+  // Poll for new notifications periodically
+  useEffect(() => {
+    const intervalId = setInterval(
+      loadNotifications,
+      NOTIFICATION_POLL_INTERVAL_MS,
+    );
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [loadNotifications]);
 
   const handleRemove = useCallback(
     (id: string): void => {
@@ -288,7 +302,7 @@ export function FamilyScreen({
       {/* Page header */}
       <div className="flex-none px-4 pt-8 pb-4">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-text-primary mb-1">
               {UI_MESSAGES.family.pageTitle}
             </h1>
@@ -298,6 +312,7 @@ export function FamilyScreen({
           </div>
           <NotificationBell
             count={unreadNotificationCount}
+            isOpen={showNotifications}
             onClick={handleToggleNotifications}
           />
         </div>
@@ -311,6 +326,7 @@ export function FamilyScreen({
               notifications={notifications}
               onMarkRead={handleMarkNotificationRead}
               onMarkAllRead={handleMarkAllNotificationsRead}
+              onClose={handleToggleNotifications}
             />
           </div>
         </div>

@@ -9,23 +9,35 @@ import { logger } from "../lib/logger.js";
 
 import type { Context } from "hono";
 
+// --- Constants ---
+
+/** Maximum number of notifications returned when history is included. */
+const NOTIFICATION_HISTORY_LIMIT = 50;
+
 // --- Route ---
 
 const notificationsRoute = new Hono();
 
-/** GET /api/notifications — Get unread notifications for authenticated user. */
+/** GET /api/notifications — Get notifications for authenticated user. */
 notificationsRoute.get("/api/notifications", async (c: Context) => {
   try {
     const firebaseUid = getFirebaseUid(c);
     const userId = await resolveUserId(firebaseUid);
+    const includeRead = c.req.query("includeRead") === "true";
 
-    const rows = await db
+    const whereClause = includeRead
+      ? eq(notifications.userId, userId)
+      : and(eq(notifications.userId, userId), eq(notifications.isRead, false));
+
+    const query = db
       .select()
       .from(notifications)
-      .where(
-        and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
-      )
+      .where(whereClause)
       .orderBy(desc(notifications.createdAt));
+
+    const rows = includeRead
+      ? await query.limit(NOTIFICATION_HISTORY_LIMIT)
+      : await query;
 
     const result = rows.map((row) => ({
       id: row.id,
