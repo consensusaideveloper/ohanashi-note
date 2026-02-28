@@ -241,6 +241,31 @@ export const lifecycleActionLog = pgTable(
   ],
 );
 
+// --- Activity Log (unified audit trail for all user actions) ---
+
+export const activityLog = pgTable(
+  "activity_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    actorRole: text("actor_role").notNull(),
+    action: text("action").notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_activity_log_creator_date").on(table.creatorId, table.createdAt),
+    index("idx_activity_log_actor").on(table.actorId),
+  ],
+);
+
 // --- Access Presets (creator's pre-mortem category access wishes) ---
 
 export const accessPresets = pgTable(
@@ -326,6 +351,10 @@ export const todos = pgTable(
     }),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", tz),
+    deletedBy: uuid("deleted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
     index("idx_todos_lifecycle").on(table.lifecycleId),

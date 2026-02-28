@@ -19,6 +19,7 @@ import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { accessPresetsRoute } from "./routes/access-presets.js";
 import { accountRoute } from "./routes/account.js";
 import { todoRoute } from "./routes/todos.js";
+import { activityRoute } from "./routes/activity.js";
 import { createWsRoute } from "./routes/ws.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
@@ -135,6 +136,7 @@ app.use("/api/access-presets", authMiddleware);
 app.use("/api/account", authMiddleware);
 app.use("/api/todos/*", authMiddleware);
 app.use("/api/todos", authMiddleware);
+app.use("/api/activity/*", authMiddleware);
 
 // --- Routes ---
 
@@ -152,6 +154,7 @@ app.route("/", sessionQuotaRoute);
 app.route("/", accessPresetsRoute);
 app.route("/", accountRoute);
 app.route("/", todoRoute);
+app.route("/", activityRoute);
 
 // WebSocket route via relay
 const wsRoute = createWsRoute(upgradeWebSocket);

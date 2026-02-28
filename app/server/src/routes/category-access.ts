@@ -17,6 +17,7 @@ import {
   getCreatorName,
   notifyFamilyMembers,
 } from "../lib/lifecycle-helpers.js";
+import { logActivity, logReadAccess } from "../lib/activity-logger.js";
 import { r2 } from "../lib/r2.js";
 
 import type { Context } from "hono";
@@ -265,6 +266,17 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
       return lifecycleResult.response;
     }
 
+    // Block access changes during consent_gathering
+    if (lifecycleResult.lifecycle.status === "consent_gathering") {
+      return c.json(
+        {
+          error: "同意収集中はアクセス権を変更できません",
+          code: "BLOCKED_DURING_CONSENT",
+        },
+        403,
+      );
+    }
+
     const body = await c.req.json<Record<string, unknown>>();
     const familyMemberId = body["familyMemberId"];
     const categoryId = body["categoryId"];
@@ -298,6 +310,16 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
         500,
       );
     }
+
+    // Audit log: record the access grant
+    await logActivity({
+      creatorId,
+      actorId: userId,
+      actorRole: role,
+      action: "category_access_granted",
+      resourceType: "category_access",
+      metadata: { familyMemberId, categoryId },
+    });
 
     // Send notification to the affected member (best-effort)
     const member = await db.query.familyMembers.findFirst({
@@ -384,6 +406,17 @@ categoryAccessRoute.delete(
         return lifecycleResult.response;
       }
 
+      // Block access changes during consent_gathering
+      if (lifecycleResult.lifecycle.status === "consent_gathering") {
+        return c.json(
+          {
+            error: "同意収集中はアクセス権を変更できません",
+            code: "BLOCKED_DURING_CONSENT",
+          },
+          403,
+        );
+      }
+
       const body = await c.req.json<Record<string, unknown>>();
       const familyMemberId = body["familyMemberId"];
       const categoryId = body["categoryId"];
@@ -421,6 +454,16 @@ categoryAccessRoute.delete(
           404,
         );
       }
+
+      // Audit log: record the access revocation
+      await logActivity({
+        creatorId,
+        actorId: userId,
+        actorRole: role,
+        action: "category_access_revoked",
+        resourceType: "category_access",
+        metadata: { familyMemberId, categoryId },
+      });
 
       // Send notification to the affected member (best-effort)
       const member = await db.query.familyMembers.findFirst({
@@ -536,6 +579,15 @@ categoryAccessRoute.get(
           ),
         )
         .orderBy(desc(conversations.startedAt));
+
+      // Debounced read-access log (best-effort, non-blocking)
+      void logReadAccess({
+        creatorId,
+        actorId: userId,
+        actorRole: role,
+        resourceType: "note_category",
+        resourceId: categoryId,
+      });
 
       return c.json({
         categoryId,
@@ -718,46 +770,54 @@ categoryAccessRoute.get(
         );
       }
 
-      // Representatives and creators can view any conversation
-      if (role === "representative" || role === "creator") {
-        return c.json(formatConversationDetail(row));
-      }
-
       // Members: verify the conversation contains content in accessible categories
-      const membership = await db.query.familyMembers.findFirst({
-        where: and(
-          eq(familyMembers.creatorId, creatorId),
-          eq(familyMembers.memberId, userId),
-          eq(familyMembers.isActive, true),
-        ),
-        columns: { id: true },
-      });
-
-      if (!membership) {
-        return c.json(
-          { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
-          404,
-        );
-      }
-
-      const accessRows = await db
-        .select({ categoryId: categoryAccess.categoryId })
-        .from(categoryAccess)
-        .where(
-          and(
-            eq(categoryAccess.lifecycleId, lifecycleResult.lifecycle.id),
-            eq(categoryAccess.familyMemberId, membership.id),
+      if (role === "member") {
+        const membership = await db.query.familyMembers.findFirst({
+          where: and(
+            eq(familyMembers.creatorId, creatorId),
+            eq(familyMembers.memberId, userId),
+            eq(familyMembers.isActive, true),
           ),
+          columns: { id: true },
+        });
+
+        if (!membership) {
+          return c.json(
+            { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+            404,
+          );
+        }
+
+        const accessRows = await db
+          .select({ categoryId: categoryAccess.categoryId })
+          .from(categoryAccess)
+          .where(
+            and(
+              eq(categoryAccess.lifecycleId, lifecycleResult.lifecycle.id),
+              eq(categoryAccess.familyMemberId, membership.id),
+            ),
+          );
+
+        const accessibleCategories = new Set(
+          accessRows.map((r) => r.categoryId),
         );
 
-      const accessibleCategories = new Set(accessRows.map((r) => r.categoryId));
-
-      if (!hasAccessibleContent(row, accessibleCategories)) {
-        return c.json(
-          { error: "この会話を閲覧する権限がありません", code: "FORBIDDEN" },
-          403,
-        );
+        if (!hasAccessibleContent(row, accessibleCategories)) {
+          return c.json(
+            { error: "この会話を閲覧する権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
       }
+
+      // Debounced read-access log (best-effort, non-blocking)
+      void logReadAccess({
+        creatorId,
+        actorId: userId,
+        actorRole: role,
+        resourceType: "conversation",
+        resourceId: conversationId,
+      });
 
       return c.json(formatConversationDetail(row));
     } catch (error) {
@@ -893,6 +953,16 @@ categoryAccessRoute.get(
           );
         }
       }
+
+      // Audit log: record audio access (not debounced — audio access is high-value)
+      void logActivity({
+        creatorId,
+        actorId: userId,
+        actorRole: role,
+        action: "audio_accessed",
+        resourceType: "conversation",
+        resourceId: conversationId,
+      });
 
       const downloadUrl = await r2.generateDownloadUrl(row.audioStorageKey);
       return c.json({ downloadUrl });

@@ -499,3 +499,17 @@ export async function getInvitationPreview(
     return { valid: false };
   }
 }
+
+// --- Activity Logging API ---
+
+/** Log a print/export event for audit purposes (best-effort). */
+export async function logPrintEvent(
+  creatorId: string,
+  resourceType: "note" | "conversation",
+  resourceId?: string,
+): Promise<void> {
+  await fetchWithAuth(`/api/activity/${creatorId}/print-event`, {
+    method: "POST",
+    body: JSON.stringify({ resourceType, resourceId }),
+  });
+}

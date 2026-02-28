@@ -50,6 +50,13 @@
       "when": 1772220308605,
       "tag": "0006_strong_mentor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1772262331307,
+      "tag": "0007_yummy_red_hulk",
+      "breakpoints": true
     }
   ]
 }

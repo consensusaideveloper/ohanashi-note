@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import {
@@ -23,6 +23,7 @@ import {
   getCreatorName,
   notifyFamilyMembers,
 } from "../lib/lifecycle-helpers.js";
+import { logActivity } from "../lib/activity-logger.js";
 
 import type { Context } from "hono";
 
@@ -283,11 +284,16 @@ todoRoute.get("/api/todos/:creatorId", async (c: Context) => {
     const statusFilter = c.req.query("status");
     const categoryFilter = c.req.query("category");
 
-    // Fetch all todos for this lifecycle
+    // Fetch all active (non-deleted) todos for this lifecycle
     const allTodos = await db
       .select()
       .from(todos)
-      .where(eq(todos.lifecycleId, lifecycleResult.lifecycle.id))
+      .where(
+        and(
+          eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+          isNull(todos.deletedAt),
+        ),
+      )
       .orderBy(desc(todos.createdAt));
 
     let todosResult: Array<typeof todos.$inferSelect>;
@@ -479,11 +485,12 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
       return lifecycleResult.response;
     }
 
-    // Fetch existing todo
+    // Fetch existing todo (exclude soft-deleted)
     const existing = await db.query.todos.findFirst({
       where: and(
         eq(todos.id, todoId),
         eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+        isNull(todos.deletedAt),
       ),
     });
 
@@ -692,11 +699,12 @@ todoRoute.delete("/api/todos/:creatorId/:todoId", async (c: Context) => {
       return lifecycleResult.response;
     }
 
-    // Verify todo exists and belongs to this lifecycle
+    // Verify todo exists and belongs to this lifecycle (exclude already deleted)
     const existing = await db.query.todos.findFirst({
       where: and(
         eq(todos.id, todoId),
         eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+        isNull(todos.deletedAt),
       ),
     });
 
@@ -707,8 +715,30 @@ todoRoute.delete("/api/todos/:creatorId/:todoId", async (c: Context) => {
       );
     }
 
-    // Cascade delete handles comments, history, visibility
-    await db.delete(todos).where(eq(todos.id, todoId));
+    // Soft-delete: preserve history and audit trail
+    await db
+      .update(todos)
+      .set({ deletedAt: new Date(), deletedBy: userId })
+      .where(eq(todos.id, todoId));
+
+    // Record deletion with full snapshot in activity log
+    await logActivity({
+      creatorId,
+      actorId: userId,
+      actorRole: role,
+      action: "todo_deleted",
+      resourceType: "todo",
+      resourceId: todoId,
+      metadata: {
+        title: existing.title,
+        description: existing.description,
+        status: existing.status,
+        priority: existing.priority,
+        assigneeId: existing.assigneeId,
+        sourceCategory: existing.sourceCategory,
+        sourceQuestionId: existing.sourceQuestionId,
+      },
+    });
 
     return c.json({ success: true });
   } catch (error) {
@@ -747,11 +777,12 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
       return lifecycleResult.response;
     }
 
-    // Fetch the todo
+    // Fetch the todo (exclude soft-deleted)
     const todo = await db.query.todos.findFirst({
       where: and(
         eq(todos.id, todoId),
         eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+        isNull(todos.deletedAt),
       ),
     });
 
@@ -888,11 +919,12 @@ todoRoute.post("/api/todos/:creatorId/:todoId/comments", async (c: Context) => {
       return lifecycleResult.response;
     }
 
-    // Fetch the todo
+    // Fetch the todo (exclude soft-deleted)
     const todo = await db.query.todos.findFirst({
       where: and(
         eq(todos.id, todoId),
         eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+        isNull(todos.deletedAt),
       ),
     });
 
@@ -1049,11 +1081,12 @@ todoRoute.post(
         return lifecycleResult.response;
       }
 
-      // Fetch the todo
+      // Fetch the todo (exclude soft-deleted)
       const todo = await db.query.todos.findFirst({
         where: and(
           eq(todos.id, todoId),
           eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+          isNull(todos.deletedAt),
         ),
       });
 
@@ -1219,11 +1252,12 @@ todoRoute.post(
         return lifecycleResult.response;
       }
 
-      // Verify todo exists and belongs to this lifecycle
+      // Verify todo exists and belongs to this lifecycle (exclude soft-deleted)
       const todo = await db.query.todos.findFirst({
         where: and(
           eq(todos.id, todoId),
           eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+          isNull(todos.deletedAt),
         ),
       });
 

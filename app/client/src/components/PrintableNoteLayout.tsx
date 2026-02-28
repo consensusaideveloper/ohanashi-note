@@ -15,6 +15,7 @@ interface PrintableNoteLayoutProps {
   error: boolean;
   onRefresh: () => void;
   onClose: () => void;
+  onPrint?: () => void;
 }
 
 function formatDate(date: Date): string {
@@ -30,10 +31,12 @@ export function PrintableNoteLayout({
   error,
   onRefresh,
   onClose,
+  onPrint,
 }: PrintableNoteLayoutProps): ReactNode {
   const handlePrint = useCallback((): void => {
+    onPrint?.();
     window.print();
-  }, []);
+  }, [onPrint]);
 
   const totalAnswered = categories.reduce(
     (sum, cat) => sum + cat.answeredCount,
