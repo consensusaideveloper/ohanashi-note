@@ -310,7 +310,10 @@ export async function getFamilyConversations(
   const response = await fetchWithAuth(
     `/api/access/${creatorId}/conversations`,
   );
-  return response.json() as Promise<FamilyConversation[]>;
+  const data = (await response.json()) as {
+    conversations: FamilyConversation[];
+  };
+  return data.conversations;
 }
 
 export async function getAccessMatrix(
