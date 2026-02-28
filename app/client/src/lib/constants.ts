@@ -23,7 +23,7 @@ export const AUDIO_BUFFER_SIZE = 4096;
 
 // --- Echo suppression settings ---
 /** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
-export const POST_SPEECH_COOLDOWN_MS = 2000;
+export const POST_SPEECH_COOLDOWN_MS = 500;
 /** Minimum character count for a user transcript to be considered valid input. */
 export const MIN_TRANSCRIPT_LENGTH = 3;
 /** RMS threshold for barge-in detection during AI speech. */
@@ -37,7 +37,7 @@ export const INPUT_RMS_THRESHOLD = 0.005;
 /** Number of consecutive chunks above INPUT_RMS_THRESHOLD to transition to "speech active". */
 export const SPEECH_START_CHUNKS = 2;
 /** Number of consecutive chunks below INPUT_RMS_THRESHOLD to transition out of "speech active". */
-export const SPEECH_END_CHUNKS = 8;
+export const SPEECH_END_CHUNKS = 4;
 
 // --- Noise transcript filter ---
 /**
@@ -71,7 +71,7 @@ export const SESSION_CONFIG = {
     type: "server_vad" as const,
     threshold: 0.6, // lowered for mobile compatibility; Whisper filter handles noise
     prefix_padding_ms: 300,
-    silence_duration_ms: 1200, // raised from 1000 for natural pauses
+    silence_duration_ms: 600, // lowered for faster response
   },
   temperature: 0.7,
 } as const;
