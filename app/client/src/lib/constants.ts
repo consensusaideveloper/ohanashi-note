@@ -703,6 +703,12 @@ export const UI_MESSAGES = {
     leaveFailed: "脱退に失敗しました。",
     leaveBlockedByLifecycle: "現在の状態では脱退できません。",
   },
+  audio: {
+    downloadButton: "録音をダウンロード",
+    downloading: "ダウンロードしています...",
+    downloadFailed:
+      "録音のダウンロードに失敗しました。もう一度お試しください。",
+  },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
   dailyLimitReached:

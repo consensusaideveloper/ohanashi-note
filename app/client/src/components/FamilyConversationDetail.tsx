@@ -33,6 +33,26 @@ function getCategoryLabel(categoryId: QuestionCategory): string | null {
   return info !== undefined ? info.label : null;
 }
 
+const MIME_EXT_MAP: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/webm;codecs=opus": "webm",
+  "audio/mp4": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/ogg": "ogg",
+  "audio/ogg;codecs=opus": "ogg",
+};
+
+const DEFAULT_AUDIO_EXT = "webm";
+
+function buildAudioFilename(timestamp: number, mimeType: string): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const ext = MIME_EXT_MAP[mimeType] ?? DEFAULT_AUDIO_EXT;
+  return `会話録音_${year}年${month}月${day}日.${ext}`;
+}
+
 export function FamilyConversationDetail({
   creatorId,
   conversationId,
@@ -44,6 +64,7 @@ export function FamilyConversationDetail({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioMimeType, setAudioMimeType] = useState<string>("");
   const [audioLoading, setAudioLoading] = useState(false);
   const audioUrlRef = useRef<string | null>(null);
   const [showPrint, setShowPrint] = useState(false);
@@ -55,6 +76,17 @@ export function FamilyConversationDetail({
   const handleClosePrint = useCallback((): void => {
     setShowPrint(false);
   }, []);
+
+  const handleDownloadAudio = useCallback((): void => {
+    if (audioUrl === null || record === null) return;
+    const filename = buildAudioFilename(record.startedAt, audioMimeType);
+    const anchor = document.createElement("a");
+    anchor.href = audioUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  }, [audioUrl, audioMimeType, record]);
 
   const loadData = useCallback((): void => {
     setIsLoading(true);
@@ -96,6 +128,7 @@ export function FamilyConversationDetail({
           const url = URL.createObjectURL(blob);
           audioUrlRef.current = url;
           setAudioUrl(url);
+          setAudioMimeType(blob.type);
         }
       })
       .catch((err: unknown) => {
@@ -389,12 +422,37 @@ export function FamilyConversationDetail({
               <p className="text-lg text-text-secondary">読み込み中...</p>
             )}
             {!audioLoading && audioUrl !== null && (
-              <audio
-                controls
-                src={audioUrl}
-                className="w-full"
-                preload="metadata"
-              />
+              <>
+                <audio
+                  controls
+                  src={audioUrl}
+                  className="w-full"
+                  preload="metadata"
+                />
+                <button
+                  type="button"
+                  className="mt-2 min-h-11 inline-flex items-center gap-2 rounded-full border border-border text-text-secondary text-lg px-5 py-2.5 hover:bg-bg-surface-hover active:bg-border-light transition-colors"
+                  onClick={handleDownloadAudio}
+                  aria-label="録音をダウンロード"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 flex-none"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    />
+                  </svg>
+                  {UI_MESSAGES.audio.downloadButton}
+                </button>
+              </>
             )}
             {!audioLoading && audioUrl === null && (
               <p className="text-lg text-text-secondary">
