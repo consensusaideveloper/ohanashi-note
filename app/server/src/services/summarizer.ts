@@ -42,7 +42,6 @@ export interface SummarizeResponse {
   noteEntries: NoteEntry[];
   extractedUserName?: string | null;
   oneLinerSummary: string;
-  emotionAnalysis: string;
   discussedCategories: string[];
   keyPoints: KeyPoints;
   topicAdherence: "high" | "medium" | "low";
@@ -63,7 +62,6 @@ const RESPONSE_JSON_SCHEMA = {
     properties: {
       summary: { type: "string" as const },
       oneLinerSummary: { type: "string" as const },
-      emotionAnalysis: { type: "string" as const },
       discussedCategories: {
         type: "array" as const,
         items: { type: "string" as const },
@@ -124,7 +122,6 @@ const RESPONSE_JSON_SCHEMA = {
     required: [
       "summary",
       "oneLinerSummary",
-      "emotionAnalysis",
       "discussedCategories",
       "keyPoints",
       "coveredQuestionIds",
@@ -174,7 +171,6 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 {
   "summary": "会話全体の要約（2〜3文、日本語）",
   "oneLinerSummary": "会話内容を一言で表す短い要約（20〜40文字）",
-  "emotionAnalysis": "会話の雰囲気やユーザーの感情を一文で（温かく柔らかい表現で）",
   "discussedCategories": ["この会話で実際に話題にしたカテゴリIDの配列"],
   "keyPoints": {
     "importantStatements": ["ユーザーが語った重要な発言（0〜5個）"],
@@ -203,17 +199,16 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 5. noteEntriesの各項目のquestionIdは、上記の質問リストに含まれるIDのみを使用してください。
 6. 必ず有効なJSONのみを返してください。説明文は不要です。
 7. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
-8. emotionAnalysisは「穏やかな雰囲気で〜」のような温かい表現で。臨床的・評価的な表現は避けてください。
-9. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
-10. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
-11. topicAdherenceの判断基準：
+8. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
+9. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
+10. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
     - low: 会話の大部分がエンディングノートと無関係な話題だった
-12. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
-13. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
-14. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
-15. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+11. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
+12. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
+13. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
+14. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【カテゴリ別の分析ガイド】
 - legal（相続・遺言）: 相続の希望、遺言書の有無や内容、遺産分割の意向、生前贈与の計画など、相続・遺言に関する具体的な希望や状況を重点的に抽出してください。
@@ -243,7 +238,6 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 {
   "summary": "会話全体の要約（2〜3文、日本語）",
   "oneLinerSummary": "会話内容を一言で表す短い要約（20〜40文字）",
-  "emotionAnalysis": "会話の雰囲気やユーザーの感情を一文で（温かく柔らかい表現で）",
   "discussedCategories": ["この会話で実際に話題にしたカテゴリIDの配列"],
   "keyPoints": {
     "importantStatements": ["ユーザーが語った重要な発言（0〜5個）"],
@@ -273,17 +267,16 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 6. noteEntriesの各項目のquestionIdは、上記の質問一覧に含まれるIDのみを使用してください。
 7. 必ず有効なJSONのみを返してください。説明文は不要です。
 8. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
-9. emotionAnalysisは「穏やかな雰囲気で〜」のような温かい表現で。臨床的・評価的な表現は避けてください。
-10. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
-11. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
-12. topicAdherenceの判断基準：
+9. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
+10. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
+11. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
     - low: 会話の大部分がエンディングノートと無関係な話題だった
-13. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
-14. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
-15. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
-16. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+12. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
+13. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
+14. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
+15. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【追加タスク - ユーザー名の検出】
 会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
@@ -392,7 +385,6 @@ function validateResponse(data: unknown): data is SummarizeResponse {
 
   if (typeof obj["summary"] !== "string") return false;
   if (typeof obj["oneLinerSummary"] !== "string") return false;
-  if (typeof obj["emotionAnalysis"] !== "string") return false;
 
   if (!validateStringArray(obj["coveredQuestionIds"])) return false;
 

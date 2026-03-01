@@ -118,7 +118,6 @@ async function recoverPendingSummaries(): Promise<void> {
           coveredQuestionIds: result.coveredQuestionIds,
           noteEntries: result.noteEntries,
           oneLinerSummary: result.oneLinerSummary,
-          emotionAnalysis: result.emotionAnalysis,
           discussedCategories: result.discussedCategories,
           keyPoints: result.keyPoints,
           topicAdherence: result.topicAdherence,

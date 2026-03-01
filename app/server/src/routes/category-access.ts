@@ -719,7 +719,6 @@ function formatConversationDetail(
     summary: row.summary,
     summaryStatus: row.summaryStatus,
     oneLinerSummary: row.oneLinerSummary,
-    emotionAnalysis: row.emotionAnalysis,
     discussedCategories: row.discussedCategories,
     keyPoints: row.keyPoints ?? null,
     noteEntries: row.noteEntries ?? [],

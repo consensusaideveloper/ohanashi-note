@@ -1377,7 +1377,6 @@ export function useConversation(): UseConversationReturn {
             noteEntries: result.noteEntries,
             summaryStatus: "completed",
             oneLinerSummary: result.oneLinerSummary,
-            emotionAnalysis: result.emotionAnalysis,
             discussedCategories:
               result.discussedCategories as QuestionCategory[],
             keyPoints: result.keyPoints,

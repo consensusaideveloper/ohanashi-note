@@ -294,7 +294,6 @@ export interface FamilyConversationDetail {
   summary: string | null;
   summaryStatus: string;
   oneLinerSummary: string | null;
-  emotionAnalysis: string | null;
   discussedCategories: string[] | null;
   keyPoints: {
     importantStatements: string[];

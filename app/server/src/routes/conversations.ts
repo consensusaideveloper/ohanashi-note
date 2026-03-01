@@ -29,7 +29,6 @@ interface ClientConversation {
   coveredQuestionIds: string[] | null;
   noteEntries: unknown;
   oneLinerSummary: string | null;
-  emotionAnalysis: string | null;
   discussedCategories: string[] | null;
   keyPoints: unknown;
   topicAdherence: string | null;
@@ -58,7 +57,6 @@ function toClientConversation(
     coveredQuestionIds: row.coveredQuestionIds,
     noteEntries: row.noteEntries,
     oneLinerSummary: row.oneLinerSummary,
-    emotionAnalysis: row.emotionAnalysis,
     discussedCategories: row.discussedCategories,
     keyPoints: row.keyPoints,
     topicAdherence: row.topicAdherence,
@@ -215,7 +213,6 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
         ? body["noteEntries"]
         : [],
       oneLinerSummary: toStringOrNull(body["oneLinerSummary"]),
-      emotionAnalysis: toStringOrNull(body["emotionAnalysis"]),
       discussedCategories: toStringArray(body["discussedCategories"]),
       keyPoints: body["keyPoints"] ?? null,
       topicAdherence: toStringOrNull(body["topicAdherence"]),
@@ -307,8 +304,6 @@ conversationsRoute.patch("/api/conversations/:id", async (c: Context) => {
     if ("noteEntries" in body) updates["noteEntries"] = body["noteEntries"];
     if ("oneLinerSummary" in body)
       updates["oneLinerSummary"] = body["oneLinerSummary"];
-    if ("emotionAnalysis" in body)
-      updates["emotionAnalysis"] = body["emotionAnalysis"];
     if ("discussedCategories" in body)
       updates["discussedCategories"] = body["discussedCategories"];
     if ("keyPoints" in body) updates["keyPoints"] = body["keyPoints"];

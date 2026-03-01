@@ -90,7 +90,6 @@ describe("buildCanonicalContent", () => {
       audioAvailable: true,
       coveredQuestionIds: ["q1", "q2"],
       oneLinerSummary: "short summary",
-      emotionAnalysis: "warm and friendly",
       discussedCategories: ["memories", "people"],
       integrityHash: "somehash",
       audioHash: "someaudiohash",
@@ -105,7 +104,6 @@ describe("buildCanonicalContent", () => {
     expect(obj["audioAvailable"]).toBeUndefined();
     expect(obj["coveredQuestionIds"]).toBeUndefined();
     expect(obj["oneLinerSummary"]).toBeUndefined();
-    expect(obj["emotionAnalysis"]).toBeUndefined();
     expect(obj["discussedCategories"]).toBeUndefined();
     expect(obj["integrityHash"]).toBeUndefined();
     expect(obj["audioHash"]).toBeUndefined();

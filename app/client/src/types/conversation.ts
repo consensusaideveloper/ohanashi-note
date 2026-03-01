@@ -96,8 +96,6 @@ export interface ConversationRecord {
   audioMimeType?: string;
   /** Short one-line summary for list card display. */
   oneLinerSummary?: string;
-  /** Emotion/atmosphere analysis of the conversation. */
-  emotionAnalysis?: string;
   /** Topic categories actually discussed in this conversation. */
   discussedCategories?: QuestionCategory[];
   /** Structured key points extracted from the conversation. */

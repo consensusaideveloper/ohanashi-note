@@ -223,7 +223,6 @@ CREATE TABLE conversations (
   covered_question_ids TEXT[] DEFAULT '{}',
   note_entries JSONB DEFAULT '[]',              -- [{questionId, questionTitle, answer}]
   one_liner_summary TEXT,
-  emotion_analysis TEXT,
   discussed_categories TEXT[] DEFAULT '{}',
   key_points JSONB,                             -- {importantStatements[], decisions[], undecidedItems[]}
   topic_adherence TEXT,                         -- high | medium | low

@@ -24,7 +24,6 @@ interface ServerConversation {
   coveredQuestionIds: string[] | null;
   noteEntries: unknown;
   oneLinerSummary: string | null;
-  emotionAnalysis: string | null;
   discussedCategories: string[] | null;
   keyPoints: unknown;
   topicAdherence: string | null;
@@ -56,7 +55,6 @@ function toConversationRecord(s: ServerConversation): ConversationRecord {
       ? (s.noteEntries as NoteEntry[])
       : [],
     oneLinerSummary: s.oneLinerSummary ?? undefined,
-    emotionAnalysis: s.emotionAnalysis ?? undefined,
     discussedCategories:
       (s.discussedCategories as ConversationRecord["discussedCategories"]) ??
       [],

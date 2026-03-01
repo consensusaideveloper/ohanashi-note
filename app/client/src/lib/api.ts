@@ -64,7 +64,6 @@ export interface SummarizeResult {
   noteEntries: NoteEntry[];
   extractedUserName?: string | null;
   oneLinerSummary: string;
-  emotionAnalysis: string;
   discussedCategories: string[];
   keyPoints: KeyPoints;
   topicAdherence: "high" | "medium" | "low";

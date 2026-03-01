@@ -288,18 +288,6 @@ export function ConversationDetail({
           </div>
         )}
 
-        {/* Emotion/atmosphere analysis */}
-        {record.emotionAnalysis !== undefined && (
-          <div className="px-4 py-4 border-b border-border-light">
-            <h3 className="text-lg font-semibold text-text-secondary mb-2">
-              会話の雰囲気
-            </h3>
-            <p className="text-lg text-text-primary leading-relaxed">
-              {record.emotionAnalysis}
-            </p>
-          </div>
-        )}
-
         {/* Discussed category tags */}
         {record.discussedCategories !== undefined &&
           record.discussedCategories.length > 0 && (
@@ -532,7 +520,6 @@ export function ConversationDetail({
         <PrintableConversationDetail
           data={{
             startedAt: record.startedAt,
-            emotionAnalysis: record.emotionAnalysis ?? null,
             discussedCategories: record.discussedCategories ?? null,
             keyPoints: record.keyPoints ?? null,
             summary: record.summary,

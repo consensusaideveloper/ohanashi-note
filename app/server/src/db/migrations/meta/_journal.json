@@ -71,6 +71,13 @@
       "when": 1772284473675,
       "tag": "0009_nasty_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772372679239,
+      "tag": "0010_big_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

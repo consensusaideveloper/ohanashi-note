@@ -8,7 +8,6 @@ import type { QuestionCategory } from "../types/conversation";
 
 interface PrintableConversationData {
   startedAt: number;
-  emotionAnalysis: string | null;
   discussedCategories: string[] | null;
   keyPoints: {
     importantStatements: string[];
@@ -100,18 +99,6 @@ export function PrintableConversationDetail({
             {formatDateJapanese(data.startedAt)}
           </p>
         </header>
-
-        {/* Emotion/atmosphere analysis */}
-        {data.emotionAnalysis !== null && (
-          <section className="print-no-break mb-6">
-            <h2 className="text-xl font-semibold text-text-primary mb-2 border-b-2 border-text-primary/20 pb-2">
-              会話の雰囲気
-            </h2>
-            <p className="text-lg text-text-primary leading-relaxed pl-2">
-              {data.emotionAnalysis}
-            </p>
-          </section>
-        )}
 
         {/* Discussed category tags */}
         {data.discussedCategories !== null &&

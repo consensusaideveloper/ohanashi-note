@@ -45,7 +45,6 @@ export const conversations = pgTable(
     coveredQuestionIds: text("covered_question_ids").array().default([]),
     noteEntries: jsonb("note_entries").default([]),
     oneLinerSummary: text("one_liner_summary"),
-    emotionAnalysis: text("emotion_analysis"),
     discussedCategories: text("discussed_categories").array().default([]),
     keyPoints: jsonb("key_points"),
     topicAdherence: text("topic_adherence"),
