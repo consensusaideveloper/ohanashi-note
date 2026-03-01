@@ -775,9 +775,6 @@ export function useConversation(): UseConversationReturn {
                   ...SESSION_CONFIG.turn_detection,
                   silence_duration_ms: silenceDurationMs,
                 },
-                input_audio_transcription:
-                  SESSION_CONFIG.input_audio_transcription,
-                temperature: SESSION_CONFIG.temperature,
               };
 
               // Step 4: Get ephemeral token from server

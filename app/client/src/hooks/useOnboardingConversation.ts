@@ -466,8 +466,6 @@ export function useOnboardingConversation({
           voice: character.voice,
           tools: [...ONBOARDING_TOOLS],
           turn_detection: SESSION_CONFIG.turn_detection,
-          input_audio_transcription: SESSION_CONFIG.input_audio_transcription,
-          temperature: SESSION_CONFIG.temperature,
         };
 
         // Step 3: Get ephemeral token from server

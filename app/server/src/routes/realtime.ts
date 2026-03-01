@@ -28,6 +28,9 @@ const OPENAI_CLIENT_SECRETS_URL =
 
 const REALTIME_MODEL = "gpt-realtime-mini";
 
+/** Transcription model for GA Realtime API (replaces whisper-1 from beta). */
+const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+
 // --- Types ---
 
 interface TurnDetection {
@@ -49,8 +52,6 @@ interface SessionConfig {
   voice: string;
   tools: ToolDefinition[];
   turn_detection: TurnDetection;
-  input_audio_transcription: { model: string; language: string };
-  temperature: number;
 }
 
 interface TokenRequestBody {
@@ -87,10 +88,10 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
   const config = loadConfig();
 
   try {
-    const body = (await c.req.json()) as TokenRequestBody;
+    const body: TokenRequestBody = await c.req.json();
     const { sessionConfig, onboarding } = body;
 
-    if (!sessionConfig || typeof sessionConfig.instructions !== "string") {
+    if (typeof sessionConfig.instructions !== "string") {
       return c.json(
         { error: "セッション設定が不正です", code: "INVALID_REQUEST" },
         400,
@@ -175,14 +176,18 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
         session: {
           type: "realtime",
           model: REALTIME_MODEL,
-          modalities: ["text", "audio"],
           instructions: sanitizedInstructions,
-          voice: sessionConfig.voice,
           tools: sessionConfig.tools,
           tool_choice: "auto",
-          turn_detection: sessionConfig.turn_detection,
-          input_audio_transcription: sessionConfig.input_audio_transcription,
-          temperature: sessionConfig.temperature,
+          audio: {
+            input: {
+              transcription: { model: TRANSCRIPTION_MODEL },
+              turn_detection: sessionConfig.turn_detection,
+            },
+            output: {
+              voice: sessionConfig.voice,
+            },
+          },
         },
       }),
     });
@@ -272,7 +277,7 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
  */
 realtimeRoute.post("/api/realtime/session-end", async (c) => {
   try {
-    const body = (await c.req.json()) as SessionEndRequestBody;
+    const body: SessionEndRequestBody = await c.req.json();
     const { sessionKey } = body;
 
     if (!sessionKey || typeof sessionKey !== "string") {

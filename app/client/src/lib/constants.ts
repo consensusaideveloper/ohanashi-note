@@ -32,14 +32,12 @@ export const NOISE_TRANSCRIPT_REGEX = /^[\s。、！？…・〜ー～]+$/;
 
 // OpenAI Realtime API session config (voice is set dynamically per character)
 export const SESSION_CONFIG = {
-  input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
     threshold: 0.5, // OpenAI default; previous 0.7 was too high for mobile
     prefix_padding_ms: 300,
     silence_duration_ms: 800, // allow natural pauses for elderly speakers
   },
-  temperature: 0.7,
 } as const;
 
 // Function calling tools for the Realtime API session
