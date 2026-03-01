@@ -1,47 +1,14 @@
-// WebSocket message types between client and relay server.
-// These mirror the OpenAI Realtime API event structure.
+// Data channel event types for WebRTC-based OpenAI Realtime API.
+// Audio flows natively through WebRTC media tracks, so audio-related
+// events (input_audio_buffer.append, response.audio.delta) are not used.
 
-// --- Client → Server (forwarded to OpenAI) ---
+// --- Client → OpenAI (via data channel) ---
 
 export interface RealtimeToolDefinition {
   type: "function";
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-}
-
-export interface SessionUpdateEvent {
-  type: "session.update";
-  session: {
-    modalities: Array<"text" | "audio">;
-    instructions: string;
-    voice: string;
-    input_audio_format: "pcm16" | "g711_ulaw" | "g711_alaw";
-    output_audio_format: "pcm16" | "g711_ulaw" | "g711_alaw";
-    input_audio_transcription: { model: string; language?: string } | null;
-    turn_detection: {
-      type: "server_vad";
-      threshold: number;
-      prefix_padding_ms: number;
-      silence_duration_ms: number;
-    } | null;
-    temperature: number;
-    tools?: RealtimeToolDefinition[];
-    tool_choice?: "auto" | "none" | "required";
-  };
-}
-
-export interface InputAudioBufferAppendEvent {
-  type: "input_audio_buffer.append";
-  audio: string; // base64-encoded PCM16 audio
-}
-
-export interface InputAudioBufferCommitEvent {
-  type: "input_audio_buffer.commit";
-}
-
-export interface InputAudioBufferClearEvent {
-  type: "input_audio_buffer.clear";
 }
 
 export interface ResponseCreateEvent {
@@ -61,24 +28,15 @@ export interface ConversationItemCreateEvent {
   };
 }
 
-export type ClientEvent =
-  | SessionUpdateEvent
-  | InputAudioBufferAppendEvent
-  | InputAudioBufferCommitEvent
-  | InputAudioBufferClearEvent
+export type DataChannelClientEvent =
   | ResponseCreateEvent
   | ResponseCancelEvent
   | ConversationItemCreateEvent;
 
-// --- Server → Client (forwarded from OpenAI) ---
+// --- OpenAI → Client (via data channel) ---
 
 export interface SessionCreatedEvent {
   type: "session.created";
-  session: Record<string, unknown>;
-}
-
-export interface SessionUpdatedEvent {
-  type: "session.updated";
   session: Record<string, unknown>;
 }
 
@@ -92,23 +50,6 @@ export interface InputAudioBufferSpeechStoppedEvent {
   type: "input_audio_buffer.speech_stopped";
   audio_end_ms: number;
   item_id: string;
-}
-
-export interface ResponseAudioDeltaEvent {
-  type: "response.audio.delta";
-  response_id: string;
-  item_id: string;
-  output_index: number;
-  content_index: number;
-  delta: string; // base64-encoded PCM16 audio chunk
-}
-
-export interface ResponseAudioDoneEvent {
-  type: "response.audio.done";
-  response_id: string;
-  item_id: string;
-  output_index: number;
-  content_index: number;
 }
 
 export interface ResponseAudioTranscriptDeltaEvent {
@@ -159,7 +100,7 @@ export interface ResponseOutputItemDoneEvent {
   };
 }
 
-export interface ErrorEvent {
+export interface RealtimeErrorEvent {
   type: "error";
   error: {
     type: string;
@@ -168,17 +109,14 @@ export interface ErrorEvent {
   };
 }
 
-export type ServerEvent =
+export type DataChannelServerEvent =
   | SessionCreatedEvent
-  | SessionUpdatedEvent
   | InputAudioBufferSpeechStartedEvent
   | InputAudioBufferSpeechStoppedEvent
-  | ResponseAudioDeltaEvent
-  | ResponseAudioDoneEvent
   | ResponseAudioTranscriptDeltaEvent
   | ResponseAudioTranscriptDoneEvent
   | InputAudioTranscriptionCompletedEvent
   | ResponseCreatedServerEvent
   | ResponseDoneEvent
   | ResponseOutputItemDoneEvent
-  | ErrorEvent;
+  | RealtimeErrorEvent;

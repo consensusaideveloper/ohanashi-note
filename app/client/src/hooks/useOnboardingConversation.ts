@@ -7,25 +7,21 @@ import { useCallback, useEffect, useRef, useReducer } from "react";
 import {
   SESSION_CONFIG,
   ONBOARDING_TOOLS,
-  POST_SPEECH_COOLDOWN_MS,
   MIN_TRANSCRIPT_LENGTH,
-  BARGE_IN_RMS_THRESHOLD,
-  BARGE_IN_CONSECUTIVE_CHUNKS,
-  NOISE_FLOOR_RMS,
   FONT_SIZE_LABELS,
   SPEAKING_SPEED_LABELS,
   SILENCE_DURATION_LABELS,
   CONFIRMATION_LEVEL_LABELS,
+  RETRY_DELAY_MS,
 } from "../lib/constants";
 import { isNoiseTranscript } from "../lib/audio";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
 import { saveUserProfile, getUserProfile } from "../lib/storage";
-import { useWebSocket } from "./useWebSocket";
-import { useAudioInput } from "./useAudioInput";
-import { useAudioOutput } from "./useAudioOutput";
+import { getRealtimeToken, endRealtimeSession } from "../lib/api";
+import { useWebRTC } from "./useWebRTC";
 
-import type { ServerEvent } from "../lib/websocket-protocol";
+import type { DataChannelServerEvent } from "../lib/realtime-protocol";
 import type {
   ConfirmationLevel,
   ConversationState,
@@ -138,20 +134,16 @@ export function useOnboardingConversation({
 }: UseOnboardingConversationProps): UseOnboardingConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const ws = useWebSocket();
-  const audioOutput = useAudioOutput();
+  const webrtc = useWebRTC();
 
-  // Track whether session.update has been sent
-  const sessionConfigSentRef = useRef(false);
-
-  // Echo suppression refs
-  const audioGatedRef = useRef(false);
-  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bargeInCountRef = useRef(0);
-
-  // Client-side noise gate: track whether user speech is actively detected
   // End-conversation countdown
   const endConversationCountdownRef = useRef<number | null>(null);
+
+  // Session key for server-side tracking
+  const sessionKeyRef = useRef<string>("");
+
+  // Track whether AI is currently speaking (for UI state)
+  const aiSpeakingRef = useRef(false);
 
   // Stable ref for stop
   const stopRef = useRef<() => void>(() => {});
@@ -168,53 +160,11 @@ export function useOnboardingConversation({
     setFontSizeRef.current = setFontSize;
   }, [setFontSize]);
 
-  const clearCooldownTimer = useCallback((): void => {
-    if (cooldownTimerRef.current !== null) {
-      clearTimeout(cooldownTimerRef.current);
-      cooldownTimerRef.current = null;
-    }
-  }, []);
-
-  // Audio chunk handler with echo suppression, barge-in, and noise gate
-  const handleAudioChunk = useCallback(
-    (base64: string, rmsLevel: number): void => {
-      if (audioGatedRef.current) {
-        if (rmsLevel >= BARGE_IN_RMS_THRESHOLD) {
-          bargeInCountRef.current += 1;
-          if (bargeInCountRef.current >= BARGE_IN_CONSECUTIVE_CHUNKS) {
-            audioGatedRef.current = false;
-            bargeInCountRef.current = 0;
-            clearCooldownTimer();
-            audioOutput.stopPlayback();
-            endConversationCountdownRef.current = null;
-            ws.send({ type: "input_audio_buffer.clear" });
-            // Fall through to send audio below
-          } else {
-            return;
-          }
-        } else {
-          bargeInCountRef.current = 0;
-          return;
-        }
-      }
-
-      // Simple noise floor: skip chunks that are clearly silence/ambient noise.
-      if (rmsLevel < NOISE_FLOOR_RMS) {
-        return;
-      }
-
-      ws.send({ type: "input_audio_buffer.append", audio: base64 });
-    },
-    [ws, audioOutput, clearCooldownTimer],
-  );
-
-  const audioInput = useAudioInput({ onAudioChunk: handleAudioChunk });
-
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
     (callId: string, functionName: string, argsJson: string): void => {
       const sendResult = (output: string): void => {
-        ws.send({
+        webrtc.send({
           type: "conversation.item.create",
           item: {
             type: "function_call_output",
@@ -222,7 +172,7 @@ export function useOnboardingConversation({
             output,
           },
         });
-        ws.send({ type: "response.create" });
+        webrtc.send({ type: "response.create" });
       };
 
       try {
@@ -388,52 +338,26 @@ export function useOnboardingConversation({
         sendResult(JSON.stringify({ error: "操作中にエラーが発生しました" }));
       }
     },
-    [ws],
+    [webrtc],
   );
 
-  // Handle incoming server events
+  // Handle incoming data channel events
   const handleServerEvent = useCallback(
-    (event: ServerEvent): void => {
+    (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-        case "session.updated":
-          if (
-            event.type === "session.created" &&
-            !sessionConfigSentRef.current
-          ) {
-            sessionConfigSentRef.current = true;
-            const character = getCharacterById("character-a");
-            const instructions = buildOnboardingPrompt();
-            ws.send({
-              type: "session.update",
-              session: {
-                ...SESSION_CONFIG,
-                voice: character.voice,
-                instructions,
-                tools: [...ONBOARDING_TOOLS],
-                tool_choice: "auto",
-              },
-            });
-          }
-          if (event.type === "session.updated") {
-            dispatch({ type: "CONNECTED" });
-            // Trigger AI to greet the user first
-            ws.send({ type: "response.create" });
-          }
-          break;
-
-        case "response.audio.delta":
-          if (state.conversationState !== "ai-speaking") {
-            dispatch({ type: "AI_SPEAKING" });
-            ws.send({ type: "input_audio_buffer.clear" });
-          }
-          audioGatedRef.current = true;
-          bargeInCountRef.current = 0;
-          clearCooldownTimer();
-          audioOutput.enqueueAudio(event.delta);
+          // Session is ready (pre-configured via client_secrets)
+          dispatch({ type: "CONNECTED" });
+          // Trigger AI to greet the user first
+          webrtc.send({ type: "response.create" });
           break;
 
         case "response.audio_transcript.delta":
+          // AI is speaking — use transcript delta as a proxy for audio state
+          if (!aiSpeakingRef.current) {
+            aiSpeakingRef.current = true;
+            dispatch({ type: "AI_SPEAKING" });
+          }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
 
@@ -456,31 +380,29 @@ export function useOnboardingConversation({
         }
 
         case "response.done": {
+          aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
 
-          // End-conversation flow
+          // End-conversation flow: count down response.done events
           if (endConversationCountdownRef.current !== null) {
             endConversationCountdownRef.current -= 1;
             if (endConversationCountdownRef.current <= 0) {
               endConversationCountdownRef.current = null;
+              // Farewell response complete — delay for audio playback, then stop
               setTimeout(() => {
                 stopRef.current();
               }, END_CONVERSATION_FAREWELL_DELAY_MS);
               break;
             }
           }
-
-          // Post-speech cooldown
-          clearCooldownTimer();
-          cooldownTimerRef.current = setTimeout(() => {
-            audioGatedRef.current = false;
-            cooldownTimerRef.current = null;
-          }, POST_SPEECH_COOLDOWN_MS);
           break;
         }
 
         case "input_audio_buffer.speech_started":
-          audioOutput.stopPlayback();
+          // User started speaking — OpenAI handles barge-in automatically
+          // Cancel pending end-conversation flow if user interrupts
+          endConversationCountdownRef.current = null;
+          aiSpeakingRef.current = false;
           break;
 
         case "response.output_item.done": {
@@ -509,58 +431,94 @@ export function useOnboardingConversation({
           break;
       }
     },
-    [
-      ws,
-      audioOutput,
-      state.conversationState,
-      handleFunctionCall,
-      clearCooldownTimer,
-    ],
+    [webrtc, handleFunctionCall],
   );
 
   // Register/unregister message handler
   useEffect(() => {
-    ws.addMessageHandler(handleServerEvent);
+    webrtc.addMessageHandler(handleServerEvent);
     return () => {
-      ws.removeMessageHandler(handleServerEvent);
+      webrtc.removeMessageHandler(handleServerEvent);
     };
-  }, [ws, handleServerEvent]);
+  }, [webrtc, handleServerEvent]);
 
-  // Watch for WebSocket connection failures
+  // Watch for WebRTC connection failures
   useEffect(() => {
-    if (ws.status === "failed") {
+    if (webrtc.status === "failed") {
       dispatch({ type: "ERROR", errorType: "network" });
     }
-  }, [ws.status]);
+  }, [webrtc.status]);
 
   // Start the onboarding conversation
   const start = useCallback((): void => {
     dispatch({ type: "CONNECT" });
-    sessionConfigSentRef.current = false;
 
-    ws.connect({ onboarding: true });
+    // Step 1: Request mic access first (must be in user gesture context for iOS)
+    webrtc
+      .requestMicAccess()
+      .then((micStream) => {
+        // Step 2: Build session config
+        const character = getCharacterById("character-a");
+        const instructions = buildOnboardingPrompt();
 
-    // Start audio capture
-    audioInput.startCapture().catch(() => {
-      dispatch({ type: "ERROR", errorType: "microphone" });
-    });
-  }, [ws, audioInput]);
+        const sessionConfig = {
+          instructions,
+          voice: character.voice,
+          tools: [...ONBOARDING_TOOLS],
+          turn_detection: SESSION_CONFIG.turn_detection,
+          input_audio_transcription: SESSION_CONFIG.input_audio_transcription,
+          temperature: SESSION_CONFIG.temperature,
+        };
+
+        // Step 3: Get ephemeral token from server
+        return getRealtimeToken(sessionConfig, true).then(
+          ({ token, sessionKey }) => {
+            sessionKeyRef.current = sessionKey;
+
+            // Step 4: Connect WebRTC with token and mic stream
+            return webrtc.connect(token, micStream);
+          },
+        );
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to start onboarding conversation:", {
+          error: err,
+        });
+        if (
+          err instanceof Error &&
+          (err.name === "NotAllowedError" ||
+            err.name === "NotFoundError" ||
+            err.message.includes("getUserMedia"))
+        ) {
+          dispatch({ type: "ERROR", errorType: "microphone" });
+        } else {
+          dispatch({ type: "ERROR", errorType: "network" });
+        }
+      });
+  }, [webrtc]);
 
   // Stop the conversation and clean up
   const stop = useCallback((): void => {
-    clearCooldownTimer();
-    audioGatedRef.current = false;
-    bargeInCountRef.current = 0;
     endConversationCountdownRef.current = null;
+    aiSpeakingRef.current = false;
 
-    audioInput.stopCapture();
-    audioOutput.stopPlayback();
-    ws.disconnect();
+    webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
+
+    // End server-side session tracking
+    const key = sessionKeyRef.current;
+    if (key !== "") {
+      endRealtimeSession(key).catch((err: unknown) => {
+        console.error("Failed to end onboarding realtime session:", {
+          error: err,
+        });
+      });
+    }
+    sessionKeyRef.current = "";
 
     // Notify parent that onboarding is complete
     onCompleteRef.current();
-  }, [ws, audioInput, audioOutput, clearCooldownTimer]);
+  }, [webrtc]);
 
   // Keep stopRef in sync
   useEffect(() => {
@@ -569,21 +527,19 @@ export function useOnboardingConversation({
 
   // Retry after an error
   const retry = useCallback((): void => {
-    audioOutput.stopPlayback();
-    ws.disconnect();
+    webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
-    // Small delay before reconnecting
     setTimeout(() => {
       start();
-    }, 300);
-  }, [ws, audioOutput, start]);
+    }, RETRY_DELAY_MS);
+  }, [webrtc, start]);
 
   return {
     state: state.conversationState,
     errorType: state.errorType,
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
-    audioLevel: audioInput.audioLevel,
+    audioLevel: webrtc.audioLevel,
     start,
     stop,
     retry,

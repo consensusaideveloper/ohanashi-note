@@ -9,11 +9,7 @@ import {
   RETRY_DELAY_MS,
   MAX_SESSION_DURATION_MS,
   SESSION_WARNING_THRESHOLD,
-  POST_SPEECH_COOLDOWN_MS,
   MIN_TRANSCRIPT_LENGTH,
-  BARGE_IN_RMS_THRESHOLD,
-  BARGE_IN_CONSECUTIVE_CHUNKS,
-  NOISE_FLOOR_RMS,
   SILENCE_DURATION_MS_MAP,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
@@ -33,7 +29,12 @@ import {
 import { isNoiseTranscript } from "../lib/audio";
 import { computeContentHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
-import { requestSummarize, requestEnhancedSummarize } from "../lib/api";
+import {
+  requestSummarize,
+  requestEnhancedSummarize,
+  getRealtimeToken,
+  endRealtimeSession,
+} from "../lib/api";
 import {
   searchPastConversations,
   getNoteEntriesForAI,
@@ -41,16 +42,14 @@ import {
 import { useVoiceActionRef } from "../contexts/VoiceActionContext";
 
 import type { VoiceActionCallbacks } from "../contexts/VoiceActionContext";
-import { useWebSocket } from "./useWebSocket";
-import { useAudioInput } from "./useAudioInput";
-import { useAudioOutput } from "./useAudioOutput";
+import { useWebRTC } from "./useWebRTC";
 
 import type {
   PastConversationContext,
   GuidedPastContext,
   FamilyContext,
 } from "../lib/prompt-builder";
-import type { ServerEvent } from "../lib/websocket-protocol";
+import type { DataChannelServerEvent } from "../lib/realtime-protocol";
 import type {
   CharacterId,
   ConversationRecord,
@@ -212,7 +211,7 @@ export interface UseConversationReturn {
   stop: () => void;
   /** Retry after an error. */
   retry: () => void;
-  /** Re-send session.update with new speaking preferences (for mid-conversation changes). */
+  /** Update speaking preferences (applied to the next session). */
   updateSessionConfig: (preferences: SpeakingPreferences) => void;
 }
 
@@ -329,12 +328,8 @@ function dispatchVoiceAction(
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const ws = useWebSocket();
-  const audioOutput = useAudioOutput();
+  const webrtc = useWebRTC();
   const voiceActionRef = useVoiceActionRef();
-
-  // Track whether we've sent the session.update to avoid sending it twice
-  const sessionConfigSentRef = useRef(false);
 
   // Session timer refs
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -348,32 +343,30 @@ export function useConversation(): UseConversationReturn {
   const categoryRef = useRef<QuestionCategory | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
 
-  // Past conversation context (loaded on start, used in session.created)
+  // Past conversation context (loaded on start, used in session config)
   const pastContextRef = useRef<PastConversationContext | null>(null);
 
   // Guided mode context (loaded on start when category is null)
   const guidedContextRef = useRef<GuidedPastContext | null>(null);
 
-  // User name (loaded on start, used in session.created)
+  // User name (loaded on start, used in session config)
   const userNameRef = useRef<string | null>(null);
 
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
 
-  // Family context (loaded on start, used in session.update for access preset management)
+  // Family context (loaded on start, used in session config)
   const familyContextRef = useRef<FamilyContext | null>(null);
 
-  // Speaking preferences (loaded on start, used in session.update)
+  // Speaking preferences (loaded on start, used in session config)
   const speakingPrefsRef = useRef<SpeakingPreferences>({
     speakingSpeed: "normal",
     silenceDuration: "normal",
     confirmationLevel: "normal",
   });
 
-  // Echo suppression: gate audio input to server during AI speech + cooldown
-  const audioGatedRef = useRef(false);
-  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bargeInCountRef = useRef(0);
+  // Session key for server-side tracking
+  const sessionKeyRef = useRef<string>("");
 
   // Stable ref for stop so the session timer can call it without stale closures
   const stopRef = useRef<() => void>(() => {});
@@ -382,67 +375,20 @@ export function useConversation(): UseConversationReturn {
   // before the farewell is complete. null = not in end-conversation flow.
   const endConversationCountdownRef = useRef<number | null>(null);
 
+  // Track whether AI is currently speaking (for UI state)
+  const aiSpeakingRef = useRef(false);
+
   // Keep transcript ref in sync with reducer state
   useEffect(() => {
     transcriptRef.current = state.transcript;
   }, [state.transcript]);
-
-  /** Cancel any pending post-speech cooldown timer. */
-  const clearCooldownTimer = useCallback((): void => {
-    if (cooldownTimerRef.current !== null) {
-      clearTimeout(cooldownTimerRef.current);
-      cooldownTimerRef.current = null;
-    }
-  }, []);
-
-  // Callback for audio chunks from the microphone
-  const handleAudioChunk = useCallback(
-    (base64: string, rmsLevel: number): void => {
-      if (audioGatedRef.current) {
-        // Check for barge-in: user speaking loudly enough to override echo
-        if (rmsLevel >= BARGE_IN_RMS_THRESHOLD) {
-          bargeInCountRef.current += 1;
-          if (bargeInCountRef.current >= BARGE_IN_CONSECUTIVE_CHUNKS) {
-            // Confirmed barge-in — ungate and stop AI playback
-            audioGatedRef.current = false;
-            bargeInCountRef.current = 0;
-            clearCooldownTimer();
-            audioOutput.stopPlayback();
-            // Cancel pending end-conversation flow if user barges in
-            endConversationCountdownRef.current = null;
-            ws.send({ type: "input_audio_buffer.clear" });
-            // Fall through to send audio below
-          } else {
-            return; // Not yet confirmed
-          }
-        } else {
-          bargeInCountRef.current = 0;
-          return; // Below threshold — skip (echo or noise)
-        }
-      }
-
-      // Simple noise floor: skip chunks that are clearly silence/ambient noise.
-      // No state machine — just a per-chunk threshold check.
-      if (rmsLevel < NOISE_FLOOR_RMS) {
-        return;
-      }
-
-      ws.send({
-        type: "input_audio_buffer.append",
-        audio: base64,
-      });
-    },
-    [ws, audioOutput, clearCooldownTimer],
-  );
-
-  const audioInput = useAudioInput({ onAudioChunk: handleAudioChunk });
 
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
     (callId: string, functionName: string, argsJson: string): void => {
       /** Send function call output back to the Realtime API and trigger a response. */
       const sendResult = (output: string): void => {
-        ws.send({
+        webrtc.send({
           type: "conversation.item.create",
           item: {
             type: "function_call_output",
@@ -450,7 +396,7 @@ export function useConversation(): UseConversationReturn {
             output,
           },
         });
-        ws.send({ type: "response.create" });
+        webrtc.send({ type: "response.create" });
       };
 
       try {
@@ -485,7 +431,7 @@ export function useConversation(): UseConversationReturn {
           );
           result = JSON.stringify(noteResult);
         } else {
-          // Delegate to voice action callbacks (tools added in Phase B-D)
+          // Delegate to voice action callbacks
           const callbacks = voiceActionRef.current;
           if (callbacks !== null) {
             const voiceResult = dispatchVoiceAction(
@@ -522,87 +468,26 @@ export function useConversation(): UseConversationReturn {
         sendResult(JSON.stringify({ error: "検索中にエラーが発生しました" }));
       }
     },
-    [ws, voiceActionRef],
+    [webrtc, voiceActionRef],
   );
 
-  // Handle incoming server events
+  // Handle incoming data channel events
   const handleServerEvent = useCallback(
-    (event: ServerEvent): void => {
+    (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-        case "session.updated":
-          // Session is ready — if we haven't sent config yet, send it
-          if (
-            event.type === "session.created" &&
-            !sessionConfigSentRef.current
-          ) {
-            sessionConfigSentRef.current = true;
-            const charId = characterIdRef.current ?? "character-a";
-            const character = getCharacterById(charId);
-            const prefs = speakingPrefsRef.current;
-            const familyCtx = familyContextRef.current ?? undefined;
-            let instructions: string;
-            if (categoryRef.current !== null) {
-              // Focused mode: category-specific prompt
-              instructions = buildSessionPrompt(
-                charId,
-                categoryRef.current,
-                pastContextRef.current ?? undefined,
-                userNameRef.current ?? undefined,
-                prefs,
-                familyCtx,
-              );
-            } else {
-              // Guided mode: cross-category prompt
-              instructions = buildGuidedSessionPrompt(
-                charId,
-                guidedContextRef.current ?? {
-                  allCoveredQuestionIds: [],
-                  recentSummaries: [],
-                },
-                userNameRef.current ?? undefined,
-                prefs,
-                familyCtx,
-              );
-            }
-            const silenceDurationMs =
-              SILENCE_DURATION_MS_MAP[prefs.silenceDuration];
-            ws.send({
-              type: "session.update",
-              session: {
-                ...SESSION_CONFIG,
-                turn_detection: {
-                  ...SESSION_CONFIG.turn_detection,
-                  silence_duration_ms: silenceDurationMs,
-                },
-                voice: character.voice,
-                instructions,
-                tools: [...REALTIME_TOOLS],
-                tool_choice: "auto",
-              },
-            });
-          }
-          if (event.type === "session.updated") {
-            dispatch({ type: "CONNECTED" });
-            // Trigger AI to greet the user first
-            ws.send({ type: "response.create" });
-          }
-          break;
-
-        case "response.audio.delta":
-          // AI is sending audio — gate mic input and transition to speaking state
-          if (state.conversationState !== "ai-speaking") {
-            dispatch({ type: "AI_SPEAKING" });
-            // Clear any audio already buffered server-side to prevent stale echo
-            ws.send({ type: "input_audio_buffer.clear" });
-          }
-          audioGatedRef.current = true;
-          bargeInCountRef.current = 0;
-          clearCooldownTimer();
-          audioOutput.enqueueAudio(event.delta);
+          // Session is ready (pre-configured via client_secrets)
+          dispatch({ type: "CONNECTED" });
+          // Trigger AI to greet the user first
+          webrtc.send({ type: "response.create" });
           break;
 
         case "response.audio_transcript.delta":
+          // AI is speaking — use transcript delta as a proxy for audio state
+          if (!aiSpeakingRef.current) {
+            aiSpeakingRef.current = true;
+            dispatch({ type: "AI_SPEAKING" });
+          }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
 
@@ -625,6 +510,7 @@ export function useConversation(): UseConversationReturn {
         }
 
         case "response.done": {
+          aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
 
           // End-conversation flow: count down response.done events
@@ -639,20 +525,14 @@ export function useConversation(): UseConversationReturn {
               break;
             }
           }
-
-          // Start post-speech cooldown: keep audio gated briefly
-          // to prevent residual echo from triggering a new response
-          clearCooldownTimer();
-          cooldownTimerRef.current = setTimeout(() => {
-            audioGatedRef.current = false;
-            cooldownTimerRef.current = null;
-          }, POST_SPEECH_COOLDOWN_MS);
           break;
         }
 
         case "input_audio_buffer.speech_started":
-          // User started speaking — stop any AI audio that's playing
-          audioOutput.stopPlayback();
+          // User started speaking — OpenAI handles barge-in automatically
+          // Cancel pending end-conversation flow if user interrupts
+          endConversationCountdownRef.current = null;
+          aiSpeakingRef.current = false;
           break;
 
         case "response.output_item.done": {
@@ -682,186 +562,249 @@ export function useConversation(): UseConversationReturn {
           break;
       }
     },
-    [
-      ws,
-      audioOutput,
-      state.conversationState,
-      handleFunctionCall,
-      clearCooldownTimer,
-    ],
+    [webrtc, handleFunctionCall],
   );
 
   // Register/unregister message handler
   useEffect(() => {
-    ws.addMessageHandler(handleServerEvent);
+    webrtc.addMessageHandler(handleServerEvent);
     return () => {
-      ws.removeMessageHandler(handleServerEvent);
+      webrtc.removeMessageHandler(handleServerEvent);
     };
-  }, [ws, handleServerEvent]);
+  }, [webrtc, handleServerEvent]);
 
-  // Watch for WebSocket connection failures and server rejection codes
+  // Watch for WebRTC connection failures
   useEffect(() => {
-    if (ws.status === "failed") {
-      if (ws.lastError === "QUOTA_EXCEEDED") {
-        dispatch({ type: "ERROR", errorType: "quotaExceeded" });
-      } else if (ws.lastError === "SESSION_TIMEOUT") {
-        // Server forced timeout — trigger normal stop flow to save data
-        stopRef.current();
-      } else {
-        dispatch({ type: "ERROR", errorType: "network" });
-      }
+    if (webrtc.status === "failed") {
+      dispatch({ type: "ERROR", errorType: "network" });
     }
-  }, [ws.status, ws.lastError]);
+  }, [webrtc.status]);
 
-  // Start conversation — load past context, then connect
+  // Start conversation — load past context, get token, connect via WebRTC
   const start = useCallback(
     (characterId: CharacterId, category: QuestionCategory | null): void => {
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
       categoryRef.current = category;
       dispatch({ type: "CONNECT" });
-      sessionConfigSentRef.current = false;
 
-      // Load all conversations, user profile, and family context (partial failure safe)
-      Promise.allSettled([
-        listConversations(),
-        getUserProfile(),
-        listFamilyMembers(),
-        listAccessPresets(),
-      ])
-        .then(([recordsResult, profileResult, familyResult, presetsResult]) => {
-          const allRecords =
-            recordsResult.status === "fulfilled" ? recordsResult.value : [];
-          if (recordsResult.status === "rejected") {
-            console.error("Failed to load conversations:", {
-              error: recordsResult.reason,
-            });
-          }
-
-          const profile =
-            profileResult.status === "fulfilled" ? profileResult.value : null;
-          if (profileResult.status === "rejected") {
-            console.error("Failed to load user profile for session:", {
-              error: profileResult.reason,
-            });
-          }
-
-          allRecordsRef.current = allRecords;
-
-          if (category !== null) {
-            // FOCUSED MODE: build context for a specific category
-            const pastRecords = allRecords.filter(
-              (r) => r.category === category,
-            );
-            const coveredIds: string[] = [];
-            const summaries: string[] = [];
-            for (const record of pastRecords) {
-              if (record.coveredQuestionIds) {
-                coveredIds.push(...record.coveredQuestionIds);
+      // Step 1: Request mic access first (must be in user gesture context for iOS)
+      webrtc
+        .requestMicAccess()
+        .then((micStream) => {
+          // Step 2: Load all context data in parallel
+          return Promise.allSettled([
+            listConversations(),
+            getUserProfile(),
+            listFamilyMembers(),
+            listAccessPresets(),
+          ]).then(
+            ([recordsResult, profileResult, familyResult, presetsResult]) => {
+              const allRecords =
+                recordsResult.status === "fulfilled" ? recordsResult.value : [];
+              if (recordsResult.status === "rejected") {
+                console.error("Failed to load conversations:", {
+                  error: recordsResult.reason,
+                });
               }
-              if (record.summary) {
-                summaries.push(record.summary);
+
+              const profile =
+                profileResult.status === "fulfilled"
+                  ? profileResult.value
+                  : null;
+              if (profileResult.status === "rejected") {
+                console.error("Failed to load user profile for session:", {
+                  error: profileResult.reason,
+                });
               }
-            }
 
-            const otherCategoryRecords = allRecords
-              .filter((r) => r.category !== category && r.summary !== null)
-              .slice(0, CROSS_CATEGORY_RECORDS_LIMIT);
+              allRecordsRef.current = allRecords;
 
-            const crossCategorySummaries = otherCategoryRecords.map((r) => ({
-              category:
-                QUESTION_CATEGORIES.find((c) => c.id === r.category)?.label ??
-                r.category ??
-                "",
-              summary: r.summary ?? "",
-            }));
+              if (category !== null) {
+                // FOCUSED MODE: build context for a specific category
+                const pastRecords = allRecords.filter(
+                  (r) => r.category === category,
+                );
+                const coveredIds: string[] = [];
+                const summaries: string[] = [];
+                for (const record of pastRecords) {
+                  if (record.coveredQuestionIds) {
+                    coveredIds.push(...record.coveredQuestionIds);
+                  }
+                  if (record.summary) {
+                    summaries.push(record.summary);
+                  }
+                }
 
-            pastContextRef.current = {
-              coveredQuestionIds: [...new Set(coveredIds)],
-              summaries: summaries.slice(0, FOCUSED_SUMMARIES_LIMIT),
-              crossCategorySummaries,
-            };
-            guidedContextRef.current = null;
-          } else {
-            // GUIDED MODE: build context across all categories
-            const allCoveredIds: string[] = [];
-            for (const record of allRecords) {
-              if (record.coveredQuestionIds) {
-                allCoveredIds.push(...record.coveredQuestionIds);
+                const otherCategoryRecords = allRecords
+                  .filter((r) => r.category !== category && r.summary !== null)
+                  .slice(0, CROSS_CATEGORY_RECORDS_LIMIT);
+
+                const crossCategorySummaries = otherCategoryRecords.map(
+                  (r) => ({
+                    category:
+                      QUESTION_CATEGORIES.find((c) => c.id === r.category)
+                        ?.label ??
+                      r.category ??
+                      "",
+                    summary: r.summary ?? "",
+                  }),
+                );
+
+                pastContextRef.current = {
+                  coveredQuestionIds: [...new Set(coveredIds)],
+                  summaries: summaries.slice(0, FOCUSED_SUMMARIES_LIMIT),
+                  crossCategorySummaries,
+                };
+                guidedContextRef.current = null;
+              } else {
+                // GUIDED MODE: build context across all categories
+                const allCoveredIds: string[] = [];
+                for (const record of allRecords) {
+                  if (record.coveredQuestionIds) {
+                    allCoveredIds.push(...record.coveredQuestionIds);
+                  }
+                }
+
+                const recentSummaries = allRecords
+                  .filter((r) => r.summary !== null)
+                  .slice(0, GUIDED_RECENT_SUMMARIES_LIMIT)
+                  .map((r) => ({
+                    category:
+                      QUESTION_CATEGORIES.find((c) => c.id === r.category)
+                        ?.label ??
+                      r.category ??
+                      "その他",
+                    summary: r.summary ?? "",
+                  }));
+
+                guidedContextRef.current = {
+                  allCoveredQuestionIds: [...new Set(allCoveredIds)],
+                  recentSummaries,
+                };
+                pastContextRef.current = null;
               }
-            }
 
-            const recentSummaries = allRecords
-              .filter((r) => r.summary !== null)
-              .slice(0, GUIDED_RECENT_SUMMARIES_LIMIT)
-              .map((r) => ({
-                category:
-                  QUESTION_CATEGORIES.find((c) => c.id === r.category)?.label ??
-                  r.category ??
-                  "その他",
-                summary: r.summary ?? "",
-              }));
+              userNameRef.current = profile?.name ?? null;
 
-            guidedContextRef.current = {
-              allCoveredQuestionIds: [...new Set(allCoveredIds)],
-              recentSummaries,
-            };
-            pastContextRef.current = null;
-          }
+              // Load speaking preferences from profile
+              const profileSpeed = profile?.speakingSpeed;
+              const profileSilence = profile?.silenceDuration;
+              const profileConfirmation = profile?.confirmationLevel;
+              const prefs: SpeakingPreferences = {
+                speakingSpeed:
+                  profileSpeed !== undefined ? profileSpeed : "normal",
+                silenceDuration:
+                  profileSilence !== undefined ? profileSilence : "normal",
+                confirmationLevel:
+                  profileConfirmation !== undefined
+                    ? profileConfirmation
+                    : "normal",
+              };
+              speakingPrefsRef.current = prefs;
 
-          userNameRef.current = profile?.name ?? null;
+              // Build family context
+              const familyMembers =
+                familyResult.status === "fulfilled"
+                  ? familyResult.value.members
+                  : [];
+              if (familyResult.status === "rejected") {
+                console.error("Failed to load family members for session:", {
+                  error: familyResult.reason as unknown,
+                });
+              }
+              const accessPresets =
+                presetsResult.status === "fulfilled" ? presetsResult.value : [];
+              if (presetsResult.status === "rejected") {
+                console.error("Failed to load access presets for session:", {
+                  error: presetsResult.reason as unknown,
+                });
+              }
 
-          // Load speaking preferences from profile
-          const profileSpeed = profile?.speakingSpeed;
-          const profileSilence = profile?.silenceDuration;
-          const profileConfirmation = profile?.confirmationLevel;
-          speakingPrefsRef.current = {
-            speakingSpeed: profileSpeed !== undefined ? profileSpeed : "normal",
-            silenceDuration:
-              profileSilence !== undefined ? profileSilence : "normal",
-            confirmationLevel:
-              profileConfirmation !== undefined
-                ? profileConfirmation
-                : "normal",
-          };
+              if (familyMembers.length > 0) {
+                familyContextRef.current = {
+                  members: familyMembers
+                    .filter((m) => m.isActive)
+                    .map((m) => ({
+                      name: m.name,
+                      relationshipLabel: m.relationshipLabel,
+                    })),
+                  presets: accessPresets.map((p) => ({
+                    memberName: p.memberName,
+                    categoryId: p.categoryId,
+                  })),
+                };
+              } else {
+                familyContextRef.current = null;
+              }
 
-          // Build family context for access preset voice management
-          const familyMembers =
-            familyResult.status === "fulfilled"
-              ? familyResult.value.members
-              : [];
-          if (familyResult.status === "rejected") {
-            console.error("Failed to load family members for session:", {
-              error: familyResult.reason as unknown,
-            });
-          }
-          const accessPresets =
-            presetsResult.status === "fulfilled" ? presetsResult.value : [];
-          if (presetsResult.status === "rejected") {
-            console.error("Failed to load access presets for session:", {
-              error: presetsResult.reason as unknown,
-            });
-          }
+              // Step 3: Build session config
+              const character = getCharacterById(characterId);
+              const familyCtx = familyContextRef.current ?? undefined;
+              let instructions: string;
+              if (category !== null) {
+                instructions = buildSessionPrompt(
+                  characterId,
+                  category,
+                  pastContextRef.current ?? undefined,
+                  userNameRef.current ?? undefined,
+                  prefs,
+                  familyCtx,
+                );
+              } else {
+                instructions = buildGuidedSessionPrompt(
+                  characterId,
+                  guidedContextRef.current ?? {
+                    allCoveredQuestionIds: [],
+                    recentSummaries: [],
+                  },
+                  userNameRef.current ?? undefined,
+                  prefs,
+                  familyCtx,
+                );
+              }
 
-          if (familyMembers.length > 0) {
-            familyContextRef.current = {
-              members: familyMembers
-                .filter((m) => m.isActive)
-                .map((m) => ({
-                  name: m.name,
-                  relationshipLabel: m.relationshipLabel,
-                })),
-              presets: accessPresets.map((p) => ({
-                memberName: p.memberName,
-                categoryId: p.categoryId,
-              })),
-            };
-          } else {
-            familyContextRef.current = null;
-          }
+              const silenceDurationMs =
+                SILENCE_DURATION_MS_MAP[prefs.silenceDuration];
+
+              const sessionConfig = {
+                instructions,
+                voice: character.voice,
+                tools: [...REALTIME_TOOLS],
+                turn_detection: {
+                  ...SESSION_CONFIG.turn_detection,
+                  silence_duration_ms: silenceDurationMs,
+                },
+                input_audio_transcription:
+                  SESSION_CONFIG.input_audio_transcription,
+                temperature: SESSION_CONFIG.temperature,
+              };
+
+              // Step 4: Get ephemeral token from server
+              return getRealtimeToken(sessionConfig).then(
+                ({ token, sessionKey }) => {
+                  sessionKeyRef.current = sessionKey;
+
+                  // Step 5: Connect WebRTC with token and mic stream
+                  return webrtc.connect(token, micStream);
+                },
+              );
+            },
+          );
         })
-        .finally(() => {
-          ws.connect();
+        .catch((err: unknown) => {
+          console.error("Failed to start conversation:", { error: err });
+          // Determine error type based on failure
+          if (
+            err instanceof Error &&
+            (err.name === "NotAllowedError" ||
+              err.name === "NotFoundError" ||
+              err.message.includes("getUserMedia"))
+          ) {
+            dispatch({ type: "ERROR", errorType: "microphone" });
+          } else {
+            dispatch({ type: "ERROR", errorType: "network" });
+          }
         });
 
       // Start session timer
@@ -886,16 +829,11 @@ export function useConversation(): UseConversationReturn {
           stopRef.current();
         }
       }, TIMER_INTERVAL_MS);
-
-      // Start audio capture (must be in user gesture handler context)
-      audioInput.startCapture().catch(() => {
-        dispatch({ type: "ERROR", errorType: "microphone" });
-      });
     },
-    [ws, audioInput],
+    [webrtc],
   );
 
-  // Stop conversation, save transcript, recording, and request summary
+  // Stop conversation, save transcript, and request summary
   const stop = useCallback((): void => {
     // Clear session timer
     if (sessionTimerRef.current !== null) {
@@ -904,21 +842,14 @@ export function useConversation(): UseConversationReturn {
     }
     sessionStartTimeRef.current = null;
 
-    // Reset echo suppression state
-    clearCooldownTimer();
-    audioGatedRef.current = false;
-    bargeInCountRef.current = 0;
-
     // Reset end-conversation state
     endConversationCountdownRef.current = null;
+    aiSpeakingRef.current = false;
 
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
     const category = categoryRef.current;
     const charId = characterIdRef.current;
-
-    // Stop audio capture (no parallel MediaRecorder — see useAudioInput)
-    audioInput.stopCapture();
 
     if (convId !== null && currentTranscript.length > 0) {
       const firstEntry = currentTranscript[0];
@@ -945,14 +876,11 @@ export function useConversation(): UseConversationReturn {
 
       saveConversation(record)
         .then(() => {
-          // Request enhanced summarization (re-transcription + summarize on server).
-          // Falls back to client-side summarize if enhanced endpoint fails.
           const summarizePromise = requestEnhancedSummarize(
             convId,
             category,
             previousEntries,
           ).catch(() => {
-            // Fallback: use original realtime transcript for summarization
             return requestSummarize(
               category,
               record.transcript,
@@ -962,7 +890,6 @@ export function useConversation(): UseConversationReturn {
 
           return summarizePromise
             .then((result) => {
-              // Auto-save extracted user name to profile
               if (
                 result.extractedUserName !== undefined &&
                 result.extractedUserName !== null &&
@@ -979,7 +906,6 @@ export function useConversation(): UseConversationReturn {
                   .catch(() => {});
               }
 
-              // Update local IndexedDB with summary results
               return updateConversation(convId, {
                 summary: result.summary,
                 coveredQuestionIds: result.coveredQuestionIds,
@@ -995,7 +921,6 @@ export function useConversation(): UseConversationReturn {
               });
             })
             .then(() => {
-              // Compute integrity hash on the finalized record
               return getConversation(convId).then((fullRecord) => {
                 if (fullRecord !== null) {
                   return computeContentHash(fullRecord).then((integrityHash) =>
@@ -1013,7 +938,6 @@ export function useConversation(): UseConversationReturn {
         })
         .catch((error: unknown) => {
           console.error("Failed to save/summarize conversation:", error);
-          // Mark summary as failed but keep the transcript saved
           updateConversation(convId, { summaryStatus: "failed" }).catch(
             () => {},
           );
@@ -1021,9 +945,16 @@ export function useConversation(): UseConversationReturn {
         });
     }
 
-    audioOutput.stopPlayback();
-    ws.disconnect();
+    webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
+
+    // End server-side session tracking
+    const key = sessionKeyRef.current;
+    if (key !== "") {
+      endRealtimeSession(key).catch((err: unknown) => {
+        console.error("Failed to end realtime session:", { error: err });
+      });
+    }
 
     conversationIdRef.current = null;
     characterIdRef.current = null;
@@ -1033,12 +964,13 @@ export function useConversation(): UseConversationReturn {
     userNameRef.current = null;
     allRecordsRef.current = [];
     familyContextRef.current = null;
+    sessionKeyRef.current = "";
     speakingPrefsRef.current = {
       speakingSpeed: "normal",
       silenceDuration: "normal",
       confirmationLevel: "normal",
     };
-  }, [ws, audioInput, audioOutput, clearCooldownTimer]);
+  }, [webrtc]);
 
   // Keep stopRef in sync with the latest stop callback
   useEffect(() => {
@@ -1051,62 +983,16 @@ export function useConversation(): UseConversationReturn {
       if (sessionTimerRef.current !== null) {
         clearInterval(sessionTimerRef.current);
       }
-      if (cooldownTimerRef.current !== null) {
-        clearTimeout(cooldownTimerRef.current);
-      }
     };
   }, []);
 
-  // Re-send session.update with updated speaking preferences (mid-conversation)
+  // Mid-conversation session config update is not supported with WebRTC GA protocol
+  // (session is pre-configured via client_secrets). Changes will apply to the next session.
   const updateSessionConfig = useCallback(
     (preferences: SpeakingPreferences): void => {
       speakingPrefsRef.current = preferences;
-      const charId = characterIdRef.current ?? "character-a";
-      const character = getCharacterById(charId);
-      const familyCtx = familyContextRef.current ?? undefined;
-
-      let instructions: string;
-      if (categoryRef.current !== null) {
-        instructions = buildSessionPrompt(
-          charId,
-          categoryRef.current,
-          pastContextRef.current ?? undefined,
-          userNameRef.current ?? undefined,
-          preferences,
-          familyCtx,
-        );
-      } else {
-        instructions = buildGuidedSessionPrompt(
-          charId,
-          guidedContextRef.current ?? {
-            allCoveredQuestionIds: [],
-            recentSummaries: [],
-          },
-          userNameRef.current ?? undefined,
-          preferences,
-          familyCtx,
-        );
-      }
-
-      const silenceDurationMs =
-        SILENCE_DURATION_MS_MAP[preferences.silenceDuration];
-
-      ws.send({
-        type: "session.update",
-        session: {
-          ...SESSION_CONFIG,
-          turn_detection: {
-            ...SESSION_CONFIG.turn_detection,
-            silence_duration_ms: silenceDurationMs,
-          },
-          voice: character.voice,
-          instructions,
-          tools: [...REALTIME_TOOLS],
-          tool_choice: "auto",
-        },
-      });
     },
-    [ws],
+    [],
   );
 
   // Retry after error
@@ -1114,7 +1000,6 @@ export function useConversation(): UseConversationReturn {
     const retryCharacterId = characterIdRef.current;
     const retryCategory = categoryRef.current;
     stop();
-    // Small delay to ensure cleanup before reconnecting
     setTimeout(() => {
       if (retryCharacterId !== null) {
         start(retryCharacterId, retryCategory);
@@ -1127,7 +1012,7 @@ export function useConversation(): UseConversationReturn {
     errorType: state.errorType,
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
-    audioLevel: audioInput.audioLevel,
+    audioLevel: webrtc.audioLevel,
     characterId: characterIdRef.current,
     summaryStatus: state.summaryStatus,
     remainingMs: state.remainingMs,

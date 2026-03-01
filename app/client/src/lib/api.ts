@@ -123,6 +123,31 @@ export async function requestSummarize(
   return response.json() as Promise<SummarizeResult>;
 }
 
+// --- Realtime WebRTC token ---
+
+export interface RealtimeTokenResponse {
+  token: string;
+  sessionKey: string;
+}
+
+export async function getRealtimeToken(
+  sessionConfig: Record<string, unknown>,
+  onboarding?: boolean,
+): Promise<RealtimeTokenResponse> {
+  const response = await fetchWithAuth("/api/realtime/token", {
+    method: "POST",
+    body: JSON.stringify({ sessionConfig, onboarding }),
+  });
+  return response.json() as Promise<RealtimeTokenResponse>;
+}
+
+export async function endRealtimeSession(sessionKey: string): Promise<void> {
+  await fetchWithAuth("/api/realtime/session-end", {
+    method: "POST",
+    body: JSON.stringify({ sessionKey }),
+  });
+}
+
 // --- Enhanced Summarize (with re-transcription) ---
 
 export async function requestEnhancedSummarize(

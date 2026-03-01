@@ -5,35 +5,8 @@ import type {
   ConfirmationLevel,
 } from "../types/conversation";
 
-// WebSocket URL — in development, Vite proxy handles /ws
-// In production, same origin serves both static files and WebSocket
-export const WS_URL =
-  import.meta.env.MODE === "production"
-    ? `wss://${window.location.host}/ws`
-    : `ws://${window.location.host}/ws`;
-
-// Reconnection settings
-export const MAX_RECONNECT_ATTEMPTS = 3;
-export const RECONNECT_BASE_DELAY_MS = 1000;
-export const RECONNECT_MAX_DELAY_MS = 10000;
-
-// Audio settings
-export const AUDIO_SAMPLE_RATE = 24000;
-export const AUDIO_BUFFER_SIZE = 4096;
-
-// --- Echo suppression settings ---
-/** Minimum RMS level to send audio to OpenAI. Simple per-chunk filter (no state machine).
- * Lowered from 0.01 to 0.003 for mobile: soft speech on mobile produces RMS 0.008-0.015. */
-export const NOISE_FLOOR_RMS = 0.003;
-/** Cooldown period (ms) after AI finishes speaking before re-enabling mic input. */
-export const POST_SPEECH_COOLDOWN_MS = 500;
 /** Minimum character count for a user transcript to be considered valid input. */
 export const MIN_TRANSCRIPT_LENGTH = 3;
-/** RMS threshold for barge-in detection during AI speech.
- * Lowered from 0.15 to 0.08: normal mobile speech RMS is 0.02-0.08. */
-export const BARGE_IN_RMS_THRESHOLD = 0.08;
-/** Number of consecutive audio chunks above RMS threshold to confirm barge-in. */
-export const BARGE_IN_CONSECUTIVE_CHUNKS = 2;
 
 // --- Noise transcript filter ---
 /**
@@ -59,9 +32,6 @@ export const NOISE_TRANSCRIPT_REGEX = /^[\s。、！？…・〜ー～]+$/;
 
 // OpenAI Realtime API session config (voice is set dynamically per character)
 export const SESSION_CONFIG = {
-  modalities: ["text", "audio"] as Array<"text" | "audio">,
-  input_audio_format: "pcm16" as const,
-  output_audio_format: "pcm16" as const,
   input_audio_transcription: { model: "whisper-1", language: "ja" },
   turn_detection: {
     type: "server_vad" as const,
@@ -828,14 +798,6 @@ export const MAX_SESSION_DURATION_MS = 20 * 60 * 1000;
 export const SESSION_WARNING_THRESHOLD = 0.85;
 /** Maximum number of conversation sessions per day. */
 export const MAX_DAILY_SESSIONS = 5;
-
-// --- WebSocket close codes (server-defined, RFC 6455 app range 4000-4999) ---
-/** Server close code: daily session quota exceeded. */
-export const WS_CLOSE_QUOTA_EXCEEDED = 4008;
-/** Server close code: session duration limit reached. */
-export const WS_CLOSE_SESSION_TIMEOUT = 4009;
-/** Server close code: lifecycle status blocks new conversations. */
-export const WS_CLOSE_LIFECYCLE_BLOCKED = 4004;
 
 // --- UI timing ---
 export const RETRY_DELAY_MS = 300;
