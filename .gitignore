@@ -17,5 +17,8 @@ Thumbs.db
 .claude/settings.json
 .claude/todos.json
 
+# === Dependencies ===
+node_modules/
+
 # === TypeScript build info ===
 *.tsbuildinfo
