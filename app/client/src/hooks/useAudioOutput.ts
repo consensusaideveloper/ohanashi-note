@@ -7,8 +7,10 @@ import {
   AudioContextClass,
 } from "../lib/audio";
 
-/** Number of audio chunks to buffer before starting playback. */
-const PRE_BUFFER_CHUNKS = 2;
+/** Number of audio chunks to buffer before starting playback.
+ * Kept at 1 to minimize perceived latency while still covering one
+ * chunk of network jitter. */
+const PRE_BUFFER_CHUNKS = 1;
 
 interface UseAudioOutputReturn {
   /** Decode and enqueue a base64-encoded PCM16 audio chunk for gapless playback. */

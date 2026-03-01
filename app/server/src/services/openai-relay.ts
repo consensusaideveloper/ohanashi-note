@@ -252,7 +252,12 @@ function createRelay(clientWs: WSContext, config: RelayConfig): RelaySession {
         return;
       }
 
-      const sanitized = sanitizeClientMessage(data);
+      // Fast-path: audio messages don't contain user text that needs
+      // sanitization. Skip JSON.parse/stringify to reduce latency and CPU.
+      const isAudioAppend = data.startsWith(
+        '{"type":"input_audio_buffer.append"',
+      );
+      const sanitized = isAudioAppend ? data : sanitizeClientMessage(data);
 
       if (openaiWs.readyState === WebSocket.CONNECTING) {
         if (pendingMessages.length < MAX_PENDING_BUFFER_SIZE) {
