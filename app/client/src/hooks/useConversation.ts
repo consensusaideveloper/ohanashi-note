@@ -69,7 +69,7 @@ import type { SummarizeResult } from "../lib/api";
 
 // --- End-conversation flow ---
 /** Delay (ms) after farewell response.done before calling stop(), allowing audio playback to complete. */
-const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
+const END_CONVERSATION_FAREWELL_DELAY_MS = 5000;
 /** Safety timeout if farewell events are not observed as expected. */
 const END_CONVERSATION_FALLBACK_MS = 12000;
 /** MediaRecorder timeslice for chunked buffering during long sessions. */
@@ -720,6 +720,10 @@ export function useConversation(): UseConversationReturn {
       try {
         if (functionName === "end_conversation") {
           requestEndConversation("tool");
+          // Reset farewell detection so the stop timer starts only after
+          // the farewell *response* (Response 2) completes, not after
+          // the tool-call response (Response 1) that precedes it.
+          endConversationFarewellDetectedRef.current = false;
 
           sendResult(
             JSON.stringify({
