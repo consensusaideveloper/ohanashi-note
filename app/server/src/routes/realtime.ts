@@ -63,8 +63,13 @@ interface SessionEndRequestBody {
 }
 
 interface OpenAIClientSecretResponse {
-  value: string;
-  expires_at: number;
+  /** Top-level value field (GA format). */
+  value?: string;
+  /** Nested client_secret object (alternative response format). */
+  client_secret?: {
+    value: string;
+    expires_at: number;
+  };
 }
 
 // --- Route ---
@@ -168,6 +173,7 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
       },
       body: JSON.stringify({
         session: {
+          type: "realtime",
           model: REALTIME_MODEL,
           modalities: ["text", "audio"],
           instructions: sanitizedInstructions,
@@ -199,6 +205,22 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
     const tokenResponse =
       (await openaiResponse.json()) as OpenAIClientSecretResponse;
 
+    // Extract token value — handle both top-level and nested response formats
+    const tokenValue =
+      tokenResponse.client_secret?.value ?? tokenResponse.value;
+    if (tokenValue === undefined) {
+      logger.error("Unexpected OpenAI token response format", {
+        keys: Object.keys(tokenResponse),
+      });
+      return c.json(
+        {
+          error: "AIサービスからのトークン取得に失敗しました",
+          code: "OPENAI_TOKEN_FORMAT_ERROR",
+        },
+        502,
+      );
+    }
+
     // --- Track session ---
     let sessionKey = "";
 
@@ -225,7 +247,7 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
     });
 
     return c.json({
-      token: tokenResponse.value,
+      token: tokenValue,
       sessionKey,
     });
   } catch (err: unknown) {
