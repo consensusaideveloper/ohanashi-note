@@ -176,6 +176,7 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
         input: {
           transcription: { model: TRANSCRIPTION_MODEL },
           turn_detection: sessionConfig.turn_detection,
+          noise_reduction: { type: "far_field" },
         },
         output: {
           voice: sessionConfig.voice,

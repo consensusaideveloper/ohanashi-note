@@ -29,6 +29,7 @@ import {
 } from "../lib/storage";
 import { isNoiseTranscript } from "../lib/audio";
 import { computeContentHash, computeBlobHash } from "../lib/integrity";
+import { isIOSDevice } from "../lib/platform";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import {
   ApiError,
@@ -83,6 +84,10 @@ const RECORDER_MIME_CANDIDATES = [
 const ENHANCED_SUMMARIZE_MAX_ATTEMPTS = 3;
 const ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS = 1500;
 const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+/** Delay (ms) after AI finishes speaking before re-enabling the mic on iOS.
+ * Allows residual echo from the last audio frame to dissipate. */
+const IOS_MIC_REENABLE_DELAY_MS = 300;
 
 // --- State machine ---
 
@@ -483,6 +488,12 @@ export function useConversation(): UseConversationReturn {
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
 
+  // iOS echo guard: cache platform check and manage mic re-enable timer
+  const isIOSRef = useRef(isIOSDevice());
+  const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
   // Keep transcript ref in sync with reducer state
   useEffect(() => {
     transcriptRef.current = state.transcript;
@@ -790,6 +801,11 @@ export function useConversation(): UseConversationReturn {
           // entire audio.input object and remove the transcription config.
 
           dispatch({ type: "CONNECTED" });
+          // iOS echo guard: mute mic before greeting so the AEC warm-up
+          // period does not cause the AI's output to be detected as speech.
+          if (isIOSRef.current) {
+            webrtc.setMicEnabled(false);
+          }
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
@@ -805,6 +821,14 @@ export function useConversation(): UseConversationReturn {
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
             dispatch({ type: "AI_SPEAKING" });
+            // iOS echo guard: keep mic muted while AI speaks
+            if (isIOSRef.current) {
+              if (micReenableTimerRef.current !== null) {
+                clearTimeout(micReenableTimerRef.current);
+                micReenableTimerRef.current = null;
+              }
+              webrtc.setMicEnabled(false);
+            }
           }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
@@ -833,6 +857,13 @@ export function useConversation(): UseConversationReturn {
         case "response.done": {
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
+          // iOS echo guard: re-enable mic after a short delay for echo to dissipate
+          if (isIOSRef.current) {
+            micReenableTimerRef.current = setTimeout(() => {
+              micReenableTimerRef.current = null;
+              webrtc.setMicEnabled(true);
+            }, IOS_MIC_REENABLE_DELAY_MS);
+          }
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -888,6 +919,14 @@ export function useConversation(): UseConversationReturn {
             resetEndConversationFlow();
           }
           aiSpeakingRef.current = false;
+          // iOS echo guard: cancel pending re-enable and enable immediately
+          if (isIOSRef.current) {
+            if (micReenableTimerRef.current !== null) {
+              clearTimeout(micReenableTimerRef.current);
+              micReenableTimerRef.current = null;
+            }
+            webrtc.setMicEnabled(true);
+          }
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -1220,6 +1259,12 @@ export function useConversation(): UseConversationReturn {
     // Reset end-conversation state
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
+
+    // iOS echo guard: clean up mic re-enable timer
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
 
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;

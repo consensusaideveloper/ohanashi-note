@@ -4,6 +4,7 @@ import type {
   DataChannelClientEvent,
   DataChannelServerEvent,
 } from "../lib/realtime-protocol";
+import { isIOSDevice } from "../lib/platform";
 
 // --- Constants ---
 
@@ -14,6 +15,24 @@ const AUDIO_LEVEL_INTERVAL_MS = 16;
 
 /** Size of the AnalyserNode FFT for mic level detection. */
 const ANALYSER_FFT_SIZE = 256;
+
+/**
+ * Audio constraints tuned for iOS to prevent echo feedback.
+ * - autoGainControl disabled: AGC introduces nonlinear distortion that
+ *   degrades the browser's Acoustic Echo Cancellation (AEC) performance.
+ *   See https://github.com/livekit/agents/issues/3758
+ */
+const IOS_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: false,
+};
+
+const DEFAULT_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
 
 // --- Types ---
 
@@ -46,6 +65,8 @@ interface UseWebRTCReturn {
   removeMessageHandler: (handler: MessageHandler) => void;
   /** Subscribe to remote audio end events. */
   onRemoteAudioEnded: (handler: () => void) => () => void;
+  /** Enable or disable the mic audio track (mute/unmute without releasing the stream). */
+  setMicEnabled: (enabled: boolean) => void;
 }
 
 interface ReleaseResourcesOptions {
@@ -160,15 +181,24 @@ export function useWebRTC(): UseWebRTCReturn {
 
   /** Request microphone access. Must be called from a user gesture handler. */
   const requestMicAccess = useCallback(async (): Promise<MediaStream> => {
+    const constraints = isIOSDevice()
+      ? IOS_AUDIO_CONSTRAINTS
+      : DEFAULT_AUDIO_CONSTRAINTS;
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
+      audio: constraints,
     });
     micStreamRef.current = stream;
     return stream;
+  }, []);
+
+  /** Enable or disable the mic track without releasing the stream.
+   * Setting track.enabled = false sends silence frames via WebRTC. */
+  const setMicEnabled = useCallback((enabled: boolean): void => {
+    const stream = micStreamRef.current;
+    if (stream === null) return;
+    for (const track of stream.getAudioTracks()) {
+      track.enabled = enabled;
+    }
   }, []);
 
   /** Release all WebRTC resources. */
@@ -357,5 +387,6 @@ export function useWebRTC(): UseWebRTCReturn {
     addMessageHandler,
     removeMessageHandler,
     onRemoteAudioEnded,
+    setMicEnabled,
   };
 }

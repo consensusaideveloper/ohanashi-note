@@ -15,6 +15,7 @@ import {
   RETRY_DELAY_MS,
 } from "../lib/constants";
 import { isNoiseTranscript } from "../lib/audio";
+import { isIOSDevice } from "../lib/platform";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
 import {
   hasExplicitConversationEndIntent,
@@ -39,6 +40,9 @@ import type {
 // --- End-conversation flow ---
 const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
 const END_CONVERSATION_FALLBACK_MS = 12000;
+
+/** Delay (ms) after AI finishes speaking before re-enabling the mic on iOS. */
+const IOS_MIC_REENABLE_DELAY_MS = 300;
 
 // --- State machine ---
 
@@ -157,6 +161,12 @@ export function useOnboardingConversation({
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
+
+  // iOS echo guard: cache platform check and manage mic re-enable timer
+  const isIOSRef = useRef(isIOSDevice());
+  const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Stable ref for stop
   const stopRef = useRef<() => void>(() => {});
@@ -389,6 +399,11 @@ export function useOnboardingConversation({
           // entire audio.input object and remove the transcription config.
 
           dispatch({ type: "CONNECTED" });
+          // iOS echo guard: mute mic before greeting so the AEC warm-up
+          // period does not cause the AI's output to be detected as speech.
+          if (isIOSRef.current) {
+            webrtc.setMicEnabled(false);
+          }
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
@@ -404,6 +419,14 @@ export function useOnboardingConversation({
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
             dispatch({ type: "AI_SPEAKING" });
+            // iOS echo guard: keep mic muted while AI speaks
+            if (isIOSRef.current) {
+              if (micReenableTimerRef.current !== null) {
+                clearTimeout(micReenableTimerRef.current);
+                micReenableTimerRef.current = null;
+              }
+              webrtc.setMicEnabled(false);
+            }
           }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
@@ -435,6 +458,13 @@ export function useOnboardingConversation({
         case "response.done": {
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
+          // iOS echo guard: re-enable mic after a short delay for echo to dissipate
+          if (isIOSRef.current) {
+            micReenableTimerRef.current = setTimeout(() => {
+              micReenableTimerRef.current = null;
+              webrtc.setMicEnabled(true);
+            }, IOS_MIC_REENABLE_DELAY_MS);
+          }
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -488,6 +518,14 @@ export function useOnboardingConversation({
             resetEndConversationFlow();
           }
           aiSpeakingRef.current = false;
+          // iOS echo guard: cancel pending re-enable and enable immediately
+          if (isIOSRef.current) {
+            if (micReenableTimerRef.current !== null) {
+              clearTimeout(micReenableTimerRef.current);
+              micReenableTimerRef.current = null;
+            }
+            webrtc.setMicEnabled(true);
+          }
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -598,6 +636,12 @@ export function useOnboardingConversation({
   const stop = useCallback((): void => {
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
+
+    // iOS echo guard: clean up mic re-enable timer
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
 
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
