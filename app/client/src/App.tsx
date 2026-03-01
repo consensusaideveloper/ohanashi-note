@@ -459,6 +459,12 @@ function AppContent(): ReactNode {
     setPendingCategory(undefined);
   }, []);
 
+  const handleAutoConversationEnded = useCallback((): void => {
+    setPendingCategory(undefined);
+    setSelectedConversationId(null);
+    setScreen("history");
+  }, []);
+
   const handleNavigateConversation = useCallback((): void => {
     navigateWithGuard("conversation");
   }, [navigateWithGuard]);
@@ -907,6 +913,7 @@ function AppContent(): ReactNode {
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
             onSummarizingChange={setIsSummarizing}
+            onAutoEnded={handleAutoConversationEnded}
             conversation={conversation}
           />
         );
@@ -1027,6 +1034,7 @@ function AppContent(): ReactNode {
             initialCategory={pendingCategory}
             onCategoryConsumed={handleCategoryConsumed}
             onSummarizingChange={setIsSummarizing}
+            onAutoEnded={handleAutoConversationEnded}
             conversation={conversation}
           />
         );

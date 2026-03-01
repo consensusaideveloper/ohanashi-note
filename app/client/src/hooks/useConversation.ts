@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useReducer } from "react";
+import { useCallback, useEffect, useRef, useReducer, useState } from "react";
 
 import {
   SESSION_CONFIG,
@@ -25,14 +25,15 @@ import {
   getConversation,
   getUserProfile,
   saveUserProfile,
+  saveAudioRecording,
 } from "../lib/storage";
 import { isNoiseTranscript } from "../lib/audio";
-import { computeContentHash } from "../lib/integrity";
+import { computeContentHash, computeBlobHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import {
   requestSummarize,
   requestEnhancedSummarize,
-  getRealtimeToken,
+  connectRealtimeSession,
   endRealtimeSession,
 } from "../lib/api";
 import {
@@ -65,8 +66,17 @@ import type {
 // --- End-conversation flow ---
 /** Delay (ms) after farewell response.done before calling stop(), allowing audio playback to complete. */
 const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
-/** Number of response.done events to expect after end_conversation: 1 for function call, 1 for farewell. */
-const END_CONVERSATION_RESPONSE_COUNT = 2;
+/** Safety timeout if farewell events are not observed as expected. */
+const END_CONVERSATION_FALLBACK_MS = 12000;
+/** MediaRecorder timeslice for chunked buffering during long sessions. */
+const RECORDING_CHUNK_MS = 1000;
+const DEFAULT_RECORDING_MIME_TYPE = "audio/webm";
+const RECORDER_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+] as const;
 
 // --- State machine ---
 
@@ -205,6 +215,8 @@ export interface UseConversationReturn {
   remainingMs: number | null;
   /** Whether the session time warning is active. */
   sessionWarningShown: boolean;
+  /** Monotonic signal incremented when AI-triggered auto-end is completed. */
+  autoEndSignal: number;
   /** Start a conversation. Pass null for category to use AI-guided mode. */
   start: (characterId: CharacterId, category: QuestionCategory | null) => void;
   /** Stop the conversation and disconnect. */
@@ -325,8 +337,21 @@ function dispatchVoiceAction(
   }
 }
 
+function pickRecorderMimeType(): string {
+  if (typeof MediaRecorder === "undefined") {
+    return "";
+  }
+  for (const candidate of RECORDER_MIME_CANDIDATES) {
+    if (MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [autoEndSignal, setAutoEndSignal] = useState(0);
 
   const webrtc = useWebRTC();
   const voiceActionRef = useVoiceActionRef();
@@ -365,15 +390,38 @@ export function useConversation(): UseConversationReturn {
     confirmationLevel: "normal",
   });
 
+  // Turn detection config (stored for session.update after connection).
+  // Uses widened types since silence_duration_ms varies by user preference.
+  const turnDetectionRef = useRef<{
+    type: "server_vad";
+    threshold: number;
+    prefix_padding_ms: number;
+    silence_duration_ms: number;
+    create_response: boolean;
+  }>({ ...SESSION_CONFIG.turn_detection });
+
   // Session key for server-side tracking
   const sessionKeyRef = useRef<string>("");
+
+  // Local recording refs (user microphone only)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef<string>(DEFAULT_RECORDING_MIME_TYPE);
 
   // Stable ref for stop so the session timer can call it without stale closures
   const stopRef = useRef<() => void>(() => {});
 
-  // End-conversation countdown: tracks how many response.done events remain
-  // before the farewell is complete. null = not in end-conversation flow.
-  const endConversationCountdownRef = useRef<number | null>(null);
+  // End-conversation flow refs
+  const endConversationRequestedRef = useRef(false);
+  const endConversationFarewellDetectedRef = useRef(false);
+  const endConversationStopTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const endConversationFallbackTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const autoEndStopTriggerRef = useRef(false);
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
@@ -382,6 +430,180 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => {
     transcriptRef.current = state.transcript;
   }, [state.transcript]);
+
+  const discardLocalRecording = useCallback((): void => {
+    const recorder = mediaRecorderRef.current;
+    mediaRecorderRef.current = null;
+
+    if (recorder !== null) {
+      recorder.ondataavailable = null;
+      recorder.onerror = null;
+      if (recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch {
+          // Best-effort cleanup
+        }
+      }
+    }
+
+    const stream = recordingStreamRef.current;
+    recordingStreamRef.current = null;
+    if (stream !== null) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+    }
+
+    recordingChunksRef.current = [];
+    recordingMimeTypeRef.current = DEFAULT_RECORDING_MIME_TYPE;
+  }, []);
+
+  const startLocalRecording = useCallback(
+    (micStream: MediaStream): void => {
+      discardLocalRecording();
+
+      if (typeof MediaRecorder === "undefined") {
+        return;
+      }
+
+      const clonedTracks = micStream
+        .getAudioTracks()
+        .map((track) => track.clone());
+      if (clonedTracks.length === 0) {
+        return;
+      }
+
+      const recordingStream = new MediaStream(clonedTracks);
+      recordingStreamRef.current = recordingStream;
+      recordingChunksRef.current = [];
+
+      try {
+        const preferredMimeType = pickRecorderMimeType();
+        const recorder =
+          preferredMimeType !== ""
+            ? new MediaRecorder(recordingStream, {
+                mimeType: preferredMimeType,
+              })
+            : new MediaRecorder(recordingStream);
+
+        mediaRecorderRef.current = recorder;
+        recordingMimeTypeRef.current =
+          recorder.mimeType || preferredMimeType || DEFAULT_RECORDING_MIME_TYPE;
+
+        recorder.ondataavailable = (event: BlobEvent): void => {
+          if (event.data.size > 0) {
+            recordingChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onerror = (): void => {
+          console.error("Local audio recorder error");
+        };
+
+        recorder.start(RECORDING_CHUNK_MS);
+      } catch {
+        mediaRecorderRef.current = null;
+        for (const track of recordingStream.getTracks()) {
+          track.stop();
+        }
+        recordingStreamRef.current = null;
+        recordingChunksRef.current = [];
+        recordingMimeTypeRef.current = DEFAULT_RECORDING_MIME_TYPE;
+      }
+    },
+    [discardLocalRecording],
+  );
+
+  const stopLocalRecording = useCallback(async (): Promise<{
+    blob: Blob;
+    mimeType: string;
+  } | null> => {
+    const recorder = mediaRecorderRef.current;
+    const recordingStream = recordingStreamRef.current;
+    mediaRecorderRef.current = null;
+    recordingStreamRef.current = null;
+
+    const finalize = (): { blob: Blob; mimeType: string } | null => {
+      if (recordingStream !== null) {
+        for (const track of recordingStream.getTracks()) {
+          track.stop();
+        }
+      }
+
+      const mimeType = recordingMimeTypeRef.current;
+      recordingMimeTypeRef.current = DEFAULT_RECORDING_MIME_TYPE;
+
+      const chunks = recordingChunksRef.current;
+      recordingChunksRef.current = [];
+      if (chunks.length === 0) {
+        return null;
+      }
+
+      const blob = new Blob(chunks, { type: mimeType });
+      if (blob.size === 0) {
+        return null;
+      }
+
+      return {
+        blob,
+        mimeType: blob.type || mimeType || DEFAULT_RECORDING_MIME_TYPE,
+      };
+    };
+
+    if (recorder === null) {
+      return finalize();
+    }
+
+    if (recorder.state === "inactive") {
+      return finalize();
+    }
+
+    return new Promise((resolve) => {
+      const handleStop = (): void => {
+        recorder.removeEventListener("error", handleError);
+        resolve(finalize());
+      };
+
+      const handleError = (): void => {
+        recorder.removeEventListener("stop", handleStop);
+        if (recordingStream !== null) {
+          for (const track of recordingStream.getTracks()) {
+            track.stop();
+          }
+        }
+        recordingChunksRef.current = [];
+        recordingMimeTypeRef.current = DEFAULT_RECORDING_MIME_TYPE;
+        resolve(null);
+      };
+
+      recorder.addEventListener("stop", handleStop, { once: true });
+      recorder.addEventListener("error", handleError, { once: true });
+
+      try {
+        recorder.stop();
+      } catch {
+        handleError();
+      }
+    });
+  }, []);
+
+  const clearEndConversationTimers = useCallback((): void => {
+    if (endConversationStopTimeoutRef.current !== null) {
+      clearTimeout(endConversationStopTimeoutRef.current);
+      endConversationStopTimeoutRef.current = null;
+    }
+    if (endConversationFallbackTimeoutRef.current !== null) {
+      clearTimeout(endConversationFallbackTimeoutRef.current);
+      endConversationFallbackTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetEndConversationFlow = useCallback((): void => {
+    endConversationRequestedRef.current = false;
+    endConversationFarewellDetectedRef.current = false;
+    clearEndConversationTimers();
+  }, [clearEndConversationTimers]);
 
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
@@ -401,7 +623,15 @@ export function useConversation(): UseConversationReturn {
 
       try {
         if (functionName === "end_conversation") {
-          endConversationCountdownRef.current = END_CONVERSATION_RESPONSE_COUNT;
+          endConversationRequestedRef.current = true;
+          endConversationFarewellDetectedRef.current = false;
+          clearEndConversationTimers();
+          endConversationFallbackTimeoutRef.current = setTimeout(() => {
+            autoEndStopTriggerRef.current = true;
+            resetEndConversationFlow();
+            stopRef.current();
+          }, END_CONVERSATION_FALLBACK_MS);
+
           sendResult(
             JSON.stringify({
               success: true,
@@ -468,7 +698,12 @@ export function useConversation(): UseConversationReturn {
         sendResult(JSON.stringify({ error: "検索中にエラーが発生しました" }));
       }
     },
-    [webrtc, voiceActionRef],
+    [
+      webrtc,
+      voiceActionRef,
+      clearEndConversationTimers,
+      resetEndConversationFlow,
+    ],
   );
 
   // Handle incoming data channel events
@@ -476,13 +711,23 @@ export function useConversation(): UseConversationReturn {
     (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-          // Session is ready (pre-configured via client_secrets)
+          // Session is fully configured via the unified /v1/realtime/calls
+          // FormData, so no session.update needed here. Sending a partial
+          // session.update (e.g. turn_detection only) would overwrite the
+          // entire audio.input object and remove the transcription config.
+
           dispatch({ type: "CONNECTED" });
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
 
+        case "session.updated":
+          break;
+
         case "response.output_audio_transcript.delta":
+          if (endConversationRequestedRef.current) {
+            endConversationFarewellDetectedRef.current = true;
+          }
           // AI is speaking — use transcript delta as a proxy for audio state
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
@@ -513,37 +758,51 @@ export function useConversation(): UseConversationReturn {
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
 
-          // End-conversation flow: count down response.done events
-          if (endConversationCountdownRef.current !== null) {
-            endConversationCountdownRef.current -= 1;
-            if (endConversationCountdownRef.current <= 0) {
-              endConversationCountdownRef.current = null;
-              // Farewell response complete — delay for audio playback, then stop
-              setTimeout(() => {
-                stopRef.current();
-              }, END_CONVERSATION_FAREWELL_DELAY_MS);
-              break;
+          // End-conversation flow: stop only after farewell response is observed.
+          if (
+            endConversationRequestedRef.current &&
+            endConversationFarewellDetectedRef.current
+          ) {
+            endConversationRequestedRef.current = false;
+            endConversationFarewellDetectedRef.current = false;
+            if (endConversationFallbackTimeoutRef.current !== null) {
+              clearTimeout(endConversationFallbackTimeoutRef.current);
+              endConversationFallbackTimeoutRef.current = null;
             }
+            if (endConversationStopTimeoutRef.current !== null) {
+              clearTimeout(endConversationStopTimeoutRef.current);
+            }
+            endConversationStopTimeoutRef.current = setTimeout(() => {
+              endConversationStopTimeoutRef.current = null;
+              autoEndStopTriggerRef.current = true;
+              stopRef.current();
+            }, END_CONVERSATION_FAREWELL_DELAY_MS);
           }
           break;
         }
 
         case "input_audio_buffer.speech_started":
-          // User started speaking — OpenAI handles barge-in automatically
-          // Cancel pending end-conversation flow if user interrupts
-          endConversationCountdownRef.current = null;
+          // Cancel pending end flow only when user actually barges in while AI is speaking.
+          if (endConversationRequestedRef.current && aiSpeakingRef.current) {
+            resetEndConversationFlow();
+          }
           aiSpeakingRef.current = false;
+          break;
+
+        case "input_audio_buffer.speech_stopped":
           break;
 
         case "response.output_item.done": {
           const { item } = event;
+          if (endConversationRequestedRef.current && item.type === "message") {
+            endConversationFarewellDetectedRef.current = true;
+          }
           if (
             item.type === "function_call" &&
             item.call_id !== undefined &&
-            item.name !== undefined &&
-            item.arguments !== undefined
+            item.name !== undefined
           ) {
-            handleFunctionCall(item.call_id, item.name, item.arguments);
+            handleFunctionCall(item.call_id, item.name, item.arguments ?? "{}");
           }
           break;
         }
@@ -562,7 +821,7 @@ export function useConversation(): UseConversationReturn {
           break;
       }
     },
-    [webrtc, handleFunctionCall],
+    [webrtc, handleFunctionCall, resetEndConversationFlow],
   );
 
   // Register/unregister message handler
@@ -592,6 +851,9 @@ export function useConversation(): UseConversationReturn {
       webrtc
         .requestMicAccess()
         .then((micStream) => {
+          // Start local mic recording (for R2 upload after conversation ends)
+          startLocalRecording(micStream);
+
           // Step 2: Load all context data in parallel
           return Promise.allSettled([
             listConversations(),
@@ -767,29 +1029,36 @@ export function useConversation(): UseConversationReturn {
               const silenceDurationMs =
                 SILENCE_DURATION_MS_MAP[prefs.silenceDuration];
 
+              const turnDetection = {
+                ...SESSION_CONFIG.turn_detection,
+                silence_duration_ms: silenceDurationMs,
+              };
+              turnDetectionRef.current = turnDetection;
+
               const sessionConfig = {
                 instructions,
                 voice: character.voice,
                 tools: [...REALTIME_TOOLS],
-                turn_detection: {
-                  ...SESSION_CONFIG.turn_detection,
-                  silence_duration_ms: silenceDurationMs,
-                },
+                turn_detection: turnDetection,
               };
 
-              // Step 4: Get ephemeral token from server
-              return getRealtimeToken(sessionConfig).then(
-                ({ token, sessionKey }) => {
-                  sessionKeyRef.current = sessionKey;
-
-                  // Step 5: Connect WebRTC with token and mic stream
-                  return webrtc.connect(token, micStream);
+              // Step 4: Connect WebRTC — server handles SDP exchange
+              return webrtc.connect(
+                micStream,
+                async (offerSdp: string): Promise<string> => {
+                  const result = await connectRealtimeSession(
+                    sessionConfig,
+                    offerSdp,
+                  );
+                  sessionKeyRef.current = result.sessionKey;
+                  return result.answerSdp;
                 },
               );
             },
           );
         })
         .catch((err: unknown) => {
+          discardLocalRecording();
           console.error("Failed to start conversation:", { error: err });
           // Determine error type based on failure
           if (
@@ -827,11 +1096,14 @@ export function useConversation(): UseConversationReturn {
         }
       }, TIMER_INTERVAL_MS);
     },
-    [webrtc],
+    [webrtc, startLocalRecording, discardLocalRecording],
   );
 
   // Stop conversation, save transcript, and request summary
   const stop = useCallback((): void => {
+    const shouldEmitAutoEndSignal = autoEndStopTriggerRef.current;
+    autoEndStopTriggerRef.current = false;
+
     // Clear session timer
     if (sessionTimerRef.current !== null) {
       clearInterval(sessionTimerRef.current);
@@ -840,13 +1112,14 @@ export function useConversation(): UseConversationReturn {
     sessionStartTimeRef.current = null;
 
     // Reset end-conversation state
-    endConversationCountdownRef.current = null;
+    resetEndConversationFlow();
     aiSpeakingRef.current = false;
 
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
     const category = categoryRef.current;
     const charId = characterIdRef.current;
+    const recordingPromise = stopLocalRecording();
 
     if (convId !== null && currentTranscript.length > 0) {
       const firstEntry = currentTranscript[0];
@@ -872,7 +1145,32 @@ export function useConversation(): UseConversationReturn {
       );
 
       saveConversation(record)
-        .then(() => {
+        .then(async () => {
+          // Upload audio first so enhanced summarization can use re-transcription.
+          const recordedAudio = await recordingPromise;
+          if (recordedAudio !== null) {
+            try {
+              const uploadResult = await saveAudioRecording(
+                convId,
+                recordedAudio.blob,
+                recordedAudio.mimeType,
+              );
+              if (uploadResult !== null) {
+                const audioHash = await computeBlobHash(recordedAudio.blob);
+                await updateConversation(convId, {
+                  audioAvailable: true,
+                  audioStorageKey: uploadResult.storageKey,
+                  audioMimeType: recordedAudio.mimeType,
+                  audioHash,
+                });
+              }
+            } catch (audioError: unknown) {
+              console.error("Failed to save conversation audio:", {
+                error: audioError,
+              });
+            }
+          }
+
           const summarizePromise = requestEnhancedSummarize(
             convId,
             category,
@@ -967,7 +1265,11 @@ export function useConversation(): UseConversationReturn {
       silenceDuration: "normal",
       confirmationLevel: "normal",
     };
-  }, [webrtc]);
+
+    if (shouldEmitAutoEndSignal) {
+      setAutoEndSignal((n) => n + 1);
+    }
+  }, [webrtc, stopLocalRecording, resetEndConversationFlow]);
 
   // Keep stopRef in sync with the latest stop callback
   useEffect(() => {
@@ -980,8 +1282,11 @@ export function useConversation(): UseConversationReturn {
       if (sessionTimerRef.current !== null) {
         clearInterval(sessionTimerRef.current);
       }
+      autoEndStopTriggerRef.current = false;
+      resetEndConversationFlow();
+      discardLocalRecording();
     };
-  }, []);
+  }, [discardLocalRecording, resetEndConversationFlow]);
 
   // Mid-conversation session config update is not supported with WebRTC GA protocol
   // (session is pre-configured via client_secrets). Changes will apply to the next session.
@@ -1014,6 +1319,7 @@ export function useConversation(): UseConversationReturn {
     summaryStatus: state.summaryStatus,
     remainingMs: state.remainingMs,
     sessionWarningShown: state.sessionWarningShown,
+    autoEndSignal,
     start,
     stop,
     retry,

@@ -18,7 +18,7 @@ import { isNoiseTranscript } from "../lib/audio";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
 import { saveUserProfile, getUserProfile } from "../lib/storage";
-import { getRealtimeToken, endRealtimeSession } from "../lib/api";
+import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";
@@ -34,7 +34,7 @@ import type {
 
 // --- End-conversation flow ---
 const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
-const END_CONVERSATION_RESPONSE_COUNT = 2;
+const END_CONVERSATION_FALLBACK_MS = 12000;
 
 // --- State machine ---
 
@@ -136,8 +136,15 @@ export function useOnboardingConversation({
 
   const webrtc = useWebRTC();
 
-  // End-conversation countdown
-  const endConversationCountdownRef = useRef<number | null>(null);
+  // End-conversation flow refs
+  const endConversationRequestedRef = useRef(false);
+  const endConversationFarewellDetectedRef = useRef(false);
+  const endConversationStopTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const endConversationFallbackTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // Session key for server-side tracking
   const sessionKeyRef = useRef<string>("");
@@ -160,6 +167,23 @@ export function useOnboardingConversation({
     setFontSizeRef.current = setFontSize;
   }, [setFontSize]);
 
+  const clearEndConversationTimers = useCallback((): void => {
+    if (endConversationStopTimeoutRef.current !== null) {
+      clearTimeout(endConversationStopTimeoutRef.current);
+      endConversationStopTimeoutRef.current = null;
+    }
+    if (endConversationFallbackTimeoutRef.current !== null) {
+      clearTimeout(endConversationFallbackTimeoutRef.current);
+      endConversationFallbackTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetEndConversationFlow = useCallback((): void => {
+    endConversationRequestedRef.current = false;
+    endConversationFarewellDetectedRef.current = false;
+    clearEndConversationTimers();
+  }, [clearEndConversationTimers]);
+
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
     (callId: string, functionName: string, argsJson: string): void => {
@@ -177,7 +201,14 @@ export function useOnboardingConversation({
 
       try {
         if (functionName === "end_conversation") {
-          endConversationCountdownRef.current = END_CONVERSATION_RESPONSE_COUNT;
+          endConversationRequestedRef.current = true;
+          endConversationFarewellDetectedRef.current = false;
+          clearEndConversationTimers();
+          endConversationFallbackTimeoutRef.current = setTimeout(() => {
+            resetEndConversationFlow();
+            stopRef.current();
+          }, END_CONVERSATION_FALLBACK_MS);
+
           sendResult(
             JSON.stringify({
               success: true,
@@ -338,7 +369,7 @@ export function useOnboardingConversation({
         sendResult(JSON.stringify({ error: "操作中にエラーが発生しました" }));
       }
     },
-    [webrtc],
+    [webrtc, clearEndConversationTimers, resetEndConversationFlow],
   );
 
   // Handle incoming data channel events
@@ -346,13 +377,23 @@ export function useOnboardingConversation({
     (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-          // Session is ready (pre-configured via client_secrets)
+          // Session is fully configured via the unified /v1/realtime/calls
+          // FormData, so no session.update needed here. Sending a partial
+          // session.update (e.g. turn_detection only) would overwrite the
+          // entire audio.input object and remove the transcription config.
+
           dispatch({ type: "CONNECTED" });
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
 
+        case "session.updated":
+          break;
+
         case "response.output_audio_transcript.delta":
+          if (endConversationRequestedRef.current) {
+            endConversationFarewellDetectedRef.current = true;
+          }
           // AI is speaking — use transcript delta as a proxy for audio state
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
@@ -383,37 +424,50 @@ export function useOnboardingConversation({
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
 
-          // End-conversation flow: count down response.done events
-          if (endConversationCountdownRef.current !== null) {
-            endConversationCountdownRef.current -= 1;
-            if (endConversationCountdownRef.current <= 0) {
-              endConversationCountdownRef.current = null;
-              // Farewell response complete — delay for audio playback, then stop
-              setTimeout(() => {
-                stopRef.current();
-              }, END_CONVERSATION_FAREWELL_DELAY_MS);
-              break;
+          // End-conversation flow: stop only after farewell response is observed.
+          if (
+            endConversationRequestedRef.current &&
+            endConversationFarewellDetectedRef.current
+          ) {
+            endConversationRequestedRef.current = false;
+            endConversationFarewellDetectedRef.current = false;
+            if (endConversationFallbackTimeoutRef.current !== null) {
+              clearTimeout(endConversationFallbackTimeoutRef.current);
+              endConversationFallbackTimeoutRef.current = null;
             }
+            if (endConversationStopTimeoutRef.current !== null) {
+              clearTimeout(endConversationStopTimeoutRef.current);
+            }
+            endConversationStopTimeoutRef.current = setTimeout(() => {
+              endConversationStopTimeoutRef.current = null;
+              stopRef.current();
+            }, END_CONVERSATION_FAREWELL_DELAY_MS);
           }
           break;
         }
 
         case "input_audio_buffer.speech_started":
-          // User started speaking — OpenAI handles barge-in automatically
-          // Cancel pending end-conversation flow if user interrupts
-          endConversationCountdownRef.current = null;
+          // Cancel pending end flow only when user actually barges in while AI is speaking.
+          if (endConversationRequestedRef.current && aiSpeakingRef.current) {
+            resetEndConversationFlow();
+          }
           aiSpeakingRef.current = false;
+          break;
+
+        case "input_audio_buffer.speech_stopped":
           break;
 
         case "response.output_item.done": {
           const { item } = event;
+          if (endConversationRequestedRef.current && item.type === "message") {
+            endConversationFarewellDetectedRef.current = true;
+          }
           if (
             item.type === "function_call" &&
             item.call_id !== undefined &&
-            item.name !== undefined &&
-            item.arguments !== undefined
+            item.name !== undefined
           ) {
-            handleFunctionCall(item.call_id, item.name, item.arguments);
+            handleFunctionCall(item.call_id, item.name, item.arguments ?? "{}");
           }
           break;
         }
@@ -431,7 +485,7 @@ export function useOnboardingConversation({
           break;
       }
     },
-    [webrtc, handleFunctionCall],
+    [webrtc, handleFunctionCall, resetEndConversationFlow],
   );
 
   // Register/unregister message handler
@@ -468,13 +522,17 @@ export function useOnboardingConversation({
           turn_detection: SESSION_CONFIG.turn_detection,
         };
 
-        // Step 3: Get ephemeral token from server
-        return getRealtimeToken(sessionConfig, true).then(
-          ({ token, sessionKey }) => {
-            sessionKeyRef.current = sessionKey;
-
-            // Step 4: Connect WebRTC with token and mic stream
-            return webrtc.connect(token, micStream);
+        // Step 3: Connect WebRTC — server handles SDP exchange
+        return webrtc.connect(
+          micStream,
+          async (offerSdp: string): Promise<string> => {
+            const result = await connectRealtimeSession(
+              sessionConfig,
+              offerSdp,
+              true,
+            );
+            sessionKeyRef.current = result.sessionKey;
+            return result.answerSdp;
           },
         );
       })
@@ -497,7 +555,7 @@ export function useOnboardingConversation({
 
   // Stop the conversation and clean up
   const stop = useCallback((): void => {
-    endConversationCountdownRef.current = null;
+    resetEndConversationFlow();
     aiSpeakingRef.current = false;
 
     webrtc.disconnect();
@@ -516,7 +574,7 @@ export function useOnboardingConversation({
 
     // Notify parent that onboarding is complete
     onCompleteRef.current();
-  }, [webrtc]);
+  }, [webrtc, resetEndConversationFlow]);
 
   // Keep stopRef in sync
   useEffect(() => {
@@ -525,12 +583,19 @@ export function useOnboardingConversation({
 
   // Retry after an error
   const retry = useCallback((): void => {
+    resetEndConversationFlow();
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
     setTimeout(() => {
       start();
     }, RETRY_DELAY_MS);
-  }, [webrtc, start]);
+  }, [webrtc, start, resetEndConversationFlow]);
+
+  useEffect(() => {
+    return () => {
+      resetEndConversationFlow();
+    };
+  }, [resetEndConversationFlow]);
 
   return {
     state: state.conversationState,

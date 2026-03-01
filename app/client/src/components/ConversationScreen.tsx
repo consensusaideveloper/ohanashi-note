@@ -41,6 +41,8 @@ interface ConversationScreenProps {
   onCategoryConsumed?: () => void;
   /** Called when summarization status changes so parent can guard navigation. */
   onSummarizingChange?: (isSummarizing: boolean) => void;
+  /** Called when AI-triggered auto-end completes. */
+  onAutoEnded?: () => void;
   /** Conversation hook values lifted from AppContent. */
   conversation: UseConversationReturn;
 }
@@ -49,6 +51,7 @@ export function ConversationScreen({
   initialCategory,
   onCategoryConsumed,
   onSummarizingChange,
+  onAutoEnded,
   conversation,
 }: ConversationScreenProps): ReactNode {
   const {
@@ -61,6 +64,7 @@ export function ConversationScreen({
     summaryStatus,
     remainingMs,
     sessionWarningShown,
+    autoEndSignal,
     start,
     stop,
     retry,
@@ -71,6 +75,7 @@ export function ConversationScreen({
   const [serverQuota, setServerQuota] = useState<SessionQuota | null>(null);
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const lastAutoEndSignalRef = useRef(autoEndSignal);
 
   // Auto-scroll transcript to bottom
   useEffect(() => {
@@ -81,6 +86,13 @@ export function ConversationScreen({
   useEffect(() => {
     onSummarizingChange?.(summaryStatus === "pending");
   }, [summaryStatus, onSummarizingChange]);
+
+  useEffect(() => {
+    if (autoEndSignal !== lastAutoEndSignalRef.current) {
+      lastAutoEndSignalRef.current = autoEndSignal;
+      onAutoEnded?.();
+    }
+  }, [autoEndSignal, onAutoEnded]);
 
   // Warn before closing browser tab during active conversation or summarization
   useEffect(() => {

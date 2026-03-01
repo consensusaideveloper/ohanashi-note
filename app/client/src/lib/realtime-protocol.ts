@@ -28,10 +28,29 @@ export interface ConversationItemCreateEvent {
   };
 }
 
+export interface SessionUpdateEvent {
+  type: "session.update";
+  session: {
+    type: "realtime";
+    audio?: {
+      input?: {
+        turn_detection?: {
+          type: "server_vad";
+          threshold?: number;
+          prefix_padding_ms?: number;
+          silence_duration_ms?: number;
+          create_response?: boolean;
+        } | null;
+      };
+    };
+  };
+}
+
 export type DataChannelClientEvent =
   | ResponseCreateEvent
   | ResponseCancelEvent
-  | ConversationItemCreateEvent;
+  | ConversationItemCreateEvent
+  | SessionUpdateEvent;
 
 // --- OpenAI → Client (via data channel) ---
 
@@ -109,8 +128,14 @@ export interface RealtimeErrorEvent {
   };
 }
 
+export interface SessionUpdatedEvent {
+  type: "session.updated";
+  session: Record<string, unknown>;
+}
+
 export type DataChannelServerEvent =
   | SessionCreatedEvent
+  | SessionUpdatedEvent
   | InputAudioBufferSpeechStartedEvent
   | InputAudioBufferSpeechStoppedEvent
   | ResponseOutputAudioTranscriptDeltaEvent

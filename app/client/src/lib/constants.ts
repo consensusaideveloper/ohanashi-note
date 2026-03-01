@@ -37,6 +37,7 @@ export const SESSION_CONFIG = {
     threshold: 0.5, // OpenAI default; previous 0.7 was too high for mobile
     prefix_padding_ms: 300,
     silence_duration_ms: 800, // allow natural pauses for elderly speakers
+    create_response: true, // explicitly trigger AI response after VAD stop
   },
 } as const;
 

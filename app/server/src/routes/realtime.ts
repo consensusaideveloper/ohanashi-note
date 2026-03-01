@@ -23,8 +23,7 @@ import { noteLifecycle, users } from "../db/schema.js";
 
 // --- Constants ---
 
-const OPENAI_CLIENT_SECRETS_URL =
-  "https://api.openai.com/v1/realtime/client_secrets";
+const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 
 const REALTIME_MODEL = "gpt-realtime-mini";
 
@@ -38,6 +37,7 @@ interface TurnDetection {
   threshold: number;
   prefix_padding_ms: number;
   silence_duration_ms: number;
+  create_response?: boolean;
 }
 
 interface ToolDefinition {
@@ -54,8 +54,9 @@ interface SessionConfig {
   turn_detection: TurnDetection;
 }
 
-interface TokenRequestBody {
+interface ConnectRequestBody {
   sessionConfig: SessionConfig;
+  sdp: string;
   onboarding?: boolean;
 }
 
@@ -63,37 +64,35 @@ interface SessionEndRequestBody {
   sessionKey: string;
 }
 
-interface OpenAIClientSecretResponse {
-  /** Top-level value field (GA format). */
-  value?: string;
-  /** Nested client_secret object (alternative response format). */
-  client_secret?: {
-    value: string;
-    expires_at: number;
-  };
-}
-
 // --- Route ---
 
 export const realtimeRoute = new Hono();
 
 /**
- * POST /api/realtime/token
+ * POST /api/realtime/connect
  *
  * Authenticates the user, checks quota and lifecycle status,
- * then creates an ephemeral token via the OpenAI client_secrets API.
- * Returns the token and a session key for tracking.
+ * then exchanges SDP with OpenAI via the unified /v1/realtime/calls
+ * endpoint using FormData (sdp + session). Returns the answer SDP
+ * and a session key for tracking.
  */
-realtimeRoute.post("/api/realtime/token", async (c) => {
+realtimeRoute.post("/api/realtime/connect", async (c) => {
   const config = loadConfig();
 
   try {
-    const body: TokenRequestBody = await c.req.json();
-    const { sessionConfig, onboarding } = body;
+    const body: ConnectRequestBody = await c.req.json();
+    const { sessionConfig, sdp, onboarding } = body;
 
     if (typeof sessionConfig.instructions !== "string") {
       return c.json(
         { error: "セッション設定が不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+
+    if (typeof sdp !== "string" || sdp.length === 0) {
+      return c.json(
+        { error: "SDP offerが不正です", code: "INVALID_REQUEST" },
         400,
       );
     }
@@ -120,7 +119,7 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
       if (!isOnboarding) {
         const quota = await getSessionQuota(userId);
         if (!quota.canStart) {
-          logger.warn("Daily session quota exceeded (realtime token)", {
+          logger.warn("Daily session quota exceeded (realtime connect)", {
             userId,
             usedToday: quota.usedToday,
           });
@@ -165,66 +164,54 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
     // --- Sanitize instructions ---
     const sanitizedInstructions = sanitizeText(sessionConfig.instructions);
 
-    // --- Create ephemeral token via OpenAI ---
-    const openaiResponse = await fetch(OPENAI_CLIENT_SECRETS_URL, {
+    // --- Build session config for OpenAI ---
+    const openaiSession = {
+      type: "realtime",
+      model: REALTIME_MODEL,
+      output_modalities: ["audio"],
+      instructions: sanitizedInstructions,
+      tools: sessionConfig.tools,
+      tool_choice: "auto",
+      audio: {
+        input: {
+          transcription: { model: TRANSCRIPTION_MODEL },
+          turn_detection: sessionConfig.turn_detection,
+        },
+        output: {
+          voice: sessionConfig.voice,
+        },
+      },
+    };
+
+    // --- Exchange SDP with OpenAI via unified /v1/realtime/calls ---
+    const formData = new FormData();
+    formData.set("sdp", sdp);
+    formData.set("session", JSON.stringify(openaiSession));
+
+    const openaiResponse = await fetch(OPENAI_REALTIME_CALLS_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.openaiApiKey}`,
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        session: {
-          type: "realtime",
-          model: REALTIME_MODEL,
-          instructions: sanitizedInstructions,
-          tools: sessionConfig.tools,
-          tool_choice: "auto",
-          audio: {
-            input: {
-              transcription: { model: TRANSCRIPTION_MODEL },
-              turn_detection: sessionConfig.turn_detection,
-            },
-            output: {
-              voice: sessionConfig.voice,
-            },
-          },
-        },
-      }),
+      body: formData,
     });
 
     if (!openaiResponse.ok) {
       const errorText = await openaiResponse.text().catch(() => "");
-      logger.error("Failed to create OpenAI ephemeral token", {
+      logger.error("Failed to exchange SDP with OpenAI", {
         status: openaiResponse.status,
         error: errorText.slice(0, 500),
       });
       return c.json(
         {
           error: "AIサービスへの接続に失敗しました",
-          code: "OPENAI_TOKEN_FAILED",
+          code: "OPENAI_SDP_EXCHANGE_FAILED",
         },
         502,
       );
     }
 
-    const tokenResponse =
-      (await openaiResponse.json()) as OpenAIClientSecretResponse;
-
-    // Extract token value — handle both top-level and nested response formats
-    const tokenValue =
-      tokenResponse.client_secret?.value ?? tokenResponse.value;
-    if (tokenValue === undefined) {
-      logger.error("Unexpected OpenAI token response format", {
-        keys: Object.keys(tokenResponse),
-      });
-      return c.json(
-        {
-          error: "AIサービスからのトークン取得に失敗しました",
-          code: "OPENAI_TOKEN_FORMAT_ERROR",
-        },
-        502,
-      );
-    }
+    const answerSdp = await openaiResponse.text();
 
     // --- Track session ---
     let sessionKey = "";
@@ -232,10 +219,7 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
     if (userId !== null && !isOnboarding) {
       const totalTimeoutMs = MAX_SESSION_DURATION_MS + SESSION_GRACE_PERIOD_MS;
       const timeoutId = setTimeout(() => {
-        // Server-side safety net: auto-end session tracking after timeout.
-        // WebRTC connection itself cannot be closed server-side; client
-        // handles its own session timer.
-        logger.info("Session timeout reached (realtime token), cleaning up", {
+        logger.info("Session timeout reached (realtime), cleaning up", {
           userId,
           sessionKey,
         });
@@ -245,24 +229,24 @@ realtimeRoute.post("/api/realtime/token", async (c) => {
       sessionKey = trackSessionStart(userId, timeoutId);
     }
 
-    logger.info("Ephemeral token created", {
+    logger.info("Realtime SDP exchange completed", {
       userId: userId ?? "anonymous",
       onboarding: isOnboarding,
       sessionKey: sessionKey || undefined,
     });
 
     return c.json({
-      token: tokenValue,
+      answerSdp,
       sessionKey,
     });
   } catch (err: unknown) {
-    logger.error("Failed to create realtime token", {
+    logger.error("Failed to connect realtime session", {
       error: err instanceof Error ? err.message : String(err),
     });
     return c.json(
       {
-        error: "トークンの作成に失敗しました",
-        code: "TOKEN_CREATE_FAILED",
+        error: "接続に失敗しました",
+        code: "CONNECT_FAILED",
       },
       500,
     );

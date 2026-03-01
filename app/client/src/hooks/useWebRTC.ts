@@ -7,7 +7,6 @@ import type {
 
 // --- Constants ---
 
-const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 const DATA_CHANNEL_NAME = "oai-events";
 
 /** Interval for mic audio level analysis (roughly 60fps). */
@@ -22,11 +21,17 @@ type WebRTCStatus = "disconnected" | "connecting" | "connected" | "failed";
 
 type MessageHandler = (event: DataChannelServerEvent) => void;
 
+/** Callback that sends the SDP offer to a server and returns the answer SDP. */
+type SdpExchangeFn = (offerSdp: string) => Promise<string>;
+
 interface UseWebRTCReturn {
   /** Request microphone access. Call this first in a user gesture handler. */
   requestMicAccess: () => Promise<MediaStream>;
-  /** Establish WebRTC connection with an ephemeral token and pre-obtained mic stream. */
-  connect: (token: string, micStream: MediaStream) => Promise<void>;
+  /** Establish WebRTC connection. exchangeSdp sends the offer to our server and returns the answer. */
+  connect: (
+    micStream: MediaStream,
+    exchangeSdp: SdpExchangeFn,
+  ) => Promise<void>;
   /** Close the connection and release all resources. */
   disconnect: () => void;
   /** Send an event through the data channel. */
@@ -39,6 +44,11 @@ interface UseWebRTCReturn {
   addMessageHandler: (handler: MessageHandler) => void;
   /** Unregister a handler. */
   removeMessageHandler: (handler: MessageHandler) => void;
+}
+
+interface ReleaseResourcesOptions {
+  /** Keep this stream alive while cleaning previous connection resources. */
+  preserveMicStream?: MediaStream;
 }
 
 /**
@@ -148,39 +158,46 @@ export function useWebRTC(): UseWebRTCReturn {
   }, []);
 
   /** Release all WebRTC resources. */
-  const releaseResources = useCallback((): void => {
-    stopAudioLevelMonitor();
+  const releaseResources = useCallback(
+    (options: ReleaseResourcesOptions = {}): void => {
+      const { preserveMicStream } = options;
 
-    // Stop mic stream tracks
-    const micStream = micStreamRef.current;
-    if (micStream !== null) {
-      for (const track of micStream.getTracks()) {
-        track.stop();
+      stopAudioLevelMonitor();
+
+      // Stop mic stream tracks
+      const micStream = micStreamRef.current;
+      if (micStream !== null && micStream !== preserveMicStream) {
+        for (const track of micStream.getTracks()) {
+          track.stop();
+        }
       }
-      micStreamRef.current = null;
-    }
+      if (micStream !== preserveMicStream) {
+        micStreamRef.current = null;
+      }
 
-    // Release audio element
-    const audioEl = audioElementRef.current;
-    if (audioEl !== null) {
-      audioEl.srcObject = null;
-      audioElementRef.current = null;
-    }
+      // Release audio element
+      const audioEl = audioElementRef.current;
+      if (audioEl !== null) {
+        audioEl.srcObject = null;
+        audioElementRef.current = null;
+      }
 
-    // Close data channel
-    const dc = dataChannelRef.current;
-    if (dc !== null) {
-      dc.close();
-      dataChannelRef.current = null;
-    }
+      // Close data channel
+      const dc = dataChannelRef.current;
+      if (dc !== null) {
+        dc.close();
+        dataChannelRef.current = null;
+      }
 
-    // Close peer connection
-    const pc = peerConnectionRef.current;
-    if (pc !== null) {
-      pc.close();
-      peerConnectionRef.current = null;
-    }
-  }, [stopAudioLevelMonitor]);
+      // Close peer connection
+      const pc = peerConnectionRef.current;
+      if (pc !== null) {
+        pc.close();
+        peerConnectionRef.current = null;
+      }
+    },
+    [stopAudioLevelMonitor],
+  );
 
   const disconnect = useCallback((): void => {
     releaseResources();
@@ -188,9 +205,12 @@ export function useWebRTC(): UseWebRTCReturn {
   }, [releaseResources]);
 
   const connect = useCallback(
-    async (token: string, micStream: MediaStream): Promise<void> => {
+    async (
+      micStream: MediaStream,
+      exchangeSdp: SdpExchangeFn,
+    ): Promise<void> => {
       // Clean up any existing connection
-      releaseResources();
+      releaseResources({ preserveMicStream: micStream });
       setStatus("connecting");
 
       try {
@@ -202,9 +222,10 @@ export function useWebRTC(): UseWebRTCReturn {
 
         // Add mic audio track
         const audioTrack = micStream.getAudioTracks()[0];
-        if (audioTrack !== undefined) {
-          pc.addTrack(audioTrack, micStream);
+        if (audioTrack === undefined || audioTrack.readyState !== "live") {
+          throw new Error("マイクの音声トラックが利用できません");
         }
+        pc.addTrack(audioTrack, micStream);
 
         // Create data channel for events
         const dc = pc.createDataChannel(DATA_CHANNEL_NAME);
@@ -268,48 +289,15 @@ export function useWebRTC(): UseWebRTCReturn {
           }
         };
 
-        // Create SDP offer
+        // Create SDP offer and exchange via our server
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // Wait for ICE gathering to complete
-        await new Promise<void>((resolve) => {
-          if (pc.iceGatheringState === "complete") {
-            resolve();
-            return;
-          }
-          pc.addEventListener("icegatheringstatechange", () => {
-            if (pc.iceGatheringState === "complete") {
-              resolve();
-            }
-          });
-        });
-
-        // Exchange SDP with OpenAI
-        const localDesc = pc.localDescription;
-        if (localDesc === null) {
+        if (offer.sdp === undefined) {
           throw new Error("SDP offerの作成に失敗しました");
         }
 
-        // GA API requires FormData with sdp field (not raw SDP)
-        const formData = new FormData();
-        formData.set("sdp", localDesc.sdp);
-
-        const sdpResponse = await fetch(OPENAI_REALTIME_CALLS_URL, {
-          method: "POST",
-          body: formData,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!sdpResponse.ok) {
-          throw new Error(
-            `SDP交換に失敗しました: ${String(sdpResponse.status)}`,
-          );
-        }
-
-        const answerSdp = await sdpResponse.text();
+        const answerSdp = await exchangeSdp(offer.sdp);
         await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
         // Start mic audio level monitoring for UI
