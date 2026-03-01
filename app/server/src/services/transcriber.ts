@@ -87,8 +87,7 @@ export async function transcribeFromR2(
       model: TRANSCRIPTION_MODEL,
       file,
       language: TRANSCRIPTION_LANGUAGE,
-      response_format: "verbose_json",
-      timestamp_granularities: ["segment"],
+      response_format: "json",
     });
 
     const segments: TranscriptionSegment[] = [];
