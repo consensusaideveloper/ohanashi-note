@@ -205,11 +205,11 @@ export async function saveAudioRecording(
       throw new Error(result.error ?? "Upload failed");
     }
   } catch (error) {
-    console.error("Failed to upload audio:", error);
     // R2 not configured — skip audio upload silently
     if (error instanceof ApiError && error.status === 503) {
       return null;
     }
+    console.error("Failed to upload audio:", error);
     throw error;
   }
 }
@@ -248,7 +248,9 @@ export async function getAudioRecording(
 
 // --- User profile storage ---
 
-export async function saveUserProfile(profile: UserProfile): Promise<void> {
+export async function saveUserProfile(
+  profile: Partial<UserProfile>,
+): Promise<void> {
   await fetchWithAuth("/api/profile", {
     method: "PUT",
     body: JSON.stringify(profile),

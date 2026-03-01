@@ -31,6 +31,7 @@ import { isNoiseTranscript } from "../lib/audio";
 import { computeContentHash, computeBlobHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import {
+  ApiError,
   requestSummarize,
   requestEnhancedSummarize,
   connectRealtimeSession,
@@ -40,6 +41,7 @@ import {
   searchPastConversations,
   getNoteEntriesForAI,
 } from "../lib/conversation-search";
+import { hasExplicitConversationEndIntent } from "../lib/conversation-end";
 import { useVoiceActionRef } from "../contexts/VoiceActionContext";
 
 import type { VoiceActionCallbacks } from "../contexts/VoiceActionContext";
@@ -62,6 +64,7 @@ import type {
   TranscriptEntry,
   VoiceActionResult,
 } from "../types/conversation";
+import type { SummarizeResult } from "../lib/api";
 
 // --- End-conversation flow ---
 /** Delay (ms) after farewell response.done before calling stop(), allowing audio playback to complete. */
@@ -77,6 +80,9 @@ const RECORDER_MIME_CANDIDATES = [
   "audio/mp4",
   "audio/ogg;codecs=opus",
 ] as const;
+const ENHANCED_SUMMARIZE_MAX_ATTEMPTS = 3;
+const ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS = 1500;
+const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 // --- State machine ---
 
@@ -349,6 +355,55 @@ function pickRecorderMimeType(): string {
   return "";
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableSummarizeError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return RETRYABLE_SUMMARIZE_STATUSES.has(error.status);
+  }
+  // Fetch network errors are typically surfaced as TypeError.
+  return error instanceof TypeError;
+}
+
+async function requestEnhancedSummarizeWithRetry(
+  conversationId: string,
+  category: QuestionCategory | null,
+  previousEntries: NoteEntry[],
+): Promise<SummarizeResult> {
+  let lastError: unknown = null;
+
+  for (
+    let attempt = 1;
+    attempt <= ENHANCED_SUMMARIZE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await requestEnhancedSummarize(
+        conversationId,
+        category,
+        previousEntries,
+      );
+    } catch (error: unknown) {
+      lastError = error;
+      const canRetry =
+        attempt < ENHANCED_SUMMARIZE_MAX_ATTEMPTS &&
+        isRetryableSummarizeError(error);
+      if (!canRetry) {
+        throw error;
+      }
+      await sleep(ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS * attempt);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Enhanced summarize failed");
+}
+
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [autoEndSignal, setAutoEndSignal] = useState(0);
@@ -422,6 +477,8 @@ export function useConversation(): UseConversationReturn {
     typeof setTimeout
   > | null>(null);
   const autoEndStopTriggerRef = useRef(false);
+  const stopAfterAudioScheduledRef = useRef(false);
+  const audioEndUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
@@ -602,8 +659,36 @@ export function useConversation(): UseConversationReturn {
   const resetEndConversationFlow = useCallback((): void => {
     endConversationRequestedRef.current = false;
     endConversationFarewellDetectedRef.current = false;
+    stopAfterAudioScheduledRef.current = false;
+    if (audioEndUnsubscribeRef.current !== null) {
+      audioEndUnsubscribeRef.current();
+      audioEndUnsubscribeRef.current = null;
+    }
     clearEndConversationTimers();
   }, [clearEndConversationTimers]);
+
+  const requestEndConversation = useCallback(
+    (source: "tool" | "user_intent"): void => {
+      if (endConversationRequestedRef.current) {
+        // User explicit end intent should force-stop even if the model
+        // forgot to call end_conversation.
+        if (source === "user_intent") {
+          endConversationFarewellDetectedRef.current = true;
+        }
+        return;
+      }
+
+      endConversationRequestedRef.current = true;
+      endConversationFarewellDetectedRef.current = source === "user_intent";
+      clearEndConversationTimers();
+      endConversationFallbackTimeoutRef.current = setTimeout(() => {
+        autoEndStopTriggerRef.current = true;
+        resetEndConversationFlow();
+        stopRef.current();
+      }, END_CONVERSATION_FALLBACK_MS);
+    },
+    [clearEndConversationTimers, resetEndConversationFlow],
+  );
 
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
@@ -623,14 +708,7 @@ export function useConversation(): UseConversationReturn {
 
       try {
         if (functionName === "end_conversation") {
-          endConversationRequestedRef.current = true;
-          endConversationFarewellDetectedRef.current = false;
-          clearEndConversationTimers();
-          endConversationFallbackTimeoutRef.current = setTimeout(() => {
-            autoEndStopTriggerRef.current = true;
-            resetEndConversationFlow();
-            stopRef.current();
-          }, END_CONVERSATION_FALLBACK_MS);
+          requestEndConversation("tool");
 
           sendResult(
             JSON.stringify({
@@ -698,12 +776,7 @@ export function useConversation(): UseConversationReturn {
         sendResult(JSON.stringify({ error: "検索中にエラーが発生しました" }));
       }
     },
-    [
-      webrtc,
-      voiceActionRef,
-      clearEndConversationTimers,
-      resetEndConversationFlow,
-    ],
+    [webrtc, voiceActionRef, requestEndConversation],
   );
 
   // Handle incoming data channel events
@@ -750,6 +823,9 @@ export function useConversation(): UseConversationReturn {
             !isNoiseTranscript(trimmed)
           ) {
             dispatch({ type: "ADD_USER_TRANSCRIPT", text: trimmed });
+            if (hasExplicitConversationEndIntent(trimmed)) {
+              requestEndConversation("user_intent");
+            }
           }
           break;
         }
@@ -761,7 +837,8 @@ export function useConversation(): UseConversationReturn {
           // End-conversation flow: stop only after farewell response is observed.
           if (
             endConversationRequestedRef.current &&
-            endConversationFarewellDetectedRef.current
+            endConversationFarewellDetectedRef.current &&
+            !stopAfterAudioScheduledRef.current
           ) {
             endConversationRequestedRef.current = false;
             endConversationFarewellDetectedRef.current = false;
@@ -772,8 +849,32 @@ export function useConversation(): UseConversationReturn {
             if (endConversationStopTimeoutRef.current !== null) {
               clearTimeout(endConversationStopTimeoutRef.current);
             }
+
+            stopAfterAudioScheduledRef.current = true;
+
+            // Subscribe to remote audio end as an additional stop trigger
+            // (fires when the server tears down the media stream).
+            audioEndUnsubscribeRef.current = webrtc.onRemoteAudioEnded(() => {
+              if (!stopAfterAudioScheduledRef.current) return;
+              stopAfterAudioScheduledRef.current = false;
+              audioEndUnsubscribeRef.current = null;
+              if (endConversationStopTimeoutRef.current !== null) {
+                clearTimeout(endConversationStopTimeoutRef.current);
+                endConversationStopTimeoutRef.current = null;
+              }
+              autoEndStopTriggerRef.current = true;
+              stopRef.current();
+            });
+
+            // Timer fallback: stop after delay even if audio-end event never fires.
             endConversationStopTimeoutRef.current = setTimeout(() => {
               endConversationStopTimeoutRef.current = null;
+              if (!stopAfterAudioScheduledRef.current) return;
+              stopAfterAudioScheduledRef.current = false;
+              if (audioEndUnsubscribeRef.current !== null) {
+                audioEndUnsubscribeRef.current();
+                audioEndUnsubscribeRef.current = null;
+              }
               autoEndStopTriggerRef.current = true;
               stopRef.current();
             }, END_CONVERSATION_FAREWELL_DELAY_MS);
@@ -821,7 +922,12 @@ export function useConversation(): UseConversationReturn {
           break;
       }
     },
-    [webrtc, handleFunctionCall, resetEndConversationFlow],
+    [
+      webrtc,
+      handleFunctionCall,
+      resetEndConversationFlow,
+      requestEndConversation,
+    ],
   );
 
   // Register/unregister message handler
@@ -1146,6 +1252,8 @@ export function useConversation(): UseConversationReturn {
 
       saveConversation(record)
         .then(async () => {
+          let hasUploadedAudio = false;
+
           // Upload audio first so enhanced summarization can use re-transcription.
           const recordedAudio = await recordingPromise;
           if (recordedAudio !== null) {
@@ -1163,6 +1271,7 @@ export function useConversation(): UseConversationReturn {
                   audioMimeType: recordedAudio.mimeType,
                   audioHash,
                 });
+                hasUploadedAudio = true;
               }
             } catch (audioError: unknown) {
               console.error("Failed to save conversation audio:", {
@@ -1171,65 +1280,72 @@ export function useConversation(): UseConversationReturn {
             }
           }
 
-          const summarizePromise = requestEnhancedSummarize(
-            convId,
-            category,
-            previousEntries,
-          ).catch(() => {
-            return requestSummarize(
+          let result: SummarizeResult;
+          if (hasUploadedAudio) {
+            try {
+              result = await requestEnhancedSummarizeWithRetry(
+                convId,
+                category,
+                previousEntries,
+              );
+            } catch (enhancedError: unknown) {
+              if (!isRetryableSummarizeError(enhancedError)) {
+                throw enhancedError;
+              }
+              // Keep summaryStatus=pending so server-side recovery can retry with audio.
+              console.error("Enhanced summarization deferred to recovery:", {
+                error: enhancedError,
+              });
+              return;
+            }
+          } else {
+            result = await requestSummarize(
               category,
               record.transcript,
               previousEntries,
             );
+          }
+
+          if (
+            result.extractedUserName !== undefined &&
+            result.extractedUserName !== null &&
+            result.extractedUserName !== ""
+          ) {
+            getUserProfile()
+              .then((currentProfile) =>
+                saveUserProfile({
+                  name: result.extractedUserName ?? "",
+                  characterId: currentProfile?.characterId,
+                  updatedAt: Date.now(),
+                }),
+              )
+              .catch(() => {});
+          }
+
+          await updateConversation(convId, {
+            summary: result.summary,
+            coveredQuestionIds: result.coveredQuestionIds,
+            noteEntries: result.noteEntries,
+            summaryStatus: "completed",
+            oneLinerSummary: result.oneLinerSummary,
+            emotionAnalysis: result.emotionAnalysis,
+            discussedCategories:
+              result.discussedCategories as QuestionCategory[],
+            keyPoints: result.keyPoints,
+            topicAdherence: result.topicAdherence,
+            offTopicSummary: result.offTopicSummary,
           });
 
-          return summarizePromise
-            .then((result) => {
-              if (
-                result.extractedUserName !== undefined &&
-                result.extractedUserName !== null &&
-                result.extractedUserName !== ""
-              ) {
-                getUserProfile()
-                  .then((currentProfile) =>
-                    saveUserProfile({
-                      name: result.extractedUserName ?? "",
-                      characterId: currentProfile?.characterId,
-                      updatedAt: Date.now(),
-                    }),
-                  )
-                  .catch(() => {});
-              }
-
-              return updateConversation(convId, {
-                summary: result.summary,
-                coveredQuestionIds: result.coveredQuestionIds,
-                noteEntries: result.noteEntries,
-                summaryStatus: "completed",
-                oneLinerSummary: result.oneLinerSummary,
-                emotionAnalysis: result.emotionAnalysis,
-                discussedCategories:
-                  result.discussedCategories as QuestionCategory[],
-                keyPoints: result.keyPoints,
-                topicAdherence: result.topicAdherence,
-                offTopicSummary: result.offTopicSummary,
-              });
-            })
-            .then(() => {
-              return getConversation(convId).then((fullRecord) => {
-                if (fullRecord !== null) {
-                  return computeContentHash(fullRecord).then((integrityHash) =>
-                    updateConversation(convId, {
-                      integrityHash,
-                      integrityHashedAt: Date.now(),
-                    }),
-                  );
-                }
-              });
-            })
-            .then(() => {
-              dispatch({ type: "SUMMARY_COMPLETED" });
+          const fullRecord = await getConversation(convId);
+          if (fullRecord !== null) {
+            const integrityHash = await computeContentHash(fullRecord);
+            await updateConversation(convId, {
+              integrityHash,
+              integrityHashedAt: Date.now(),
             });
+          }
+
+          dispatch({ type: "SUMMARY_COMPLETED" });
         })
         .catch((error: unknown) => {
           console.error("Failed to save/summarize conversation:", error);

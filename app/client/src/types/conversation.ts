@@ -67,6 +67,8 @@ export interface NoteEntry {
   questionId: string;
   questionTitle: string;
   answer: string;
+  /** Optional verbatim quote from user speech used as grounding evidence. */
+  sourceEvidence?: string;
 }
 
 export interface KeyPoints {

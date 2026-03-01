@@ -44,6 +44,8 @@ interface UseWebRTCReturn {
   addMessageHandler: (handler: MessageHandler) => void;
   /** Unregister a handler. */
   removeMessageHandler: (handler: MessageHandler) => void;
+  /** Subscribe to remote audio end events. */
+  onRemoteAudioEnded: (handler: () => void) => () => void;
 }
 
 interface ReleaseResourcesOptions {
@@ -71,6 +73,8 @@ export function useWebRTC(): UseWebRTCReturn {
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
+  const remoteAudioEndHandlersRef = useRef<Set<() => void>>(new Set());
+  const remoteAudioEndedListenerRef = useRef<(() => void) | null>(null);
 
   // Mic level analysis refs
   const analyserContextRef = useRef<AudioContext | null>(null);
@@ -93,6 +97,16 @@ export function useWebRTC(): UseWebRTCReturn {
     }
     dc.send(JSON.stringify(event));
   }, []);
+
+  const onRemoteAudioEnded = useCallback(
+    (handler: () => void): (() => void) => {
+      remoteAudioEndHandlersRef.current.add(handler);
+      return () => {
+        remoteAudioEndHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
 
   /** Start mic audio level monitoring via AnalyserNode. */
   const startAudioLevelMonitor = useCallback((stream: MediaStream): void => {
@@ -178,9 +192,17 @@ export function useWebRTC(): UseWebRTCReturn {
       // Release audio element
       const audioEl = audioElementRef.current;
       if (audioEl !== null) {
+        if (remoteAudioEndedListenerRef.current !== null) {
+          audioEl.removeEventListener(
+            "ended",
+            remoteAudioEndedListenerRef.current,
+          );
+          remoteAudioEndedListenerRef.current = null;
+        }
         audioEl.srcObject = null;
         audioElementRef.current = null;
       }
+      remoteAudioEndHandlersRef.current.clear();
 
       // Close data channel
       const dc = dataChannelRef.current;
@@ -239,6 +261,11 @@ export function useWebRTC(): UseWebRTCReturn {
             audio.srcObject = remoteStream;
             audio.autoplay = true;
             audioElementRef.current = audio;
+            const handleEnded = (): void => {
+              remoteAudioEndHandlersRef.current.forEach((handler) => handler());
+            };
+            remoteAudioEndedListenerRef.current = handleEnded;
+            audio.addEventListener("ended", handleEnded);
             // Play explicitly for iOS Safari autoplay policy
             audio.play().catch(() => {});
           }
@@ -329,5 +356,6 @@ export function useWebRTC(): UseWebRTCReturn {
     audioLevel,
     addMessageHandler,
     removeMessageHandler,
+    onRemoteAudioEnded,
   };
 }

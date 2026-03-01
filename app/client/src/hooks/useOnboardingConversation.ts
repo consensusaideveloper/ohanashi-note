@@ -16,8 +16,12 @@ import {
 } from "../lib/constants";
 import { isNoiseTranscript } from "../lib/audio";
 import { getCharacterById, CHARACTERS } from "../lib/characters";
+import {
+  hasExplicitConversationEndIntent,
+  hasOnboardingCompletionSignal,
+} from "../lib/conversation-end";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
-import { saveUserProfile, getUserProfile } from "../lib/storage";
+import { saveUserProfile } from "../lib/storage";
 import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 
@@ -145,6 +149,8 @@ export function useOnboardingConversation({
   const endConversationFallbackTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const stopAfterAudioScheduledRef = useRef(false);
+  const audioEndUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Session key for server-side tracking
   const sessionKeyRef = useRef<string>("");
@@ -181,8 +187,33 @@ export function useOnboardingConversation({
   const resetEndConversationFlow = useCallback((): void => {
     endConversationRequestedRef.current = false;
     endConversationFarewellDetectedRef.current = false;
+    stopAfterAudioScheduledRef.current = false;
+    if (audioEndUnsubscribeRef.current !== null) {
+      audioEndUnsubscribeRef.current();
+      audioEndUnsubscribeRef.current = null;
+    }
     clearEndConversationTimers();
   }, [clearEndConversationTimers]);
+
+  const requestEndConversation = useCallback(
+    (source: "tool" | "user_intent" | "completion_signal"): void => {
+      if (endConversationRequestedRef.current) {
+        if (source !== "tool") {
+          endConversationFarewellDetectedRef.current = true;
+        }
+        return;
+      }
+
+      endConversationRequestedRef.current = true;
+      endConversationFarewellDetectedRef.current = source !== "tool";
+      clearEndConversationTimers();
+      endConversationFallbackTimeoutRef.current = setTimeout(() => {
+        resetEndConversationFlow();
+        stopRef.current();
+      }, END_CONVERSATION_FALLBACK_MS);
+    },
+    [clearEndConversationTimers, resetEndConversationFlow],
+  );
 
   // Handle function calls from the Realtime API
   const handleFunctionCall = useCallback(
@@ -201,13 +232,7 @@ export function useOnboardingConversation({
 
       try {
         if (functionName === "end_conversation") {
-          endConversationRequestedRef.current = true;
-          endConversationFarewellDetectedRef.current = false;
-          clearEndConversationTimers();
-          endConversationFallbackTimeoutRef.current = setTimeout(() => {
-            resetEndConversationFlow();
-            stopRef.current();
-          }, END_CONVERSATION_FALLBACK_MS);
+          requestEndConversation("tool");
 
           sendResult(
             JSON.stringify({
@@ -221,18 +246,10 @@ export function useOnboardingConversation({
         if (functionName === "update_user_name") {
           const args = JSON.parse(argsJson) as { name: string };
           const trimmedName = args.name.trim();
-          void getUserProfile()
-            .then((existingProfile) => {
-              const profile = existingProfile ?? {
-                name: "",
-                updatedAt: Date.now(),
-              };
-              return saveUserProfile({
-                ...profile,
-                name: trimmedName,
-                updatedAt: Date.now(),
-              });
-            })
+          void saveUserProfile({
+            name: trimmedName,
+            updatedAt: Date.now(),
+          })
             .then(() => {
               sendResult(
                 JSON.stringify({
@@ -262,18 +279,10 @@ export function useOnboardingConversation({
             );
             return;
           }
-          void getUserProfile()
-            .then((existingProfile) => {
-              const profile = existingProfile ?? {
-                name: "",
-                updatedAt: Date.now(),
-              };
-              return saveUserProfile({
-                ...profile,
-                characterId: character.id,
-                updatedAt: Date.now(),
-              });
-            })
+          void saveUserProfile({
+            characterId: character.id,
+            updatedAt: Date.now(),
+          })
             .then(() => {
               sendResult(
                 JSON.stringify({
@@ -309,45 +318,42 @@ export function useOnboardingConversation({
             speaking_speed?: string;
             silence_duration?: string;
             confirmation_level?: string;
+            speakingSpeed?: string;
+            silenceDuration?: string;
+            confirmationLevel?: string;
           };
-          void getUserProfile()
-            .then((existingProfile) => {
-              const profile = existingProfile ?? {
-                name: "",
-                updatedAt: Date.now(),
-              };
-              return saveUserProfile({
-                ...profile,
-                ...(args.speaking_speed !== undefined && {
-                  speakingSpeed: args.speaking_speed as SpeakingSpeed,
-                }),
-                ...(args.silence_duration !== undefined && {
-                  silenceDuration: args.silence_duration as SilenceDuration,
-                }),
-                ...(args.confirmation_level !== undefined && {
-                  confirmationLevel: args.confirmation_level as
-                    | "frequent"
-                    | "normal"
-                    | "minimal",
-                }),
-                updatedAt: Date.now(),
-              });
-            })
+          const speakingSpeedRaw = args.speaking_speed ?? args.speakingSpeed;
+          const silenceDurationRaw =
+            args.silence_duration ?? args.silenceDuration;
+          const confirmationLevelRaw =
+            args.confirmation_level ?? args.confirmationLevel;
+          void saveUserProfile({
+            ...(speakingSpeedRaw !== undefined && {
+              speakingSpeed: speakingSpeedRaw as SpeakingSpeed,
+            }),
+            ...(silenceDurationRaw !== undefined && {
+              silenceDuration: silenceDurationRaw as SilenceDuration,
+            }),
+            ...(confirmationLevelRaw !== undefined && {
+              confirmationLevel: confirmationLevelRaw as ConfirmationLevel,
+            }),
+            updatedAt: Date.now(),
+          })
             .then(() => {
               const changedParts: string[] = [];
-              if (args.speaking_speed !== undefined) {
+              if (speakingSpeedRaw !== undefined) {
                 changedParts.push(
-                  `話す速さを「${SPEAKING_SPEED_LABELS[args.speaking_speed as SpeakingSpeed]}」`,
+                  `話す速さを「${SPEAKING_SPEED_LABELS[speakingSpeedRaw as SpeakingSpeed]}」`,
                 );
               }
-              if (args.silence_duration !== undefined) {
+              if (silenceDurationRaw !== undefined) {
                 changedParts.push(
-                  `待ち時間を「${SILENCE_DURATION_LABELS[args.silence_duration as SilenceDuration]}」`,
+                  `待ち時間を「${SILENCE_DURATION_LABELS[silenceDurationRaw as SilenceDuration]}」`,
                 );
               }
-              if (args.confirmation_level !== undefined) {
+              if (confirmationLevelRaw !== undefined) {
                 changedParts.push(
-                  `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[args.confirmation_level as ConfirmationLevel]}」`,
+                  `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[confirmationLevelRaw as ConfirmationLevel]}」`,
                 );
               }
               const msg =
@@ -369,7 +375,7 @@ export function useOnboardingConversation({
         sendResult(JSON.stringify({ error: "操作中にエラーが発生しました" }));
       }
     },
-    [webrtc, clearEndConversationTimers, resetEndConversationFlow],
+    [webrtc, requestEndConversation],
   );
 
   // Handle incoming data channel events
@@ -407,6 +413,9 @@ export function useOnboardingConversation({
             type: "FINALIZE_ASSISTANT_TRANSCRIPT",
             text: event.transcript,
           });
+          if (hasOnboardingCompletionSignal(event.transcript)) {
+            requestEndConversation("completion_signal");
+          }
           break;
 
         case "conversation.item.input_audio_transcription.completed": {
@@ -416,6 +425,9 @@ export function useOnboardingConversation({
             !isNoiseTranscript(trimmed)
           ) {
             dispatch({ type: "ADD_USER_TRANSCRIPT", text: trimmed });
+            if (hasExplicitConversationEndIntent(trimmed)) {
+              requestEndConversation("user_intent");
+            }
           }
           break;
         }
@@ -427,7 +439,8 @@ export function useOnboardingConversation({
           // End-conversation flow: stop only after farewell response is observed.
           if (
             endConversationRequestedRef.current &&
-            endConversationFarewellDetectedRef.current
+            endConversationFarewellDetectedRef.current &&
+            !stopAfterAudioScheduledRef.current
           ) {
             endConversationRequestedRef.current = false;
             endConversationFarewellDetectedRef.current = false;
@@ -438,8 +451,31 @@ export function useOnboardingConversation({
             if (endConversationStopTimeoutRef.current !== null) {
               clearTimeout(endConversationStopTimeoutRef.current);
             }
+
+            stopAfterAudioScheduledRef.current = true;
+
+            // Subscribe to remote audio end as an additional stop trigger
+            // (fires when the server tears down the media stream).
+            audioEndUnsubscribeRef.current = webrtc.onRemoteAudioEnded(() => {
+              if (!stopAfterAudioScheduledRef.current) return;
+              stopAfterAudioScheduledRef.current = false;
+              audioEndUnsubscribeRef.current = null;
+              if (endConversationStopTimeoutRef.current !== null) {
+                clearTimeout(endConversationStopTimeoutRef.current);
+                endConversationStopTimeoutRef.current = null;
+              }
+              stopRef.current();
+            });
+
+            // Timer fallback: stop after delay even if audio-end event never fires.
             endConversationStopTimeoutRef.current = setTimeout(() => {
               endConversationStopTimeoutRef.current = null;
+              if (!stopAfterAudioScheduledRef.current) return;
+              stopAfterAudioScheduledRef.current = false;
+              if (audioEndUnsubscribeRef.current !== null) {
+                audioEndUnsubscribeRef.current();
+                audioEndUnsubscribeRef.current = null;
+              }
               stopRef.current();
             }, END_CONVERSATION_FAREWELL_DELAY_MS);
           }
@@ -485,7 +521,12 @@ export function useOnboardingConversation({
           break;
       }
     },
-    [webrtc, handleFunctionCall, resetEndConversationFlow],
+    [
+      webrtc,
+      handleFunctionCall,
+      resetEndConversationFlow,
+      requestEndConversation,
+    ],
   );
 
   // Register/unregister message handler

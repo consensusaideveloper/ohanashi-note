@@ -53,17 +53,10 @@ export function FontSizeProvider({
 
   const setFontSize = useCallback((level: FontSizeLevel): void => {
     setFontSizeState(level);
-    // Persist to server (merge with existing profile)
-    void getUserProfile().then((existingProfile) => {
-      const profile = existingProfile ?? {
-        name: "",
-        updatedAt: Date.now(),
-      };
-      void saveUserProfile({
-        ...profile,
-        fontSize: level,
-        updatedAt: Date.now(),
-      });
+    // Persist only the changed field to avoid race-based overwrites.
+    void saveUserProfile({
+      fontSize: level,
+      updatedAt: Date.now(),
     });
   }, []);
 

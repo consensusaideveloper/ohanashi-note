@@ -27,6 +27,7 @@ export interface NoteEntry {
   questionId: string;
   questionTitle: string;
   answer: string;
+  sourceEvidence: string;
 }
 
 export interface KeyPoints {
@@ -102,8 +103,14 @@ const RESPONSE_JSON_SCHEMA = {
             questionId: { type: "string" as const },
             questionTitle: { type: "string" as const },
             answer: { type: "string" as const },
+            sourceEvidence: { type: "string" as const },
           },
-          required: ["questionId", "questionTitle", "answer"] as const,
+          required: [
+            "questionId",
+            "questionTitle",
+            "answer",
+            "sourceEvidence",
+          ] as const,
           additionalProperties: false,
         },
       },
@@ -179,7 +186,8 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     {
       "questionId": "質問ID",
       "questionTitle": "質問タイトル",
-      "answer": "ユーザーの回答を簡潔にまとめたもの"
+      "answer": "ユーザーの回答を簡潔にまとめたもの",
+      "sourceEvidence": "ユーザー発話からの根拠引用（原文のまま）"
     }
   ],
   "extractedUserName": "ユーザーの名前（検出できない場合はnull）",
@@ -203,7 +211,9 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
     - low: 会話の大部分がエンディングノートと無関係な話題だった
 12. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
-13. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+13. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
+14. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
+15. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【カテゴリ別の分析ガイド】
 - legal（相続・遺言）: 相続の希望、遺言書の有無や内容、遺産分割の意向、生前贈与の計画など、相続・遺言に関する具体的な希望や状況を重点的に抽出してください。
@@ -245,7 +255,8 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     {
       "questionId": "質問ID",
       "questionTitle": "質問タイトル",
-      "answer": "ユーザーの回答を簡潔にまとめたもの"
+      "answer": "ユーザーの回答を簡潔にまとめたもの",
+      "sourceEvidence": "ユーザー発話からの根拠引用（原文のまま）"
     }
   ],
   "extractedUserName": "ユーザーの名前（検出できない場合はnull）",
@@ -270,7 +281,9 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
     - low: 会話の大部分がエンディングノートと無関係な話題だった
 13. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
-14. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+14. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
+15. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
+16. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【追加タスク - ユーザー名の検出】
 会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
@@ -296,6 +309,49 @@ function truncateTranscript(
     result += line;
   }
   return result;
+}
+
+function normalizeForGrounding(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[「」『』"'`.,!?！？。、…・〜ー～()［］[\]{}]/g, "");
+}
+
+function filterGroundedNoteEntries(
+  noteEntries: NoteEntry[],
+  userTranscript: Array<{ role: "user" | "assistant"; text: string }>,
+): NoteEntry[] {
+  const userCorpus = normalizeForGrounding(
+    userTranscript
+      .filter((entry) => entry.role === "user")
+      .map((entry) => entry.text)
+      .join(""),
+  );
+  if (userCorpus.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const grounded: NoteEntry[] = [];
+
+  for (const entry of noteEntries) {
+    const evidence = entry.sourceEvidence.trim();
+    const normalizedEvidence = normalizeForGrounding(evidence);
+    if (normalizedEvidence.length < 2) continue;
+    if (!userCorpus.includes(normalizedEvidence)) continue;
+
+    const dedupeKey = `${entry.questionId}:${normalizeForGrounding(entry.answer)}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    grounded.push({
+      ...entry,
+      sourceEvidence: evidence,
+    });
+  }
+
+  return grounded;
 }
 
 const VALID_CATEGORY_SET = new Set([
@@ -355,6 +411,7 @@ function validateResponse(data: unknown): data is SummarizeResponse {
     if (typeof e["questionId"] !== "string") return false;
     if (typeof e["questionTitle"] !== "string") return false;
     if (typeof e["answer"] !== "string") return false;
+    if (typeof e["sourceEvidence"] !== "string") return false;
   }
 
   // extractedUserName is optional: string or null
@@ -393,6 +450,13 @@ export async function summarizeConversation(
     role: entry.role,
     text: sanitizeText(entry.text),
   }));
+  const userOnlyTranscript = sanitizedTranscript.filter(
+    (entry) => entry.role === "user" && entry.text.trim().length > 0,
+  );
+  const transcriptForAnalysis =
+    userOnlyTranscript.length > 0
+      ? userOnlyTranscript
+      : [{ role: "user" as const, text: "（ユーザー発話なし）" }];
 
   let systemPrompt: string;
   if (request.category !== null) {
@@ -409,11 +473,12 @@ export async function summarizeConversation(
       request.previousNoteEntries,
     );
   }
-  const userMessage = truncateTranscript(sanitizedTranscript);
+  const userMessage = truncateTranscript(transcriptForAnalysis);
 
   logger.info("Summarization request", {
     category: request.category,
     transcriptLength: request.transcript.length,
+    userTranscriptLength: userOnlyTranscript.length,
     truncatedChars: userMessage.length,
   });
 
@@ -449,13 +514,30 @@ export async function summarizeConversation(
     throw new Error("Invalid response structure from OpenAI");
   }
 
+  const groundedNoteEntries = filterGroundedNoteEntries(
+    parsed.noteEntries,
+    userOnlyTranscript,
+  );
+  const groundedQuestionIdSet = new Set(
+    groundedNoteEntries.map((entry) => entry.questionId),
+  );
+  const coveredQuestionIds = parsed.coveredQuestionIds.filter((questionId) =>
+    groundedQuestionIdSet.has(questionId),
+  );
+
+  const finalized: SummarizeResponse = {
+    ...parsed,
+    noteEntries: groundedNoteEntries,
+    coveredQuestionIds,
+  };
+
   logger.info("Summarization complete", {
     category: request.category,
-    coveredQuestions: parsed.coveredQuestionIds.length,
-    noteEntries: parsed.noteEntries.length,
-    topicAdherence: parsed.topicAdherence,
-    offTopicSummary: parsed.offTopicSummary,
+    coveredQuestions: finalized.coveredQuestionIds.length,
+    noteEntries: finalized.noteEntries.length,
+    topicAdherence: finalized.topicAdherence,
+    offTopicSummary: finalized.offTopicSummary,
   });
 
-  return parsed;
+  return finalized;
 }

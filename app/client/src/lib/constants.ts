@@ -6,7 +6,7 @@ import type {
 } from "../types/conversation";
 
 /** Minimum character count for a user transcript to be considered valid input. */
-export const MIN_TRANSCRIPT_LENGTH = 3;
+export const MIN_TRANSCRIPT_LENGTH = 2;
 
 // --- Noise transcript filter ---
 /**

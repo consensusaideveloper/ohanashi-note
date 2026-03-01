@@ -35,6 +35,7 @@ export function OnboardingConversation({
     pendingAssistantText,
     audioLevel,
     start,
+    stop,
     retry,
   } = useOnboardingConversation({ setFontSize, onComplete });
 
@@ -81,8 +82,33 @@ export function OnboardingConversation({
     <div
       className={`min-h-dvh flex flex-col items-center bg-gradient-to-b ${gradient}`}
     >
+      {/* Top bar with end-conversation button */}
+      <div className="flex-none w-full max-w-lg px-4 pt-4">
+        <button
+          type="button"
+          className="min-w-11 min-h-11 flex items-center gap-1.5 rounded-full px-3 hover:bg-bg-surface/60 active:bg-bg-surface transition-colors"
+          onClick={stop}
+          aria-label="お話しを終える"
+        >
+          <svg
+            className="w-5 h-5 text-text-secondary"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 19.5 8.25 12l7.5-7.5"
+            />
+          </svg>
+          <span className="text-lg text-text-secondary">終える</span>
+        </button>
+      </div>
+
       {/* Status area */}
-      <div className="flex-none pt-8 pb-6">
+      <div className="flex-none pt-4 pb-6">
         {state === "error" && errorType !== null ? (
           <ErrorDisplay errorType={errorType} onRetry={retry} />
         ) : (

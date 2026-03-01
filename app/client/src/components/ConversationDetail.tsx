@@ -417,8 +417,8 @@ export function ConversationDetail({
               この会話で記録された内容
             </h3>
             <div className="space-y-3">
-              {record.noteEntries.map((entry) => (
-                <div key={entry.questionId}>
+              {record.noteEntries.map((entry, index) => (
+                <div key={`${entry.questionId}-${index}`}>
                   <p className="text-lg font-medium text-text-secondary">
                     {entry.questionTitle}
                   </p>
