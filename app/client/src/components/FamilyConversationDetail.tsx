@@ -6,6 +6,7 @@ import {
 } from "../lib/family-api";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { TRANSCRIPT_DISCLAIMER, UI_MESSAGES } from "../lib/constants";
+import { AudioPlayer } from "./AudioPlayer";
 import { PrintableConversationDetail } from "./PrintableConversationDetail";
 
 import type { ReactNode } from "react";
@@ -424,12 +425,7 @@ export function FamilyConversationDetail({
             )}
             {!audioLoading && audioUrl !== null && (
               <>
-                <audio
-                  controls
-                  src={audioUrl}
-                  className="w-full"
-                  preload="metadata"
-                />
+                <AudioPlayer src={audioUrl} />
                 <button
                   type="button"
                   className="mt-2 min-h-11 inline-flex items-center gap-2 rounded-full border border-border text-text-secondary text-lg px-5 py-2.5 hover:bg-bg-surface-hover active:bg-border-light transition-colors"

@@ -760,6 +760,13 @@ export const UI_MESSAGES = {
     downloading: "ダウンロードしています...",
     downloadFailed:
       "録音のダウンロードに失敗しました。もう一度お試しください。",
+    play: "再生",
+    pause: "一時停止",
+    skipForward: "10秒進む",
+    skipBackward: "10秒戻す",
+    playbackSpeed: "再生速度",
+    seekPosition: "再生位置",
+    playerLabel: "音声プレーヤー",
   },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
@@ -797,6 +804,16 @@ export const MAX_SESSION_DURATION_MS = 20 * 60 * 1000;
 export const SESSION_WARNING_THRESHOLD = 0.85;
 /** Maximum number of conversation sessions per day. */
 export const MAX_DAILY_SESSIONS = 5;
+
+// --- Audio player ---
+/** Skip duration in seconds for audio player forward/backward buttons. */
+export const AUDIO_SKIP_SECONDS = 10;
+/** Playback rate options for the audio player speed control. */
+export const AUDIO_PLAYBACK_RATE_OPTIONS: readonly number[] = [0.75, 1, 1.25];
+/** Default playback rate index (1x). */
+export const AUDIO_DEFAULT_RATE_INDEX = 1;
+/** Keyboard seek step in seconds for the progress bar arrow keys. */
+export const AUDIO_KEYBOARD_SEEK_STEP = 5;
 
 // --- UI timing ---
 export const RETRY_DELAY_MS = 300;

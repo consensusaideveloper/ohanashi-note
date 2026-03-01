@@ -4,6 +4,7 @@ import { getConversation, getAudioRecording } from "../lib/storage";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { verifyRecordIntegrity } from "../lib/integrity";
 import { TRANSCRIPT_DISCLAIMER, UI_MESSAGES } from "../lib/constants";
+import { AudioPlayer } from "./AudioPlayer";
 import { PrintableConversationDetail } from "./PrintableConversationDetail";
 
 import type { ReactNode } from "react";
@@ -444,14 +445,7 @@ export function ConversationDetail({
             )}
             {!audioLoading && audioUrl !== null && (
               <>
-                <audio
-                  controls
-                  src={audioUrl}
-                  className="w-full"
-                  preload="metadata"
-                >
-                  お使いのブラウザは音声再生に対応していません。
-                </audio>
+                <AudioPlayer src={audioUrl} />
                 <button
                   type="button"
                   className="mt-2 min-h-11 inline-flex items-center gap-2 rounded-full border border-border text-text-secondary text-lg px-5 py-2.5 hover:bg-bg-surface-hover active:bg-border-light transition-colors"
