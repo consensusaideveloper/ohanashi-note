@@ -6,6 +6,7 @@ describe("isNoiseTranscript", () => {
   it("detects known Whisper hallucination patterns", () => {
     expect(isNoiseTranscript("ご視聴ありがとうございました")).toBe(true);
     expect(isNoiseTranscript("チャンネル登録お願いします")).toBe(true);
+    expect(isNoiseTranscript("お疲れ様でした")).toBe(true);
   });
 
   it("detects punctuation-only transcripts as noise", () => {
@@ -22,6 +23,14 @@ describe("isNoiseTranscript", () => {
   it("detects patterns embedded in longer text", () => {
     expect(isNoiseTranscript("はい、ご視聴ありがとうございました、では")).toBe(
       true,
+    );
+  });
+
+  it("does not filter conversation-end signals", () => {
+    expect(isNoiseTranscript("ありがとうございました")).toBe(false);
+    expect(isNoiseTranscript("おやすみなさい")).toBe(false);
+    expect(isNoiseTranscript("ありがとうございました、今日はここまでで")).toBe(
+      false,
     );
   });
 });
