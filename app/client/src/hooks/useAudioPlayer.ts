@@ -55,7 +55,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     if (audio === null) return;
 
     const handleLoadedMetadata = (): void => {
-      setDuration(audio.duration);
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
       setIsReady(true);
     };
 
@@ -112,7 +112,9 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     const audio = audioRef.current;
     if (audio === null) return;
 
-    const clamped = Math.max(0, Math.min(time, audio.duration || 0));
+    const audioDuration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const clamped = Math.max(0, Math.min(time, audioDuration));
+    if (!Number.isFinite(clamped)) return;
     audio.currentTime = clamped;
     setCurrentTime(clamped);
   }, []);
@@ -121,10 +123,12 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     const audio = audioRef.current;
     if (audio === null) return;
 
+    const audioDuration = Number.isFinite(audio.duration) ? audio.duration : 0;
     const target = Math.min(
       audio.currentTime + AUDIO_SKIP_SECONDS,
-      audio.duration || 0,
+      audioDuration,
     );
+    if (!Number.isFinite(target)) return;
     audio.currentTime = target;
     setCurrentTime(target);
   }, []);
@@ -134,6 +138,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     if (audio === null) return;
 
     const target = Math.max(audio.currentTime - AUDIO_SKIP_SECONDS, 0);
+    if (!Number.isFinite(target)) return;
     audio.currentTime = target;
     setCurrentTime(target);
   }, []);
