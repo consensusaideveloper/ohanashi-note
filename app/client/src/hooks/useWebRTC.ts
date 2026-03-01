@@ -291,12 +291,15 @@ export function useWebRTC(): UseWebRTCReturn {
           throw new Error("SDP offerの作成に失敗しました");
         }
 
+        // GA API requires FormData with sdp field (not raw SDP)
+        const formData = new FormData();
+        formData.set("sdp", localDesc.sdp);
+
         const sdpResponse = await fetch(OPENAI_REALTIME_CALLS_URL, {
           method: "POST",
-          body: localDesc.sdp,
+          body: formData,
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/sdp",
           },
         });
 

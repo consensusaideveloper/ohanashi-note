@@ -482,7 +482,7 @@ export function useConversation(): UseConversationReturn {
           webrtc.send({ type: "response.create" });
           break;
 
-        case "response.audio_transcript.delta":
+        case "response.output_audio_transcript.delta":
           // AI is speaking — use transcript delta as a proxy for audio state
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
@@ -491,7 +491,7 @@ export function useConversation(): UseConversationReturn {
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
 
-        case "response.audio_transcript.done":
+        case "response.output_audio_transcript.done":
           dispatch({
             type: "FINALIZE_ASSISTANT_TRANSCRIPT",
             text: event.transcript,

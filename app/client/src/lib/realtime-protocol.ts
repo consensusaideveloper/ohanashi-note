@@ -52,8 +52,8 @@ export interface InputAudioBufferSpeechStoppedEvent {
   item_id: string;
 }
 
-export interface ResponseAudioTranscriptDeltaEvent {
-  type: "response.audio_transcript.delta";
+export interface ResponseOutputAudioTranscriptDeltaEvent {
+  type: "response.output_audio_transcript.delta";
   response_id: string;
   item_id: string;
   output_index: number;
@@ -61,8 +61,8 @@ export interface ResponseAudioTranscriptDeltaEvent {
   delta: string;
 }
 
-export interface ResponseAudioTranscriptDoneEvent {
-  type: "response.audio_transcript.done";
+export interface ResponseOutputAudioTranscriptDoneEvent {
+  type: "response.output_audio_transcript.done";
   response_id: string;
   item_id: string;
   output_index: number;
@@ -113,8 +113,8 @@ export type DataChannelServerEvent =
   | SessionCreatedEvent
   | InputAudioBufferSpeechStartedEvent
   | InputAudioBufferSpeechStoppedEvent
-  | ResponseAudioTranscriptDeltaEvent
-  | ResponseAudioTranscriptDoneEvent
+  | ResponseOutputAudioTranscriptDeltaEvent
+  | ResponseOutputAudioTranscriptDoneEvent
   | InputAudioTranscriptionCompletedEvent
   | ResponseCreatedServerEvent
   | ResponseDoneEvent
