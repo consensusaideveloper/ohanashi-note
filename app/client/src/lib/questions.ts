@@ -1,5 +1,5 @@
 // Ending note question definitions organized by category.
-// All 63 questions based on the Hokkaido Administrative Scrivener Association
+// All 110 questions based on the Hokkaido Administrative Scrivener Association
 // ending note (2023) adapted for natural voice conversation.
 
 import type { QuestionCategory } from "../types/conversation";
@@ -132,13 +132,6 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     sensitive: false,
   },
   {
-    id: "memories-06",
-    category: "memories",
-    title: "いつもの挨拶",
-    question: "さようならの代わりに、いつもの「行ってきます」の言葉を。",
-    sensitive: false,
-  },
-  {
     id: "memories-09",
     category: "memories",
     title: "若い頃のエピソード",
@@ -149,7 +142,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "memories-10",
     category: "memories",
-    title: "壮年期のエピソード",
+    title: "働き盛りの頃の思い出（壮年期）",
     question:
       "40代から60代の頃に、一番がんばったことや忘れられない出来事はありますか？",
     sensitive: false,
@@ -251,8 +244,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "house-03",
     category: "house",
-    title: "私物の整理・形見分け",
-    question: "衣類や思い出の品で、誰かに譲りたいものや処分してほしいものは？",
+    title: "誰かに譲りたいもの（形見分け）",
+    question:
+      "衣類や思い出の品で、特定の人に譲りたいものはありますか？誰にどの品を渡したいか教えてください。",
     sensitive: false,
   },
   {
@@ -266,7 +260,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "house-04",
     category: "house",
-    title: "処分してほしいもの",
+    title: "内密に処分してほしいもの",
     question:
       "家族に見せずに処分してほしいものや、特別にしまってあるものはありますか？",
     sensitive: true,
@@ -328,9 +322,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "medical-05",
     category: "medical",
-    title: "延命治療・終末医療の希望",
+    title: "延命治療の希望",
     question:
-      "意識がなくなった時の延命治療や、最期の過ごし方（緩和ケアなど）についてお考えはありますか？",
+      "意識がなくなった時や回復が見込めない時、延命治療（人工呼吸器や点滴など）を希望しますか？",
     sensitive: true,
   },
   {
@@ -351,7 +345,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "medical-14",
     category: "medical",
-    title: "延命治療のご意思",
+    title: "延命治療の書類（尊厳死宣言書）",
     question:
       "延命治療を望まない場合の「尊厳死宣言書（リヴィング・ウイル）」を作成されていますか？",
     sensitive: true,
@@ -395,7 +389,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "funeral",
     title: "お墓の準備",
     question:
-      "お墓はすでに準備されていますか？場所はどこですか？お墓じまい（墓所の返還）についてお考えはありますか？",
+      "お墓はすでに準備されていますか？場所や管理している方を教えてください。",
     sensitive: false,
   },
   {
@@ -403,7 +397,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "funeral",
     title: "埋葬の方法",
     question:
-      "埋葬の方法に希望はありますか？（一般的なお墓、納骨堂、樹木葬、散骨など）",
+      "埋葬の方法に希望はありますか？（一般的なお墓、納骨堂、樹木葬など）",
     sensitive: false,
   },
   {
@@ -423,7 +417,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "funeral-06",
     category: "funeral",
-    title: "参列と連絡の制限",
+    title: "葬儀に呼ぶ人・呼ばない人",
     question: "葬儀に呼びたい人、連絡を控えたい人はいますか？",
     sensitive: false,
   },
@@ -486,7 +480,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "money-16",
     category: "money",
-    title: "有価証券・投資",
+    title: "株や投資のこと（有価証券）",
     question:
       "株式や投資信託、債券など、証券会社で運用している資産はありますか？（証券会社名のみ教えてください）",
     sensitive: true,
@@ -644,7 +638,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "work-06",
     category: "work",
-    title: "仕事の契約・許認可",
+    title: "仕事の免許や契約書（許認可）",
     question:
       "お仕事に必要な免許や許可証、業務上の契約書などはありますか？保管場所を教えてください。",
     sensitive: false,
@@ -668,7 +662,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "work-09",
     category: "work",
-    title: "著作物・知的財産",
+    title: "自分の作品や特許（知的財産）",
     question:
       "ご自身が書いた本や作品、特許、商標など、知的財産に当たるものはありますか？どう引き継いでほしいですか？",
     sensitive: false,
@@ -718,7 +712,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "digital-06",
     category: "digital",
-    title: "追悼アカウント設定",
+    title: "亡くなった後のアカウント管理（追悼アカウント）",
     question:
       "AppleやGoogleの「亡くなった後のアカウント管理」機能を設定していますか？",
     sensitive: false,
@@ -736,7 +730,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-01",
     category: "legal",
-    title: "法定相続人の確認",
+    title: "ご家族の構成（法定相続人）",
     question:
       "ご家族の構成を教えてください。配偶者、お子さん、ご両親、ご兄弟はいらっしゃいますか？",
     sensitive: false,
@@ -744,7 +738,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-02",
     category: "legal",
-    title: "相続財産の全体像",
+    title: "財産の整理（相続財産）",
     question:
       "相続の対象になる財産を整理しましょう。預貯金、不動産、有価証券のほかに、借入金や連帯保証もありますか？",
     sensitive: true,
@@ -767,7 +761,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "legal-05",
     category: "legal",
-    title: "生前贈与の意向",
+    title: "生きているうちに渡したい財産（生前贈与）",
     question:
       "ご存命のうちに財産を贈与したいとお考えですか？贈与契約書は作成していますか？",
     sensitive: true,
@@ -777,7 +771,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "legal",
     title: "生命保険の活用",
     question:
-      "生命保険の受取人はどなたですか？リビングニーズ特約はご存知ですか？",
+      "生命保険の受取人はどなたですか？また、余命宣告を受けた時に保険金を先に受け取れる仕組み（リビングニーズ特約）がついているか、確認されていますか？",
     sensitive: true,
   },
   {
@@ -785,21 +779,21 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "legal",
     title: "税金がかからない仕組みの活用",
     question:
-      "毎年110万円まで税金がかからずにお金を渡せる仕組み（暦年贈与）や、お孫さんの教育資金を渡す制度は使われていますか？",
+      "毎年110万円まで税金がかからずにお金を渡せる仕組みがあります。この仕組みや、お孫さんの教育資金を非課税で渡せる制度を利用されていますか？",
     sensitive: true,
   },
   {
     id: "legal-08",
     category: "legal",
-    title: "不動産の相続登記",
+    title: "土地や家の名義変更（相続登記）",
     question:
-      "不動産をお持ちの場合、相続登記の義務化（令和6年4月施行、3年以内に登記必要）はご存知ですか？",
+      "土地や家をお持ちの場合、相続が起きたら3年以内に名義変更（相続登記）をしなければならない決まりになっています。名義変更の手続きについて、準備や相談はされていますか？",
     sensitive: false,
   },
   {
     id: "legal-09",
     category: "legal",
-    title: "遺産分割の希望",
+    title: "財産の分け方の希望（遺産分割）",
     question: "財産の分け方について、ご家族と話し合われたことはありますか？",
     sensitive: true,
   },
@@ -832,13 +826,13 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "trust",
     title: "家族信託の検討",
     question:
-      "認知症などに備えて、信頼できるご家族に財産管理を任せる「家族信託」をご存知ですか？",
+      "認知症などで判断が難しくなった時に備えて、信頼できるご家族に財産の管理を任せる「家族信託」という仕組みがあります。検討されたことはありますか？すでに契約されていますか？",
     sensitive: false,
   },
   {
     id: "trust-02",
     category: "trust",
-    title: "信託の役割分担",
+    title: "財産を預ける人・預かる人（家族信託）",
     question:
       "家族信託を検討される場合、財産を預ける人・預かる人・利益を受ける人は誰を想定しますか？",
     sensitive: false,
@@ -862,7 +856,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "trust-05",
     category: "trust",
-    title: "死後事務委任",
+    title: "亡くなった後の手続きを頼む人（死後事務委任）",
     question:
       "亡くなった後の手続き（届出、公共料金の解約、役所手続きなど）を誰にお願いしたいですか？",
     sensitive: false,
@@ -870,15 +864,15 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "trust-06",
     category: "trust",
-    title: "任意後見の検討",
+    title: "判断が難しくなった時の備え（任意後見）",
     question:
-      "判断能力が低下した時に備えて、信頼できる方に財産管理や契約をお願いする「任意後見」をご存知ですか？",
+      "判断が難しくなった時に備えて、元気なうちに信頼できる方に財産管理や契約をお願いしておく仕組みがあります。検討されたことはありますか？すでに契約されていますか？",
     sensitive: false,
   },
   {
     id: "trust-07",
     category: "trust",
-    title: "任意後見受任者",
+    title: "後見人になってほしい人（任意後見受任者）",
     question: "任意後見人になってほしい人は決まっていますか？",
     sensitive: false,
   },
@@ -919,7 +913,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "support",
     title: "判断が難しくなったときの支援",
     question:
-      "判断力が低下したときに、信頼できる方に代わりに手続きをしてもらう「成年後見制度」をご存知ですか？利用を検討されたことはありますか？",
+      "判断が難しくなった時に、裁判所が選んだ方にお金の管理や手続きを代わってもらえる仕組みがあります。こうした制度の利用を検討されたことはありますか？すでに申し立てをされていますか？",
     sensitive: false,
   },
   {
@@ -935,7 +929,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "support",
     title: "葬儀費用の補助金",
     question:
-      "健康保険から葬儀費用の補助金（葬祭費・埋葬料）が出ることをご存知ですか？",
+      "亡くなった後、健康保険から葬儀費用の補助金を受け取ることができます。この手続きについて、ご家族に伝えてありますか？",
     sensitive: false,
   },
   {
@@ -943,7 +937,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "support",
     title: "自宅を使った生活資金の仕組み",
     question:
-      "自宅に住み続けながら、家を担保にして生活資金を借りる仕組み（リバースモーゲージ）に興味はありますか？",
+      "自宅に住み続けながら、家を担保にして毎月生活費を受け取れる仕組みがあります。利用されていますか？または検討されたことはありますか？",
     sensitive: false,
   },
   {
@@ -951,7 +945,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     category: "support",
     title: "自宅を売って住み続ける方法",
     question:
-      "自宅を売却した後も、家賃を払ってそのまま住み続ける仕組み（リースバック）をご存知ですか？",
+      "自宅を売った後も、家賃を払ってそのまま住み続けられる仕組みがあります。利用されていますか？または検討されたことはありますか？",
     sensitive: false,
   },
   {
@@ -965,9 +959,9 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
   {
     id: "support-07",
     category: "support",
-    title: "日常生活自立支援",
+    title: "暮らしの手助けサービス（日常生活自立支援）",
     question:
-      "福祉サービスの利用や日常的な金銭管理をサポートする「日常生活自立支援事業」をご存知ですか？",
+      "お金の管理や福祉サービスの手続きを手伝ってもらえる公的なサービスがあります。利用されていますか？または利用を考えたことはありますか？",
     sensitive: false,
   },
   {

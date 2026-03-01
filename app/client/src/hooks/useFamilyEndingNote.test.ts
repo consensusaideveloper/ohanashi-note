@@ -292,7 +292,7 @@ describe("buildFamilyCategoryData", () => {
         category: null,
         startedAt: 2000,
         noteEntries: [],
-        coveredQuestionIds: ["memories-06"],
+        coveredQuestionIds: ["memories-07"],
       }),
     ];
 

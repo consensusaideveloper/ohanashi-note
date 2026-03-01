@@ -102,9 +102,13 @@ export function buildFamilyCategoryData(
     for (const [qId, latest] of latestMetaMap.entries()) {
       const allVersions = allVersionsMap.get(qId) ?? [];
       const previousVersions = allVersions.slice(0, -1);
+      // Always use client-side question title to ensure consistency
+      // between answered and unanswered display states.
+      const clientQuestion = questions.find((q) => q.id === qId);
+      const questionTitle = clientQuestion?.title ?? latest.entry.questionTitle;
       noteEntries.push({
         questionId: latest.entry.questionId,
-        questionTitle: latest.entry.questionTitle,
+        questionTitle,
         answer: latest.entry.answer,
         conversationId: latest.convId,
         audioAvailable: false,

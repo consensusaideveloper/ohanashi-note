@@ -39,8 +39,8 @@ describe("getQuestionListForCategory", () => {
 });
 
 describe("QUESTIONS", () => {
-  it("contains 111 questions", () => {
-    expect(QUESTIONS).toHaveLength(111);
+  it("contains 110 questions", () => {
+    expect(QUESTIONS).toHaveLength(110);
   });
 
   it("contains 12 legal questions", () => {

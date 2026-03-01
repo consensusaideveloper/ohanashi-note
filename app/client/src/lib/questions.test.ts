@@ -5,7 +5,7 @@ import { getQuestionsByCategory, QUESTIONS } from "./questions";
 describe("getQuestionsByCategory", () => {
   it("returns only questions for the memories category", () => {
     const result = getQuestionsByCategory("memories");
-    expect(result).toHaveLength(7);
+    expect(result).toHaveLength(6);
     for (const q of result) {
       expect(q.category).toBe("memories");
     }
@@ -90,8 +90,8 @@ describe("getQuestionsByCategory", () => {
 });
 
 describe("QUESTIONS", () => {
-  it("contains 111 total questions", () => {
-    expect(QUESTIONS).toHaveLength(111);
+  it("contains 110 total questions", () => {
+    expect(QUESTIONS).toHaveLength(110);
   });
 
   it("has unique question IDs", () => {

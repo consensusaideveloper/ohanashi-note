@@ -96,8 +96,13 @@ export function buildCategoryData(
     for (const [qId, latest] of latestMetaMap.entries()) {
       const allVersions = allVersionsMap.get(qId) ?? [];
       const previousVersions = allVersions.slice(0, -1);
+      // Always use client-side question title to ensure consistency
+      // between answered and unanswered display states.
+      const clientQuestion = questions.find((q) => q.id === qId);
+      const questionTitle = clientQuestion?.title ?? latest.entry.questionTitle;
       entryMap.set(qId, {
         ...latest.entry,
+        questionTitle,
         conversationId: latest.convId,
         audioAvailable: latest.audio,
         previousVersions,
