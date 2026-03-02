@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 import { useFamilyEndingNote } from "../hooks/useFamilyEndingNote";
 import { SETTINGS_MESSAGES, UI_MESSAGES } from "../lib/constants";
@@ -12,6 +12,7 @@ interface FamilyNoteViewProps {
   onBack: () => void;
   onViewConversation?: (id: string) => void;
   onPrintNote?: () => void;
+  focusCategory?: string;
 }
 
 export function FamilyNoteView({
@@ -20,14 +21,36 @@ export function FamilyNoteView({
   onBack,
   onViewConversation,
   onPrintNote,
+  focusCategory,
 }: FamilyNoteViewProps): ReactNode {
   const { categories, isRepresentative, isLoading, error, refresh } =
     useFamilyEndingNote(creatorId);
+  const hasScrolledRef = useRef(false);
 
   // Refresh data when the view becomes visible
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Scroll to focused category after data loads
+  useEffect(() => {
+    if (
+      focusCategory === undefined ||
+      isLoading ||
+      categories.length === 0 ||
+      hasScrolledRef.current
+    ) {
+      return;
+    }
+    hasScrolledRef.current = true;
+    const target = document.getElementById(`category-${focusCategory}`);
+    if (target !== null) {
+      // Use requestAnimationFrame to ensure DOM is rendered
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [focusCategory, isLoading, categories]);
 
   const handleBack = useCallback((): void => {
     onBack();
@@ -150,12 +173,13 @@ export function FamilyNoteView({
           )}
 
           {categories.map((cat) => (
-            <CategoryNoteSection
-              key={cat.category}
-              data={cat}
-              onStartConversation={undefined}
-              onViewConversation={onViewConversation}
-            />
+            <div key={cat.category} id={`category-${cat.category}`}>
+              <CategoryNoteSection
+                data={cat}
+                onStartConversation={undefined}
+                onViewConversation={onViewConversation}
+              />
+            </div>
           ))}
         </div>
       </div>

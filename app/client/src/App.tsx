@@ -133,6 +133,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 type OnboardingPhase = "none" | "conversation" | "complete";
+type NavigationWarningKind = "summarizing" | "todo-generating" | null;
 
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
@@ -330,6 +331,9 @@ function AppContent(): ReactNode {
     string | null
   >(null);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
+  const [noteFocusCategory, setNoteFocusCategory] = useState<
+    string | undefined
+  >(undefined);
 
   // Track which screen to return to when leaving the detail view
   const [detailReturnScreen, setDetailReturnScreen] = useState<
@@ -402,7 +406,10 @@ function AppContent(): ReactNode {
 
   // Summarization guard state
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isGeneratingTodos, setIsGeneratingTodos] = useState(false);
   const [showNavWarning, setShowNavWarning] = useState(false);
+  const [navWarningKind, setNavWarningKind] =
+    useState<NavigationWarningKind>(null);
   const [pendingNavTarget, setPendingNavTarget] = useState<AppScreen | null>(
     null,
   );
@@ -411,12 +418,21 @@ function AppContent(): ReactNode {
     (target: AppScreen): void => {
       if (isSummarizing && screen === "conversation" && target !== screen) {
         setPendingNavTarget(target);
+        setNavWarningKind("summarizing");
+        setShowNavWarning(true);
+      } else if (
+        isGeneratingTodos &&
+        screen === "family-todos" &&
+        target !== screen
+      ) {
+        setPendingNavTarget(target);
+        setNavWarningKind("todo-generating");
         setShowNavWarning(true);
       } else {
         setScreen(target);
       }
     },
-    [isSummarizing, screen],
+    [isSummarizing, isGeneratingTodos, screen],
   );
 
   const handleConfirmNavigation = useCallback((): void => {
@@ -424,6 +440,7 @@ function AppContent(): ReactNode {
       setScreen(pendingNavTarget);
     }
     setShowNavWarning(false);
+    setNavWarningKind(null);
     setPendingNavTarget(null);
   }, [pendingNavTarget]);
 
@@ -468,7 +485,12 @@ function AppContent(): ReactNode {
 
   const handleCancelNavigation = useCallback((): void => {
     setShowNavWarning(false);
+    setNavWarningKind(null);
     setPendingNavTarget(null);
+  }, []);
+
+  const handleTodoGeneratingChange = useCallback((isGenerating: boolean) => {
+    setIsGeneratingTodos(isGenerating);
   }, []);
 
   // Navigate from EndingNoteView to conversation screen for a specific category
@@ -545,6 +567,7 @@ function AppContent(): ReactNode {
   );
 
   const handleBackFromFamilyNote = useCallback((): void => {
+    setNoteFocusCategory(undefined);
     // If we came from creator detail, go back to detail; otherwise go to dashboard
     if (selectedConnection !== null) {
       setScreen("family-creator-detail");
@@ -571,15 +594,20 @@ function AppContent(): ReactNode {
 
   const handleBackFromTodos = useCallback((): void => {
     if (selectedConnection !== null) {
-      setScreen("family-creator-detail");
+      navigateWithGuard("family-creator-detail");
     } else {
-      setScreen("family-dashboard");
+      navigateWithGuard("family-dashboard");
     }
-  }, [selectedConnection]);
+  }, [selectedConnection, navigateWithGuard]);
 
   const handleBackFromTodoDetail = useCallback((): void => {
     setSelectedTodoId(null);
     setScreen("family-todos");
+  }, []);
+
+  const handleViewSourceNote = useCallback((category: string): void => {
+    setNoteFocusCategory(category);
+    setScreen("family-note");
   }, []);
 
   const handleViewAccessManagement = useCallback(
@@ -996,6 +1024,7 @@ function AppContent(): ReactNode {
             onBack={handleBackFromFamilyNote}
             onViewConversation={handleViewConversationFromFamilyNote}
             onPrintNote={handleOpenFamilyPrintNote}
+            focusCategory={noteFocusCategory}
           />
         );
       case "family-conversation-detail":
@@ -1022,6 +1051,7 @@ function AppContent(): ReactNode {
             isRepresentative={selectedConnection?.role === "representative"}
             onBack={handleBackFromTodos}
             onSelectTodo={handleSelectTodo}
+            onGeneratingChange={handleTodoGeneratingChange}
           />
         );
       case "family-todo-detail":
@@ -1035,6 +1065,7 @@ function AppContent(): ReactNode {
             todoId={selectedTodoId}
             isRepresentative={selectedConnection?.role === "representative"}
             onBack={handleBackFromTodoDetail}
+            onViewSourceNote={handleViewSourceNote}
           />
         );
       case "family-access-management":
@@ -1083,6 +1114,22 @@ function AppContent(): ReactNode {
     conversation.characterId !== null;
 
   const showLifecycleBanner = myLifecycleStatus !== "active";
+  const navWarningTitle =
+    navWarningKind === "todo-generating"
+      ? UI_MESSAGES.todo.generatingDialogTitle
+      : UI_MESSAGES.summarizing.dialogTitle;
+  const navWarningMessage =
+    navWarningKind === "todo-generating"
+      ? UI_MESSAGES.todo.generatingNavigationWarning
+      : UI_MESSAGES.summarizing.navigationWarning;
+  const navWarningConfirmLabel =
+    navWarningKind === "todo-generating"
+      ? UI_MESSAGES.todo.generatingLeaveButton
+      : UI_MESSAGES.summarizing.leaveButton;
+  const navWarningCancelLabel =
+    navWarningKind === "todo-generating"
+      ? UI_MESSAGES.todo.generatingStayButton
+      : UI_MESSAGES.summarizing.stayButton;
 
   return (
     <div className="min-h-dvh flex flex-col bg-bg-primary">
@@ -1099,13 +1146,13 @@ function AppContent(): ReactNode {
       {/* Main content area */}
       <div className="flex-1 flex flex-col pb-[72px]">{renderScreen()}</div>
 
-      {/* Navigation guard dialog during summarization */}
+      {/* Navigation guard dialog during summarization / todo generation */}
       <ConfirmDialog
         isOpen={showNavWarning}
-        title={UI_MESSAGES.summarizing.dialogTitle}
-        message={UI_MESSAGES.summarizing.navigationWarning}
-        confirmLabel={UI_MESSAGES.summarizing.leaveButton}
-        cancelLabel={UI_MESSAGES.summarizing.stayButton}
+        title={navWarningTitle}
+        message={navWarningMessage}
+        confirmLabel={navWarningConfirmLabel}
+        cancelLabel={navWarningCancelLabel}
         onConfirm={handleConfirmNavigation}
         onCancel={handleCancelNavigation}
       />
