@@ -18,6 +18,27 @@ interface OnboardingCompleteProps {
 const DEFAULT_CHARACTER_ID: CharacterId = "character-a";
 const DEFAULT_FONT_SIZE_KEY = "standard";
 const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
+const PROFILE_LOAD_MAX_RETRIES = 3;
+const PROFILE_LOAD_RETRY_DELAY_MS = 250;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function getUserProfileWithRetry() {
+  for (let attempt = 0; attempt < PROFILE_LOAD_MAX_RETRIES; attempt += 1) {
+    const profile = await getUserProfile();
+    if (profile !== null) {
+      return profile;
+    }
+    if (attempt < PROFILE_LOAD_MAX_RETRIES - 1) {
+      await delay(PROFILE_LOAD_RETRY_DELAY_MS);
+    }
+  }
+  return null;
+}
 
 export function OnboardingComplete({
   onStart,
@@ -30,7 +51,7 @@ export function OnboardingComplete({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void getUserProfile()
+    void getUserProfileWithRetry()
       .then((profile) => {
         const name = profile?.name ?? "";
         const charId = profile?.characterId ?? DEFAULT_CHARACTER_ID;
@@ -49,7 +70,10 @@ export function OnboardingComplete({
           "";
         setFontSizeLabel(label);
 
-        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
+        setSpeakingSpeedLabel(
+          SPEAKING_SPEED_LABELS[speed] ??
+            SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED],
+        );
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {

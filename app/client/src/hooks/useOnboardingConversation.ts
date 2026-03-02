@@ -16,7 +16,7 @@ import {
 } from "../lib/constants";
 import { isNoiseTranscript } from "../lib/audio";
 import { isIOSDevice } from "../lib/platform";
-import { getCharacterById, CHARACTERS } from "../lib/characters";
+import { getCharacterById } from "../lib/characters";
 import {
   hasExplicitConversationEndIntent,
   hasOnboardingCompletionSignal,
@@ -36,14 +36,173 @@ import type {
   SilenceDuration,
   SpeakingSpeed,
   TranscriptEntry,
+  UserProfile,
 } from "../types/conversation";
 
 // --- End-conversation flow ---
 const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
 const END_CONVERSATION_FALLBACK_MS = 12000;
+const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic on iOS. */
 const IOS_MIC_REENABLE_DELAY_MS = 300;
+
+function normalizePreferenceToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\u3000]+/g, "")
+    .replace(/[「」『』"'`]/g, "");
+}
+
+function normalizeCharacterId(value: string): CharacterId | null {
+  const normalized = normalizePreferenceToken(value);
+  if (normalized === "") return null;
+
+  const map: Record<string, CharacterId> = {
+    "character-a": "character-a",
+    charactera: "character-a",
+    a: "character-a",
+    のんびり: "character-a",
+    "character-b": "character-b",
+    characterb: "character-b",
+    b: "character-b",
+    しっかり: "character-b",
+    "character-c": "character-c",
+    characterc: "character-c",
+    c: "character-c",
+    にこにこ: "character-c",
+  };
+  const direct = map[normalized];
+  if (direct !== undefined) return direct;
+
+  if (normalized.includes("のんびり")) return "character-a";
+  if (normalized.includes("しっかり")) return "character-b";
+  if (normalized.includes("にこにこ")) return "character-c";
+  return null;
+}
+
+function normalizeFontSizeLevel(value: string): FontSizeLevel | null {
+  const normalized = normalizePreferenceToken(value);
+  if (normalized === "") return null;
+  if (
+    normalized === "x-large" ||
+    normalized === "xlarge" ||
+    normalized === "特大" ||
+    normalized === "とても大きい"
+  ) {
+    return "x-large";
+  }
+  if (normalized === "large" || normalized === "大きめ") {
+    return "large";
+  }
+  if (
+    normalized === "standard" ||
+    normalized === "標準" ||
+    normalized === "ふつう" ||
+    normalized === "普通"
+  ) {
+    return "standard";
+  }
+  return null;
+}
+
+function normalizeSpeakingSpeed(value: string): SpeakingSpeed | null {
+  const normalized = normalizePreferenceToken(value);
+  if (normalized === "") return null;
+  const map: Record<string, SpeakingSpeed> = {
+    slow: "slow",
+    ゆっくり: "slow",
+    ゆっくりめ: "slow",
+    遅め: "slow",
+    のんびり: "slow",
+    normal: "normal",
+    ふつう: "normal",
+    普通: "normal",
+    そのまま: "normal",
+    今のまま: "normal",
+    fast: "fast",
+    速め: "fast",
+    すこし速め: "fast",
+    少し速め: "fast",
+    テキパキ: "fast",
+  };
+  const direct = map[normalized];
+  if (direct !== undefined) return direct;
+  if (normalized.includes("ゆっくり") || normalized.includes("遅")) {
+    return "slow";
+  }
+  if (normalized.includes("速")) {
+    return "fast";
+  }
+  if (normalized.includes("そのまま") || normalized.includes("ふつう")) {
+    return "normal";
+  }
+  return null;
+}
+
+function normalizeSilenceDuration(value: string): SilenceDuration | null {
+  const normalized = normalizePreferenceToken(value);
+  if (normalized === "") return null;
+  const map: Record<string, SilenceDuration> = {
+    short: "short",
+    短め: "short",
+    短い: "short",
+    すぐ: "short",
+    normal: "normal",
+    ふつう: "normal",
+    普通: "normal",
+    そのまま: "normal",
+    今のまま: "normal",
+    long: "long",
+    長め: "long",
+    長い: "long",
+  };
+  const direct = map[normalized];
+  if (direct !== undefined) return direct;
+  if (normalized.includes("短") || normalized.includes("すぐ")) {
+    return "short";
+  }
+  if (normalized.includes("長")) {
+    return "long";
+  }
+  if (normalized.includes("そのまま") || normalized.includes("ふつう")) {
+    return "normal";
+  }
+  return null;
+}
+
+function normalizeConfirmationLevel(value: string): ConfirmationLevel | null {
+  const normalized = normalizePreferenceToken(value);
+  if (normalized === "") return null;
+  const map: Record<string, ConfirmationLevel> = {
+    frequent: "frequent",
+    こまめに確認: "frequent",
+    しっかり確認: "frequent",
+    確認多め: "frequent",
+    normal: "normal",
+    ふつう: "normal",
+    普通: "normal",
+    そのまま: "normal",
+    今のまま: "normal",
+    minimal: "minimal",
+    あまり確認しない: "minimal",
+    確認少なめ: "minimal",
+    どんどん進める: "minimal",
+  };
+  const direct = map[normalized];
+  if (direct !== undefined) return direct;
+  if (normalized.includes("こまめ") || normalized.includes("しっかり確認")) {
+    return "frequent";
+  }
+  if (normalized.includes("あまり確認") || normalized.includes("確認少")) {
+    return "minimal";
+  }
+  if (normalized.includes("そのまま") || normalized.includes("ふつう")) {
+    return "normal";
+  }
+  return null;
+}
 
 // --- State machine ---
 
@@ -176,6 +335,7 @@ export function useOnboardingConversation({
   const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const pendingProfileSavesRef = useRef<Set<Promise<void>>>(new Set());
 
   // Stable ref for stop
   const stopRef = useRef<() => void>(() => {});
@@ -213,6 +373,33 @@ export function useOnboardingConversation({
     }
     clearEndConversationTimers();
   }, [clearEndConversationTimers]);
+
+  const enqueueProfileSave = useCallback(
+    (updates: Partial<UserProfile>): Promise<void> => {
+      const savePromise = saveUserProfile({
+        ...updates,
+        updatedAt: Date.now(),
+      });
+      pendingProfileSavesRef.current.add(savePromise);
+      return savePromise.finally(() => {
+        pendingProfileSavesRef.current.delete(savePromise);
+      });
+    },
+    [],
+  );
+
+  const waitForPendingProfileSaves = useCallback(async (): Promise<void> => {
+    const pending = Array.from(pendingProfileSavesRef.current);
+    if (pending.length === 0) {
+      return;
+    }
+    await Promise.race([
+      Promise.allSettled(pending).then(() => undefined),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, PROFILE_SAVE_WAIT_TIMEOUT_MS);
+      }),
+    ]);
+  }, []);
 
   const requestEndConversation = useCallback(
     (source: "tool" | "user_intent" | "completion_signal"): void => {
@@ -265,9 +452,16 @@ export function useOnboardingConversation({
         if (functionName === "update_user_name") {
           const args = JSON.parse(argsJson) as { name: string };
           const trimmedName = args.name.trim();
-          void saveUserProfile({
+          if (trimmedName === "") {
+            sendResult(
+              JSON.stringify({
+                error: "お名前が空欄です。もう一度教えてください。",
+              }),
+            );
+            return;
+          }
+          void enqueueProfileSave({
             name: trimmedName,
-            updatedAt: Date.now(),
           })
             .then(() => {
               sendResult(
@@ -286,28 +480,37 @@ export function useOnboardingConversation({
         }
 
         if (functionName === "change_character") {
-          const args = JSON.parse(argsJson) as { character_name: string };
-          const character = CHARACTERS.find(
-            (c) => c.name === args.character_name,
-          );
-          if (character === undefined) {
+          const args = JSON.parse(argsJson) as {
+            character_name?: string;
+            characterName?: string;
+            character_id?: string;
+            characterId?: string;
+          };
+          const rawCharacter =
+            args.character_name ??
+            args.characterName ??
+            args.character_id ??
+            args.characterId ??
+            "";
+          const normalizedId = normalizeCharacterId(rawCharacter);
+          if (normalizedId === null) {
             sendResult(
               JSON.stringify({
-                error: `「${args.character_name}」というキャラクターは見つかりません`,
+                error: `「${rawCharacter}」というキャラクターは見つかりません`,
               }),
             );
             return;
           }
+          const character = getCharacterById(normalizedId);
           dispatch({ type: "SET_CHARACTER", characterId: character.id });
-          void saveUserProfile({
+          void enqueueProfileSave({
             characterId: character.id,
-            updatedAt: Date.now(),
           })
             .then(() => {
               sendResult(
                 JSON.stringify({
                   success: true,
-                  message: "次回の会話から話し方が変わります",
+                  message: `話し相手を「${character.name}」に変更しました`,
                 }),
               );
             })
@@ -321,15 +524,31 @@ export function useOnboardingConversation({
 
         if (functionName === "change_font_size") {
           const args = JSON.parse(argsJson) as { level: string };
-          const level = args.level as FontSizeLevel;
+          const level = normalizeFontSizeLevel(args.level);
+          if (level === null) {
+            sendResult(
+              JSON.stringify({
+                error: "文字サイズを認識できませんでした。もう一度お願いします。",
+              }),
+            );
+            return;
+          }
           setFontSizeRef.current(level);
           const label = FONT_SIZE_LABELS[level] ?? level;
-          sendResult(
-            JSON.stringify({
-              success: true,
-              message: `文字の大きさを「${label}」に変更しました`,
-            }),
-          );
+          void enqueueProfileSave({ fontSize: level })
+            .then(() => {
+              sendResult(
+                JSON.stringify({
+                  success: true,
+                  message: `文字の大きさを「${label}」に変更しました`,
+                }),
+              );
+            })
+            .catch(() => {
+              sendResult(
+                JSON.stringify({ error: "操作中にエラーが発生しました" }),
+              );
+            });
           return;
         }
 
@@ -347,33 +566,56 @@ export function useOnboardingConversation({
             args.silence_duration ?? args.silenceDuration;
           const confirmationLevelRaw =
             args.confirmation_level ?? args.confirmationLevel;
-          void saveUserProfile({
-            ...(speakingSpeedRaw !== undefined && {
-              speakingSpeed: speakingSpeedRaw as SpeakingSpeed,
-            }),
-            ...(silenceDurationRaw !== undefined && {
-              silenceDuration: silenceDurationRaw as SilenceDuration,
-            }),
-            ...(confirmationLevelRaw !== undefined && {
-              confirmationLevel: confirmationLevelRaw as ConfirmationLevel,
-            }),
-            updatedAt: Date.now(),
-          })
+          const speakingSpeed =
+            speakingSpeedRaw !== undefined
+              ? normalizeSpeakingSpeed(speakingSpeedRaw)
+              : null;
+          const silenceDuration =
+            silenceDurationRaw !== undefined
+              ? normalizeSilenceDuration(silenceDurationRaw)
+              : null;
+          const confirmationLevel =
+            confirmationLevelRaw !== undefined
+              ? normalizeConfirmationLevel(confirmationLevelRaw)
+              : null;
+
+          const updates: Partial<UserProfile> = {};
+          if (speakingSpeed !== null) {
+            updates.speakingSpeed = speakingSpeed;
+          }
+          if (silenceDuration !== null) {
+            updates.silenceDuration = silenceDuration;
+          }
+          if (confirmationLevel !== null) {
+            updates.confirmationLevel = confirmationLevel;
+          }
+
+          if (Object.keys(updates).length === 0) {
+            sendResult(
+              JSON.stringify({
+                error:
+                  "話し方の設定を認識できませんでした。もう一度ゆっくり教えてください。",
+              }),
+            );
+            return;
+          }
+
+          void enqueueProfileSave(updates)
             .then(() => {
               const changedParts: string[] = [];
-              if (speakingSpeedRaw !== undefined) {
+              if (speakingSpeed !== null) {
                 changedParts.push(
-                  `話す速さを「${SPEAKING_SPEED_LABELS[speakingSpeedRaw as SpeakingSpeed]}」`,
+                  `話す速さを「${SPEAKING_SPEED_LABELS[speakingSpeed]}」`,
                 );
               }
-              if (silenceDurationRaw !== undefined) {
+              if (silenceDuration !== null) {
                 changedParts.push(
-                  `待ち時間を「${SILENCE_DURATION_LABELS[silenceDurationRaw as SilenceDuration]}」`,
+                  `待ち時間を「${SILENCE_DURATION_LABELS[silenceDuration]}」`,
                 );
               }
-              if (confirmationLevelRaw !== undefined) {
+              if (confirmationLevel !== null) {
                 changedParts.push(
-                  `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[confirmationLevelRaw as ConfirmationLevel]}」`,
+                  `確認の頻度を「${CONFIRMATION_LEVEL_LABELS[confirmationLevel]}」`,
                 );
               }
               const msg =
@@ -395,7 +637,7 @@ export function useOnboardingConversation({
         sendResult(JSON.stringify({ error: "操作中にエラーが発生しました" }));
       }
     },
-    [webrtc, requestEndConversation],
+    [webrtc, requestEndConversation, enqueueProfileSave],
   );
 
   // Handle incoming data channel events
@@ -667,9 +909,12 @@ export function useOnboardingConversation({
     }
     sessionKeyRef.current = "";
 
-    // Notify parent that onboarding is complete
-    onCompleteRef.current();
-  }, [webrtc, resetEndConversationFlow]);
+    // Wait briefly for any in-flight profile saves so completion screen
+    // reflects the selected values reliably.
+    void waitForPendingProfileSaves().finally(() => {
+      onCompleteRef.current();
+    });
+  }, [webrtc, resetEndConversationFlow, waitForPendingProfileSaves]);
 
   // Keep stopRef in sync
   useEffect(() => {
