@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
-import { createTodo, generateTodos } from "../lib/todo-api";
+import { createTodo, generateTodos, listTodoMembers } from "../lib/todo-api";
 import { useTodos } from "../hooks/useTodos";
 import { useToast } from "../hooks/useToast";
 import { TodoCard } from "./TodoCard";
@@ -10,7 +10,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
-import type { TodoPriority } from "../lib/todo-api";
+import type { TodoPriority, TodoMember } from "../lib/todo-api";
 
 interface TodoListScreenProps {
   creatorId: string;
@@ -18,6 +18,7 @@ interface TodoListScreenProps {
   isRepresentative: boolean;
   onBack: () => void;
   onSelectTodo: (todoId: string) => void;
+  onGeneratingChange: (isGenerating: boolean) => void;
 }
 
 interface StatusFilterOption {
@@ -38,10 +39,12 @@ export function TodoListScreen({
   isRepresentative,
   onBack,
   onSelectTodo,
+  onGeneratingChange,
 }: TodoListScreenProps): ReactNode {
   const {
     todos,
     stats,
+    callerFamilyMemberId,
     isLoading,
     error,
     refresh,
@@ -55,6 +58,29 @@ export function TodoListScreen({
   const [isCreating, setIsCreating] = useState(false);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [todoMembers, setTodoMembers] = useState<TodoMember[]>([]);
+  const [myTasksOnly, setMyTasksOnly] = useState(false);
+
+  // Fetch family members for assignee picker (representative only)
+  useEffect(() => {
+    if (!isRepresentative) return;
+    void listTodoMembers(creatorId)
+      .then((members) => {
+        setTodoMembers(members);
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to load family members:", {
+          error: err,
+          creatorId,
+        });
+      });
+  }, [creatorId, isRepresentative]);
+
+  // Client-side filtering for "my tasks"
+  const filteredTodos = useMemo(() => {
+    if (!myTasksOnly || callerFamilyMemberId === null) return todos;
+    return todos.filter((t) => t.assigneeId === callerFamilyMemberId);
+  }, [todos, myTasksOnly, callerFamilyMemberId]);
 
   // --- Handlers ---
 
@@ -104,10 +130,24 @@ export function TodoListScreen({
   const handleConfirmGenerate = useCallback((): void => {
     setShowGenerateConfirm(false);
     setIsGenerating(true);
+    onGeneratingChange(true);
     void generateTodos(creatorId)
-      .then((generated) => {
+      .then((result) => {
+        const { todos: generated, summary } = result;
+        const skippedCount =
+          summary.skippedByExistingQuestionCount +
+          summary.skippedAsDuplicateCount +
+          summary.skippedInvalidCount;
+
         if (generated.length === 0) {
-          showToast(UI_MESSAGES.todo.generateEmpty, "success");
+          showToast(
+            skippedCount > 0
+              ? UI_MESSAGES.todo.generateNoNew
+              : UI_MESSAGES.todo.generateEmpty,
+            "success",
+          );
+        } else if (skippedCount > 0) {
+          showToast(UI_MESSAGES.todo.generatedWithSkipped, "success");
         } else {
           showToast(UI_MESSAGES.todo.generated, "success");
         }
@@ -119,8 +159,13 @@ export function TodoListScreen({
       })
       .finally(() => {
         setIsGenerating(false);
+        onGeneratingChange(false);
       });
-  }, [creatorId, showToast, refresh]);
+  }, [creatorId, showToast, refresh, onGeneratingChange]);
+
+  const handleToggleMyTasks = useCallback((): void => {
+    setMyTasksOnly((prev) => !prev);
+  }, []);
 
   const progressPercent =
     stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
@@ -178,7 +223,7 @@ export function TodoListScreen({
           </div>
         )}
 
-        {/* Status filter pills */}
+        {/* Filter pills */}
         <div className="flex gap-2 overflow-x-auto pb-2">
           {STATUS_FILTERS.map((filter) => {
             const isActive = statusFilter === filter.value;
@@ -200,6 +245,23 @@ export function TodoListScreen({
               </button>
             );
           })}
+
+          {/* Separator */}
+          <div className="w-px bg-border-light self-stretch my-2" />
+
+          {/* My tasks toggle */}
+          <button
+            type="button"
+            className={`min-h-11 px-4 rounded-full text-lg whitespace-nowrap transition-colors ${
+              myTasksOnly
+                ? "bg-accent-secondary text-text-on-accent"
+                : "bg-bg-surface border border-border-light text-text-secondary active:bg-bg-surface-hover"
+            }`}
+            onClick={handleToggleMyTasks}
+            aria-pressed={myTasksOnly}
+          >
+            {UI_MESSAGES.todo.filterMyTasks}
+          </button>
         </div>
       </div>
 
@@ -229,6 +291,22 @@ export function TodoListScreen({
             </div>
           )}
 
+          {isGenerating && (
+            <div className="rounded-card border border-accent-primary/30 bg-accent-primary-light px-4 py-3">
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-text-primary">
+                    {UI_MESSAGES.todo.generatingStatusTitle}
+                  </p>
+                  <p className="text-base text-text-secondary leading-relaxed">
+                    {UI_MESSAGES.todo.generatingStatusDescription}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Loading */}
           {isLoading && (
             <div className="flex items-center justify-center py-12">
@@ -253,7 +331,7 @@ export function TodoListScreen({
           )}
 
           {/* Empty state */}
-          {!isLoading && !error && todos.length === 0 && (
+          {!isLoading && !error && filteredTodos.length === 0 && (
             <div className="text-center py-12">
               <p className="text-lg text-text-secondary">
                 {UI_MESSAGES.todo.noTodos}
@@ -264,8 +342,16 @@ export function TodoListScreen({
           {/* Todo list */}
           {!isLoading &&
             !error &&
-            todos.map((todo) => (
-              <TodoCard key={todo.id} todo={todo} onSelect={onSelectTodo} />
+            filteredTodos.map((todo) => (
+              <TodoCard
+                key={todo.id}
+                todo={todo}
+                isMyTask={
+                  callerFamilyMemberId !== null &&
+                  todo.assigneeId === callerFamilyMemberId
+                }
+                onSelect={onSelectTodo}
+              />
             ))}
         </div>
       </div>
@@ -276,7 +362,7 @@ export function TodoListScreen({
         onClose={handleCloseCreate}
         onCreate={handleCreate}
         isSubmitting={isCreating}
-        familyMembers={[]}
+        familyMembers={todoMembers}
       />
 
       <ConfirmDialog

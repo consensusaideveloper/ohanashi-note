@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 
 import { UI_MESSAGES } from "../lib/constants";
 
@@ -11,12 +11,16 @@ interface TodoCommentThreadProps {
   isSubmitting: boolean;
 }
 
+/** Number of recent comments to show before collapsing older ones. */
+const VISIBLE_COMMENT_COUNT = 3;
+
 export function TodoCommentThread({
   comments,
   onAddComment,
   isSubmitting,
 }: TodoCommentThreadProps): ReactNode {
   const [newComment, setNewComment] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   const handleSubmit = useCallback((): void => {
     const trimmed = newComment.trim();
@@ -25,21 +29,24 @@ export function TodoCommentThread({
     setNewComment("");
   }, [newComment, onAddComment]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
-
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
       setNewComment(e.target.value);
     },
     [],
+  );
+
+  const handleShowAll = useCallback((): void => {
+    setShowAll(true);
+  }, []);
+
+  const hasHiddenComments = !showAll && comments.length > VISIBLE_COMMENT_COUNT;
+  const visibleComments = useMemo(
+    () =>
+      hasHiddenComments
+        ? comments.slice(comments.length - VISIBLE_COMMENT_COUNT)
+        : comments,
+    [comments, hasHiddenComments],
   );
 
   return (
@@ -52,7 +59,17 @@ export function TodoCommentThread({
         <p className="text-base text-text-secondary">まだメモはありません</p>
       ) : (
         <div className="space-y-3">
-          {comments.map((comment) => (
+          {hasHiddenComments && (
+            <button
+              type="button"
+              className="w-full min-h-11 rounded-full border border-border-light bg-bg-surface text-base text-text-secondary transition-colors active:bg-bg-surface-hover"
+              onClick={handleShowAll}
+            >
+              {UI_MESSAGES.todo.showOlderComments}（
+              {comments.length - VISIBLE_COMMENT_COUNT}件）
+            </button>
+          )}
+          {visibleComments.map((comment) => (
             <div
               key={comment.id}
               className="rounded-card border border-border-light bg-bg-surface p-3 space-y-1"
@@ -79,14 +96,13 @@ export function TodoCommentThread({
       )}
 
       {/* Comment input */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-end">
         <textarea
           className="flex-1 min-h-11 border border-border-light bg-bg-surface px-4 py-3 text-lg rounded-card focus:border-accent-primary focus:outline-none resize-none"
           placeholder={UI_MESSAGES.todo.commentPlaceholder}
           value={newComment}
           onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          rows={1}
+          rows={2}
         />
         <button
           type="button"

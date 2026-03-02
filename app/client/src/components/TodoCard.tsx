@@ -7,10 +7,15 @@ import type { TodoItem } from "../lib/todo-api";
 
 interface TodoCardProps {
   todo: TodoItem;
+  isMyTask: boolean;
   onSelect: (todoId: string) => void;
 }
 
-export function TodoCard({ todo, onSelect }: TodoCardProps): ReactNode {
+export function TodoCard({
+  todo,
+  isMyTask,
+  onSelect,
+}: TodoCardProps): ReactNode {
   const handleClick = (): void => {
     onSelect(todo.id);
   };
@@ -25,7 +30,11 @@ export function TodoCard({ todo, onSelect }: TodoCardProps): ReactNode {
   return (
     <button
       type="button"
-      className="w-full text-left rounded-card border border-border-light bg-bg-surface p-4 space-y-2 transition-colors active:bg-bg-surface-hover"
+      className={`w-full text-left rounded-card border p-4 space-y-2 transition-colors active:bg-bg-surface-hover ${
+        isMyTask
+          ? "border-accent-secondary bg-accent-secondary-light"
+          : "border-border-light bg-bg-surface"
+      }`}
       onClick={handleClick}
     >
       <div className="flex items-start gap-2">
@@ -44,9 +53,15 @@ export function TodoCard({ todo, onSelect }: TodoCardProps): ReactNode {
       <div className="flex items-center gap-3 flex-wrap">
         <TodoStatusBadge status={todo.status} />
 
-        <span className="text-base text-text-secondary">
-          {todo.assigneeName ?? UI_MESSAGES.todo.unassigned}
-        </span>
+        {isMyTask ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-sm font-medium bg-accent-secondary text-text-on-accent">
+            {UI_MESSAGES.todo.myTaskBadge}
+          </span>
+        ) : (
+          <span className="text-base text-text-secondary">
+            {todo.assigneeName ?? UI_MESSAGES.todo.unassigned}
+          </span>
+        )}
 
         {formattedDate && (
           <span className="text-base text-text-secondary">
