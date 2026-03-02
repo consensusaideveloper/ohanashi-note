@@ -314,7 +314,7 @@ export function ConversationScreen({
 
   return (
     <div
-      className={`min-h-dvh flex flex-col bg-gradient-to-b ${gradient} ${isLandscape ? "" : "items-center"}`}
+      className={`h-dvh flex flex-col overflow-hidden bg-gradient-to-b ${gradient} ${isLandscape ? "" : "items-center"}`}
     >
       {/* Top bar with end-conversation button and remaining time */}
       <div
@@ -370,20 +370,20 @@ export function ConversationScreen({
       <div
         className={
           isLandscape
-            ? "flex-1 grid grid-cols-2 gap-2 w-full overflow-hidden"
-            : "flex-1 flex flex-col items-center w-full"
+            ? "flex-1 grid grid-cols-2 gap-2 w-full overflow-hidden min-h-0"
+            : "flex-1 flex flex-col items-center w-full min-h-0"
         }
       >
-        {/* Face column (portrait: top section, landscape: left column) */}
+        {/* Face section (always visible — flex-none keeps it pinned) */}
         <div
           className={
             isLandscape
               ? "flex flex-col items-center justify-center gap-2"
-              : "contents"
+              : "flex-none flex flex-col items-center"
           }
         >
           {/* Status area */}
-          <div className={isLandscape ? "pb-2" : "flex-none pt-4 pb-6"}>
+          <div className={isLandscape ? "pb-2" : "pt-4 pb-6"}>
             {state === "error" && errorType !== null ? (
               <ErrorDisplay errorType={errorType} onRetry={retry} />
             ) : (
@@ -396,7 +396,7 @@ export function ConversationScreen({
             className={
               isLandscape
                 ? "flex items-center justify-center"
-                : "flex-none flex items-center justify-center py-8"
+                : "flex items-center justify-center py-8"
             }
           >
             <AiFace
@@ -409,9 +409,9 @@ export function ConversationScreen({
           </div>
         </div>
 
-        {/* Transcript column (portrait: bottom section, landscape: right column) */}
+        {/* Transcript (scrollable — only this area scrolls) */}
         <div
-          className={`overflow-y-auto px-4 pb-8 notebook-lines ${isLandscape ? "" : "flex-1 w-full max-w-lg"}`}
+          className={`overflow-y-auto overscroll-contain px-4 pb-8 notebook-lines ${isLandscape ? "" : "flex-1 w-full max-w-lg min-h-0"}`}
         >
           {transcript.map((entry, index) => (
             <div

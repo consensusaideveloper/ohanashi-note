@@ -57,6 +57,23 @@ describe("hasExplicitConversationEndIntent", () => {
     expect(hasExplicitConversationEndIntent("そろそろおしまい")).toBe(true);
   });
 
+  it("detects やめる expressions in various conjugations", () => {
+    expect(hasExplicitConversationEndIntent("やめます")).toBe(true);
+    expect(hasExplicitConversationEndIntent("今日はもうやめます")).toBe(true);
+    expect(hasExplicitConversationEndIntent("やめよう")).toBe(true);
+    expect(hasExplicitConversationEndIntent("やめたい")).toBe(true);
+    expect(hasExplicitConversationEndIntent("やめましょう")).toBe(true);
+    expect(hasExplicitConversationEndIntent("もうやめとく")).toBe(true);
+  });
+
+  it("detects standalone 終了 expressions", () => {
+    expect(hasExplicitConversationEndIntent("終了")).toBe(true);
+    expect(hasExplicitConversationEndIntent("終了する")).toBe(true);
+    expect(hasExplicitConversationEndIntent("終了します")).toBe(true);
+    expect(hasExplicitConversationEndIntent("もう終了")).toBe(true);
+    expect(hasExplicitConversationEndIntent("今日は終了")).toBe(true);
+  });
+
   it("does not trigger for ambiguous phrases (AI-only detection)", () => {
     expect(hasExplicitConversationEndIntent("ありがとうございました")).toBe(
       false,

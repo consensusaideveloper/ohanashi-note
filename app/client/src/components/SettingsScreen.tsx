@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 import {
   getUserProfile,
@@ -58,6 +58,38 @@ export function SettingsScreen({
   const [deleteMessage, setDeleteMessage] = useState("");
   const [showPrintView, setShowPrintView] = useState(false);
 
+  // Track saved values for dirty-state detection
+  const [savedName, setSavedName] = useState("");
+  const [savedCharacterId, setSavedCharacterId] =
+    useState<CharacterId>("character-a");
+  const [savedSpeakingSpeed, setSavedSpeakingSpeed] =
+    useState<SpeakingSpeed>("normal");
+  const [savedSilenceDuration, setSavedSilenceDuration] =
+    useState<SilenceDuration>("normal");
+  const [savedConfirmationLevel, setSavedConfirmationLevel] =
+    useState<ConfirmationLevel>("normal");
+
+  const hasUnsavedChanges = useMemo(
+    (): boolean =>
+      name !== savedName ||
+      selectedCharacterId !== savedCharacterId ||
+      speakingSpeed !== savedSpeakingSpeed ||
+      silenceDuration !== savedSilenceDuration ||
+      confirmationLevel !== savedConfirmationLevel,
+    [
+      name,
+      savedName,
+      selectedCharacterId,
+      savedCharacterId,
+      speakingSpeed,
+      savedSpeakingSpeed,
+      silenceDuration,
+      savedSilenceDuration,
+      confirmationLevel,
+      savedConfirmationLevel,
+    ],
+  );
+
   // Dialog state
   const { fontSize, setFontSize } = useFontSize();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -71,40 +103,65 @@ export function SettingsScreen({
     void getUserProfile().then((profile) => {
       if (profile !== null) {
         setName(profile.name);
-        if (profile.characterId !== undefined && profile.characterId !== null) {
-          setSelectedCharacterId(profile.characterId);
-        }
-        if (profile.speakingSpeed !== undefined) {
-          setSpeakingSpeed(profile.speakingSpeed);
-        }
-        if (profile.silenceDuration !== undefined) {
-          setSilenceDuration(profile.silenceDuration);
-        }
-        if (profile.confirmationLevel !== undefined) {
-          setConfirmationLevel(profile.confirmationLevel);
-        }
+        const charId =
+          profile.characterId !== undefined && profile.characterId !== null
+            ? profile.characterId
+            : ("character-a" as CharacterId);
+        setSelectedCharacterId(charId);
+        const speed = profile.speakingSpeed ?? ("normal" as SpeakingSpeed);
+        const silence =
+          profile.silenceDuration ?? ("normal" as SilenceDuration);
+        const confirmation =
+          profile.confirmationLevel ?? ("normal" as ConfirmationLevel);
+        setSpeakingSpeed(speed);
+        setSilenceDuration(silence);
+        setConfirmationLevel(confirmation);
+
+        setSavedName(profile.name);
+        setSavedCharacterId(charId);
+        setSavedSpeakingSpeed(speed);
+        setSavedSilenceDuration(silence);
+        setSavedConfirmationLevel(confirmation);
       }
     });
   }, []);
 
-  const handleSaveProfile = useCallback((): void => {
+  const handleSaveSettings = useCallback((): void => {
     void saveUserProfile({
       name,
       characterId: selectedCharacterId,
+      speakingSpeed,
+      silenceDuration,
+      confirmationLevel,
       updatedAt: Date.now(),
     })
       .then(() => {
-        showToast("保存しました", "success");
+        setSavedName(name);
+        setSavedCharacterId(selectedCharacterId);
+        setSavedSpeakingSpeed(speakingSpeed);
+        setSavedSilenceDuration(silenceDuration);
+        setSavedConfirmationLevel(confirmationLevel);
+        showToast(SETTINGS_MESSAGES.saved, "success");
       })
       .catch((error: unknown) => {
-        console.error("Failed to save profile:", {
+        console.error("Failed to save settings:", {
           error,
           name,
           characterId: selectedCharacterId,
+          speakingSpeed,
+          silenceDuration,
+          confirmationLevel,
         });
         showToast(UI_MESSAGES.error.saveFailed, "error");
       });
-  }, [name, selectedCharacterId, showToast]);
+  }, [
+    name,
+    selectedCharacterId,
+    speakingSpeed,
+    silenceDuration,
+    confirmationLevel,
+    showToast,
+  ]);
 
   const handleViewTerms = useCallback((): void => {
     setShowTermsViewer(true);
@@ -260,36 +317,6 @@ export function SettingsScreen({
     [],
   );
 
-  const handleSaveSpeakingPreferences = useCallback((): void => {
-    void saveUserProfile({
-      name,
-      characterId: selectedCharacterId,
-      speakingSpeed,
-      silenceDuration,
-      confirmationLevel,
-      updatedAt: Date.now(),
-    })
-      .then(() => {
-        showToast(SETTINGS_MESSAGES.speakingPreferences.saved, "success");
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to save speaking preferences:", {
-          error,
-          speakingSpeed,
-          silenceDuration,
-          confirmationLevel,
-        });
-        showToast(UI_MESSAGES.error.saveFailed, "error");
-      });
-  }, [
-    name,
-    selectedCharacterId,
-    speakingSpeed,
-    silenceDuration,
-    confirmationLevel,
-    showToast,
-  ]);
-
   return (
     <div className="flex-1 w-full overflow-y-auto px-4 py-4">
       <div className="max-w-lg mx-auto space-y-8">
@@ -435,17 +462,9 @@ export function SettingsScreen({
               );
             })}
           </div>
-
-          <button
-            type="button"
-            className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg"
-            onClick={handleSaveSpeakingPreferences}
-          >
-            保存する
-          </button>
         </section>
 
-        {/* Section 3: Profile (save-gated) */}
+        {/* Section 3: Profile */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">
             お名前と話し相手
@@ -487,10 +506,28 @@ export function SettingsScreen({
               </button>
             ))}
           </div>
+        </section>
+
+        {/* Unified save button for speaking preferences + profile */}
+        <section className="space-y-3">
+          {hasUnsavedChanges && (
+            <p
+              className="text-lg text-warning font-medium"
+              role="status"
+              aria-live="polite"
+            >
+              {SETTINGS_MESSAGES.unsavedChanges}
+            </p>
+          )}
           <button
             type="button"
-            className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg"
-            onClick={handleSaveProfile}
+            disabled={!hasUnsavedChanges}
+            className={`w-full rounded-full min-h-11 px-6 text-lg transition-colors ${
+              hasUnsavedChanges
+                ? "bg-accent-primary text-text-on-accent shadow-sm"
+                : "bg-bg-surface text-text-secondary border border-border cursor-default"
+            }`}
+            onClick={handleSaveSettings}
           >
             保存する
           </button>

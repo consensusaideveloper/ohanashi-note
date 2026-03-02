@@ -207,8 +207,9 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     - low: 会話の大部分がエンディングノートと無関係な話題だった
 11. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
 12. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
-13. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
-14. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+13. noteEntries.sourceEvidenceには、ユーザー発話から3〜40文字程度を原文のまま引用してください（要約・改変しない）。短い返答（「はい」「あります」など）の場合は1〜2文字でも可。
+14. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
+15. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【カテゴリ別の分析ガイド】
 - legal（相続・遺言）: 相続の希望、遺言書の有無や内容、遺産分割の意向、生前贈与の計画など、相続・遺言に関する具体的な希望や状況を重点的に抽出してください。
@@ -275,8 +276,9 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
     - low: 会話の大部分がエンディングノートと無関係な話題だった
 12. offTopicSummaryはテーマ外の話題があった場合のみ記述。なければ空文字列（""）にしてください。
 13. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
-14. noteEntries.sourceEvidenceには、ユーザー発話から10〜40文字程度を原文のまま引用してください（要約・改変しない）。
-15. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+14. noteEntries.sourceEvidenceには、ユーザー発話から3〜40文字程度を原文のまま引用してください（要約・改変しない）。短い返答（「はい」「あります」など）の場合は1〜2文字でも可。
+15. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
+16. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 
 【追加タスク - ユーザー名の検出】
 会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
@@ -345,6 +347,31 @@ function filterGroundedNoteEntries(
   }
 
   return grounded;
+}
+
+export function shouldFallbackToUngroundedEntries(
+  category: QuestionCategory | null,
+  modelNoteEntries: NoteEntry[],
+  groundedNoteEntries: NoteEntry[],
+): boolean {
+  // In focused mode, losing all entries is worse UX than keeping model output.
+  return (
+    category !== null &&
+    modelNoteEntries.length > 0 &&
+    groundedNoteEntries.length === 0
+  );
+}
+
+export function selectTranscriptForAnalysis(
+  sanitizedTranscript: Array<{ role: "user" | "assistant"; text: string }>,
+): Array<{ role: "user" | "assistant"; text: string }> {
+  const hasUserUtterance = sanitizedTranscript.some(
+    (entry) => entry.role === "user" && entry.text.trim().length > 0,
+  );
+  if (hasUserUtterance) {
+    return sanitizedTranscript;
+  }
+  return [{ role: "user", text: "（ユーザー発話なし）" }];
 }
 
 const VALID_CATEGORY_SET = new Set([
@@ -446,9 +473,7 @@ export async function summarizeConversation(
     (entry) => entry.role === "user" && entry.text.trim().length > 0,
   );
   const transcriptForAnalysis =
-    userOnlyTranscript.length > 0
-      ? userOnlyTranscript
-      : [{ role: "user" as const, text: "（ユーザー発話なし）" }];
+    selectTranscriptForAnalysis(sanitizedTranscript);
 
   let systemPrompt: string;
   if (request.category !== null) {
@@ -510,8 +535,30 @@ export async function summarizeConversation(
     parsed.noteEntries,
     userOnlyTranscript,
   );
+  const usedUngroundedFallback = shouldFallbackToUngroundedEntries(
+    request.category,
+    parsed.noteEntries,
+    groundedNoteEntries,
+  );
+  const finalizedNoteEntries = usedUngroundedFallback
+    ? parsed.noteEntries.map((entry) => ({
+        ...entry,
+        sourceEvidence: entry.sourceEvidence.trim(),
+      }))
+    : groundedNoteEntries;
+
+  if (usedUngroundedFallback) {
+    logger.warn(
+      "Grounding removed all note entries in focused mode; falling back to model output",
+      {
+        category: request.category,
+        modelEntries: parsed.noteEntries.length,
+      },
+    );
+  }
+
   const groundedQuestionIdSet = new Set(
-    groundedNoteEntries.map((entry) => entry.questionId),
+    finalizedNoteEntries.map((entry) => entry.questionId),
   );
   const coveredQuestionIds = parsed.coveredQuestionIds.filter((questionId) =>
     groundedQuestionIdSet.has(questionId),
@@ -519,7 +566,7 @@ export async function summarizeConversation(
 
   const finalized: SummarizeResponse = {
     ...parsed,
-    noteEntries: groundedNoteEntries,
+    noteEntries: finalizedNoteEntries,
     coveredQuestionIds,
   };
 

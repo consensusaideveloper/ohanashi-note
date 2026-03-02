@@ -895,9 +895,10 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
 
 // --- Settings screen messages (Japanese) ---
 export const SETTINGS_MESSAGES = {
+  saved: "設定を保存しました",
+  unsavedChanges: "変更がまだ保存されていません",
   profile: {
-    description:
-      "お名前と話し相手を設定します。変更したら「保存する」を押してください。",
+    description: "お名前と話し相手を設定します。",
   },
   speakingPreferences: {
     title: "話し相手の話し方",
@@ -905,7 +906,6 @@ export const SETTINGS_MESSAGES = {
     speedLabel: "話す速さ",
     silenceLabel: "待ち時間",
     confirmationLabel: "確認の頻度",
-    saved: "話し方の設定を保存しました",
   },
   account: {
     description: "現在お使いのログイン情報です",
