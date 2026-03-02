@@ -33,6 +33,7 @@ export interface TodoStats {
 export interface TodoListResponse {
   todos: TodoItem[];
   stats: TodoStats;
+  callerFamilyMemberId: string | null;
 }
 
 export interface TodoComment {
@@ -56,12 +57,31 @@ export interface TodoDetail {
   todo: TodoItem;
   comments: TodoComment[];
   history: TodoHistoryEntry[];
+  visibility?: TodoVisibilityMember[];
+}
+
+export interface TodoMember {
+  familyMemberId: string;
+  name: string;
+  role: string;
 }
 
 export interface TodoVisibilityMember {
   familyMemberId: string;
   memberName: string;
   hidden: boolean;
+}
+
+export interface GenerateTodosSummary {
+  createdCount: number;
+  skippedByExistingQuestionCount: number;
+  skippedAsDuplicateCount: number;
+  skippedInvalidCount: number;
+}
+
+export interface GenerateTodosResponse {
+  todos: TodoItem[];
+  summary: GenerateTodosSummary;
 }
 
 // --- API functions ---
@@ -77,6 +97,14 @@ export async function listTodos(
   const path = `/api/todos/${creatorId}${query ? `?${query}` : ""}`;
   const response = await fetchWithAuth(path);
   return response.json() as Promise<TodoListResponse>;
+}
+
+export async function listTodoMembers(
+  creatorId: string,
+): Promise<TodoMember[]> {
+  const response = await fetchWithAuth(`/api/todos/${creatorId}/members`);
+  const data = (await response.json()) as { members: TodoMember[] };
+  return data.members;
 }
 
 export async function getTodoDetail(
@@ -112,7 +140,7 @@ export async function updateTodo(
   todoId: string,
   data: {
     title?: string;
-    description?: string;
+    description?: string | null;
     status?: TodoStatus;
     priority?: TodoPriority;
     assigneeId?: string | null;
@@ -173,10 +201,23 @@ export async function updateTodoVisibility(
   });
 }
 
-export async function generateTodos(creatorId: string): Promise<TodoItem[]> {
+export async function generateTodos(
+  creatorId: string,
+): Promise<GenerateTodosResponse> {
   const response = await fetchWithAuth(`/api/todos/${creatorId}/generate`, {
     method: "POST",
   });
-  const data = (await response.json()) as { todos: TodoItem[] };
-  return data.todos;
+  const data = (await response.json()) as {
+    todos: TodoItem[];
+    summary?: GenerateTodosSummary;
+  };
+  return {
+    todos: data.todos,
+    summary: data.summary ?? {
+      createdCount: data.todos.length,
+      skippedByExistingQuestionCount: 0,
+      skippedAsDuplicateCount: 0,
+      skippedInvalidCount: 0,
+    },
+  };
 }

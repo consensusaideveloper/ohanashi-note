@@ -7,6 +7,7 @@ import type { TodoItem, TodoStats } from "../lib/todo-api";
 interface UseTodosReturn {
   todos: TodoItem[];
   stats: TodoStats;
+  callerFamilyMemberId: string | null;
   isLoading: boolean;
   error: boolean;
   refresh: () => void;
@@ -24,6 +25,9 @@ const EMPTY_STATS: TodoStats = {
 export function useTodos(creatorId: string): UseTodosReturn {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [stats, setStats] = useState<TodoStats>(EMPTY_STATS);
+  const [callerFamilyMemberId, setCallerFamilyMemberId] = useState<
+    string | null
+  >(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -36,6 +40,7 @@ export function useTodos(creatorId: string): UseTodosReturn {
       .then((data) => {
         setTodos(data.todos);
         setStats(data.stats);
+        setCallerFamilyMemberId(data.callerFamilyMemberId);
       })
       .catch((err: unknown) => {
         console.error("Failed to load todos:", { error: err, creatorId });
@@ -53,6 +58,7 @@ export function useTodos(creatorId: string): UseTodosReturn {
   return {
     todos,
     stats,
+    callerFamilyMemberId,
     isLoading,
     error,
     refresh: loadTodos,

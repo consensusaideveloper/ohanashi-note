@@ -528,7 +528,8 @@ export function useOnboardingConversation({
           if (level === null) {
             sendResult(
               JSON.stringify({
-                error: "文字サイズを認識できませんでした。もう一度お願いします。",
+                error:
+                  "文字サイズを認識できませんでした。もう一度お願いします。",
               }),
             );
             return;
