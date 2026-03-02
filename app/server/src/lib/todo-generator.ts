@@ -28,7 +28,6 @@ interface AiTodoResponse {
 // --- Constants ---
 
 const MODEL = "gpt-5-nano";
-const TEMPERATURE = 0.3;
 const MAX_ANSWER_LENGTH = 500;
 
 /** Categories where TODOs are typically not actionable. */
@@ -136,7 +135,6 @@ export async function generateTodosFromNotes(
 
   const completion = await openai.chat.completions.create({
     model: MODEL,
-    temperature: TEMPERATURE,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
