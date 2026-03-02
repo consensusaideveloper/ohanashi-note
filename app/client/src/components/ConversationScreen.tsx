@@ -145,6 +145,9 @@ export function ConversationScreen({
       serverQuota !== null ? serverQuota.canStart : canStartSession();
     if (!canStart) {
       setDailyLimitReached(true);
+      // Clear pending focused category so the UI does not remain in
+      // "準備しています..." state when start is blocked.
+      onCategoryConsumed?.();
       return;
     }
 
@@ -171,6 +174,18 @@ export function ConversationScreen({
 
   // Auto-start conversation when navigating from "このテーマで話す"
   const hasAutoStarted = useRef(false);
+  const previousInitialCategoryRef = useRef<QuestionCategory | undefined>(
+    initialCategory,
+  );
+
+  // Reset auto-start guard when initialCategory changes.
+  useEffect(() => {
+    if (previousInitialCategoryRef.current !== initialCategory) {
+      hasAutoStarted.current = false;
+      previousInitialCategoryRef.current = initialCategory;
+    }
+  }, [initialCategory]);
+
   useEffect(() => {
     if (
       initialCategory !== undefined &&
