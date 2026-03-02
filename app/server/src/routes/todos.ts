@@ -66,6 +66,13 @@ interface HistoryResponseItem {
   createdAt: string;
 }
 
+interface GenerateTodosSummary {
+  createdCount: number;
+  skippedByExistingQuestionCount: number;
+  skippedAsDuplicateCount: number;
+  skippedInvalidCount: number;
+}
+
 // --- Helpers ---
 
 /**
@@ -255,6 +262,22 @@ async function canMemberSeeTodo(
   return !hidden;
 }
 
+/** Normalize text for lightweight duplicate detection. */
+function normalizeTodoText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\s\u3000]+/g, "")
+    .replace(/[。、，．,.!?！？「」『』（）()\-ー〜～]/g, "");
+}
+
+/** Build a duplicate key using category + normalized title. */
+function buildTodoTitleKey(
+  sourceCategory: string | null,
+  title: string,
+): string {
+  return `${sourceCategory ?? ""}:${normalizeTodoText(title)}`;
+}
+
 // --- Route ---
 
 const todoRoute = new Hono();
@@ -337,6 +360,12 @@ todoRoute.get("/api/todos/:creatorId", async (c: Context) => {
 
     const assigneeMap = await buildAssigneeMap(assigneeIds);
 
+    // Resolve caller's familyMemberId for client-side "my tasks" filtering
+    const callerFamilyMemberId = await getCallerFamilyMemberId(
+      userId,
+      creatorId,
+    );
+
     // Compute stats (from unfiltered-by-query-params result for the user's access level)
     const allAccessible = role === "representative" ? allTodos : todosResult; // already filtered by access
 
@@ -351,6 +380,7 @@ todoRoute.get("/api/todos/:creatorId", async (c: Context) => {
     return c.json({
       todos: todosResult.map((t) => formatTodoResponse(t, assigneeMap)),
       stats,
+      callerFamilyMemberId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -360,6 +390,59 @@ todoRoute.get("/api/todos/:creatorId", async (c: Context) => {
     });
     return c.json(
       { error: "TODOリストの取得に失敗しました", code: "LIST_TODOS_FAILED" },
+      500,
+    );
+  }
+});
+
+/** GET /api/todos/:creatorId/members - List family members for assignee picker (representative only) */
+todoRoute.get("/api/todos/:creatorId/members", async (c: Context) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const creatorId = c.req.param("creatorId");
+
+    const role = await getUserRole(userId, creatorId);
+
+    if (role !== "representative") {
+      return c.json(
+        { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+        403,
+      );
+    }
+
+    const lifecycleResult = await requireOpenedLifecycle(c, creatorId);
+    if (!lifecycleResult.ok) {
+      return lifecycleResult.response;
+    }
+
+    const memberRows = await db
+      .select({
+        familyMemberId: familyMembers.id,
+        name: users.name,
+        role: familyMembers.role,
+      })
+      .from(familyMembers)
+      .innerJoin(users, eq(users.id, familyMembers.memberId))
+      .where(
+        and(
+          eq(familyMembers.creatorId, creatorId),
+          eq(familyMembers.isActive, true),
+        ),
+      );
+
+    return c.json({ members: memberRows });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to list todo members", {
+      error: message,
+      creatorId: c.req.param("creatorId"),
+    });
+    return c.json(
+      {
+        error: "メンバー情報の取得に失敗しました",
+        code: "LIST_TODO_MEMBERS_FAILED",
+      },
       500,
     );
   }
@@ -878,10 +961,49 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
       createdAt: r.createdAt.toISOString(),
     }));
 
+    // Fetch visibility data for representatives
+    let visibility: Array<{
+      familyMemberId: string;
+      memberName: string;
+      hidden: boolean;
+    }> = [];
+
+    if (role === "representative") {
+      const allMembers = await db
+        .select({
+          familyMemberId: familyMembers.id,
+          name: users.name,
+          role: familyMembers.role,
+        })
+        .from(familyMembers)
+        .innerJoin(users, eq(users.id, familyMembers.memberId))
+        .where(
+          and(
+            eq(familyMembers.creatorId, creatorId),
+            eq(familyMembers.isActive, true),
+          ),
+        );
+
+      const hiddenRows = await db
+        .select({ familyMemberId: todoVisibility.familyMemberId })
+        .from(todoVisibility)
+        .where(eq(todoVisibility.todoId, todoId));
+      const hiddenSet = new Set(hiddenRows.map((r) => r.familyMemberId));
+
+      visibility = allMembers
+        .filter((m) => m.role !== "representative")
+        .map((m) => ({
+          familyMemberId: m.familyMemberId,
+          memberName: m.name,
+          hidden: hiddenSet.has(m.familyMemberId),
+        }));
+    }
+
     return c.json({
       todo: formatTodoResponse(todo, assigneeMap),
       comments,
       history,
+      ...(role === "representative" ? { visibility } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -1397,8 +1519,15 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
       }
     }
 
+    const summary: GenerateTodosSummary = {
+      createdCount: 0,
+      skippedByExistingQuestionCount: 0,
+      skippedAsDuplicateCount: 0,
+      skippedInvalidCount: 0,
+    };
+
     if (noteEntryInputs.length === 0) {
-      return c.json({ todos: [] });
+      return c.json({ todos: [], summary });
     }
 
     // Deduplicate: keep latest entry per questionId
@@ -1413,7 +1542,11 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
 
     // Exclude entries that already have non-deleted TODOs
     const existingTodos = await db
-      .select({ sourceQuestionId: todos.sourceQuestionId })
+      .select({
+        sourceQuestionId: todos.sourceQuestionId,
+        sourceCategory: todos.sourceCategory,
+        title: todos.title,
+      })
       .from(todos)
       .where(
         and(
@@ -1427,25 +1560,77 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
         .map((t) => t.sourceQuestionId)
         .filter((id): id is string => id !== null),
     );
+    const existingTitleKeys = new Set(
+      existingTodos.map((t) => buildTodoTitleKey(t.sourceCategory, t.title)),
+    );
 
     const newEntries = dedupedEntries.filter(
       (entry) => !existingQuestionIds.has(entry.questionId),
     );
+    summary.skippedByExistingQuestionCount =
+      dedupedEntries.length - newEntries.length;
 
     if (newEntries.length === 0) {
-      return c.json({ todos: [] });
+      return c.json({ todos: [], summary });
     }
 
     // Generate TODOs via AI
     const generatedTodos = await generateTodosFromNotes(newEntries);
 
     if (generatedTodos.length === 0) {
-      return c.json({ todos: [] });
+      return c.json({ todos: [], summary });
+    }
+
+    const newQuestionIds = new Set(newEntries.map((entry) => entry.questionId));
+    const acceptedGenerated: typeof generatedTodos = [];
+    const seenTitleKeys = new Set<string>();
+
+    for (const generated of generatedTodos) {
+      if (!newQuestionIds.has(generated.sourceQuestionId)) {
+        summary.skippedInvalidCount += 1;
+        continue;
+      }
+
+      const titleKey = buildTodoTitleKey(
+        generated.sourceCategory,
+        generated.title,
+      );
+      const normalizedTitle = normalizeTodoText(generated.title);
+      if (
+        normalizedTitle === "" ||
+        existingTitleKeys.has(titleKey) ||
+        seenTitleKeys.has(titleKey)
+      ) {
+        summary.skippedAsDuplicateCount += 1;
+        continue;
+      }
+
+      seenTitleKeys.add(titleKey);
+      acceptedGenerated.push(generated);
+    }
+
+    if (acceptedGenerated.length === 0) {
+      return c.json({ todos: [], summary });
     }
 
     // Insert generated TODOs into the database
     const createdTodos = [];
-    for (const generated of generatedTodos) {
+    for (const generated of acceptedGenerated) {
+      // Final race-safe check for exact duplicate from concurrent requests.
+      const duplicate = await db.query.todos.findFirst({
+        where: and(
+          eq(todos.lifecycleId, lifecycleResult.lifecycle.id),
+          isNull(todos.deletedAt),
+          eq(todos.sourceQuestionId, generated.sourceQuestionId),
+          eq(todos.title, generated.title),
+        ),
+        columns: { id: true },
+      });
+      if (duplicate) {
+        summary.skippedAsDuplicateCount += 1;
+        continue;
+      }
+
       const [inserted] = await db
         .insert(todos)
         .values({
@@ -1462,6 +1647,7 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
         .returning();
 
       if (inserted) {
+        summary.createdCount += 1;
         await db.insert(todoHistory).values({
           todoId: inserted.id,
           action: "created",
@@ -1479,9 +1665,10 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
       creatorId,
       count: createdTodos.length,
       performedBy: userId,
+      summary,
     });
 
-    return c.json({ todos: createdTodos });
+    return c.json({ todos: createdTodos, summary });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to generate TODOs", {
