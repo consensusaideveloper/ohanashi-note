@@ -47,7 +47,7 @@
 gpt-realtime-mini（音声会話）  ¥32.40  ███████████████████████████████  89.2%
 gpt-4o-mini-transcribe（再文字起こし）  ¥3.60  ███  9.7%
 gpt-5-nano（要約）              ¥0.07  ▏  0.2%
-gpt-4o-mini（TODO生成）         ¥0.25  ▏  0.8%
+gpt-5-nano（TODO生成）           ¥0.13  ▏  0.4%
 ストレージ（R2+DB）             微小    ▏  <0.1%
 ```
 
@@ -64,7 +64,7 @@ gpt-4o-mini（TODO生成）         ¥0.25  ▏  0.8%
 | 音声会話 | gpt-realtime-mini | `routes/realtime.ts` | 音声: $10/1M tokens, テキスト: $0.60/1M | 音声: $20/1M tokens, テキスト: $2.40/1M |
 | 会話要約 | gpt-5-nano | `services/summarizer.ts` | $0.05/1M tokens | $0.40/1M tokens |
 | 高精度再文字起こし | gpt-4o-mini-transcribe | `services/transcriber.ts` | $1.25/1M tokens | $5.00/1M tokens |
-| TODO自動生成 | gpt-4o-mini | `lib/todo-generator.ts` | $0.15/1M tokens | $0.60/1M tokens |
+| TODO自動生成 | gpt-5-nano | `lib/todo-generator.ts` | $0.05/1M tokens | $0.40/1M tokens |
 | 音声データ保存 | Cloudflare R2 | `lib/r2.ts` | $0.015/GB/月 | エグレス無料 |
 | データベース | Railway PostgreSQL | `db/connection.ts` | 従量課金 | - |
 | 認証 | Firebase Auth | `lib/firebase-admin.ts` | 50,000 MAUまで無料 | - |
@@ -131,15 +131,15 @@ OpenAI Realtime APIの音声トークン変換レート:
 |------|--------|--------|
 | 8分のユーザー音声 | ~$0.003/分 × 8分 | **$0.024（¥3.6）** |
 
-### 2.5 TODO自動生成（gpt-4o-mini）
+### 2.5 TODO自動生成（gpt-5-nano）
 
 ユーザーの明示的操作でのみ実行。
 
 | 項目 | トークン数 | 単価 | コスト |
 |------|-----------|------|--------|
-| 入力（ノートエントリJSON） | ~5,000 tokens | $0.15/1M | $0.00075 |
-| 出力（TODO配列） | ~1,500 tokens | $0.60/1M | $0.00090 |
-| **合計** | | | **$0.00165（¥0.25）** |
+| 入力（ノートエントリJSON） | ~5,000 tokens | $0.05/1M | $0.00025 |
+| 出力（TODO配列） | ~1,500 tokens | $0.40/1M | $0.00060 |
+| **合計** | | | **$0.00085（¥0.13）** |
 
 ### 2.6 セッション当たり総コストまとめ
 
@@ -148,8 +148,8 @@ OpenAI Realtime APIの音声トークン変換レート:
 | gpt-realtime-mini | 音声会話 | $0.223 | ¥33.4 | 89.2% |
 | gpt-4o-mini-transcribe | 再文字起こし（オプション） | $0.024 | ¥3.6 | 9.7% |
 | gpt-5-nano | 会話要約 | $0.0005 | ¥0.07 | 0.2% |
-| gpt-4o-mini | TODO生成（オンデマンド） | $0.002 | ¥0.25 | 0.8% |
-| **合計（enhanced-summarize込み）** | | **$0.250** | **¥37.3** | **100%** |
+| gpt-5-nano | TODO生成（オンデマンド） | $0.0009 | ¥0.13 | 0.4% |
+| **合計（enhanced-summarize込み）** | | **$0.249** | **¥37.2** | **100%** |
 | **合計（標準フロー）** | | **$0.224** | **¥33.5** | - |
 
 ---
@@ -296,7 +296,7 @@ OpenAI Realtime APIの音声トークン変換レート:
 | gpt-realtime-mini | 音声会話 | **低** | Realtime APIの推奨モデル。GAリリース済み |
 | gpt-5-nano | 要約 | **低** | 2025年8月リリースの最新モデル |
 | gpt-4o-mini-transcribe | 文字起こし | **中** | GPT-4oシリーズの段階的廃止傾向だが、transcribe専用モデルは代替が少ない |
-| gpt-4o-mini | TODO生成 | **中-高** | GPT-4oシリーズ。GPT-5ファミリーへの移行が公式推奨 |
+| ~~gpt-4o-mini~~ → gpt-5-nano | TODO生成 | **低** | GPT-5ファミリーへ移行済み |
 
 ### 5.2 GPT-4oシリーズ廃止の経緯
 
@@ -338,7 +338,7 @@ OpenAI Realtime APIの音声トークン変換レート:
 | 音声会話 | gpt-realtime-mini | **維持** | 安定・最適 |
 | 会話要約 | gpt-5-nano | **維持** | 最新・最安 |
 | 再文字起こし | gpt-4o-mini-transcribe | **維持・監視** | 代替なし |
-| TODO生成 | gpt-4o-mini | **→ gpt-5-nano** | コスト1/3・廃止リスク回避 |
+| TODO生成 | ~~gpt-4o-mini~~ → gpt-5-nano | **移行済み** | コスト1/3・廃止リスク回避 |
 
 ---
 
@@ -771,7 +771,7 @@ LTV:CAC = 3:1 目標:
 | 優先度 | アクション | 実装難易度 | 効果 | 備考 |
 |--------|----------|----------|------|------|
 | ~~**P0**~~ | ~~improvedTranscript自動クリーンアップ~~ | ~~低~~ | ~~DB中間データ削減~~ | **実装済み** `data-retention.ts` |
-| **P0** | gpt-4o-mini → gpt-5-nano移行（TODO生成） | 極低（1行変更） | TODO生成コスト65%削減 + 廃止リスク回避 | `todo-generator.ts` L30 |
+| ~~**P0**~~ | ~~gpt-4o-mini → gpt-5-nano移行（TODO生成）~~ | ~~極低（1行変更）~~ | ~~TODO生成コスト65%削減 + 廃止リスク回避~~ | **実装済み** `todo-generator.ts` |
 | **P0** | 会話一覧APIのカラム制限 | 低（1ファイル） | DB I/O 98%削減 | `conversations.ts` L95-99 |
 | **P1** | プラン別ストレージ上限の実装 | 中 | コスト予測性向上 | プラン確定後に実装 |
 | **P1** | `users`テーブルに`last_active_at`追加 | 中（マイグレーション） | 将来のクリーンアップの前提 | |
@@ -831,7 +831,7 @@ LTV:CAC = 3:1 目標:
 ### 短期（1-3ヶ月）
 
 1. ~~improvedTranscript自動クリーンアップ~~ — **実装済み**（`data-retention.ts`）
-2. gpt-4o-mini → gpt-5-nano移行（TODO生成）— 1行変更
+2. ~~gpt-4o-mini → gpt-5-nano移行（TODO生成）~~ — **実装済み**（`todo-generator.ts`）
 3. 会話一覧APIのカラム制限 — パフォーマンス改善
 4. 料金プランの最終決定（行政書士と議論）
 5. Stripe決済の実装
@@ -871,7 +871,7 @@ LTV:CAC = 3:1 目標:
 | `app/server/src/routes/realtime.ts` | Realtime API接続（gpt-realtime-mini） |
 | `app/server/src/services/summarizer.ts` | 会話要約（gpt-5-nano） |
 | `app/server/src/services/transcriber.ts` | 音声文字起こし（gpt-4o-mini-transcribe） |
-| `app/server/src/lib/todo-generator.ts` | TODO生成（gpt-4o-mini） |
+| `app/server/src/lib/todo-generator.ts` | TODO生成（gpt-5-nano） |
 | `app/server/src/lib/session-limits.ts` | セッション制限（3回/日、20分/回） |
 | `app/server/src/lib/r2.ts` | Cloudflare R2ストレージ |
 | `app/server/src/lib/r2-cleanup.ts` | R2クリーンアップ |

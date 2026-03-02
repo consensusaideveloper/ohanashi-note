@@ -27,7 +27,7 @@ interface AiTodoResponse {
 
 // --- Constants ---
 
-const MODEL = "gpt-4o-mini";
+const MODEL = "gpt-5-nano";
 const TEMPERATURE = 0.3;
 const MAX_ANSWER_LENGTH = 500;
 
