@@ -2,11 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 import { getUserProfile } from "../lib/storage";
 import { UI_MESSAGES } from "../lib/constants";
-import {
-  canStartSession,
-  incrementDailySession,
-  getRemainingSessionCount,
-} from "../lib/usage-tracker";
 import { getSessionQuota } from "../lib/api";
 import { useOrientation } from "../hooks/useOrientation";
 import { StatusIndicator } from "./StatusIndicator";
@@ -128,49 +123,65 @@ export function ConversationScreen({
       getSessionQuota()
         .then((quota) => {
           setServerQuota(quota);
-          if (!quota.canStart) {
-            setDailyLimitReached(true);
-          }
+          setDailyLimitReached(!quota.canStart);
         })
         .catch(() => {
-          // Fall back to localStorage if server is unavailable
+          // Fail-open: do not block user start when quota fetch fails.
           setServerQuota(null);
+          setDailyLimitReached(false);
         });
     }
   }, [state, summaryStatus]);
 
   const handleQuickStart = useCallback((): void => {
-    // Check server quota first, fall back to localStorage
-    const canStart =
-      serverQuota !== null ? serverQuota.canStart : canStartSession();
-    if (!canStart) {
-      setDailyLimitReached(true);
-      // Clear pending focused category so the UI does not remain in
-      // "準備しています..." state when start is blocked.
-      onCategoryConsumed?.();
-      return;
-    }
-
     setIsStarting(true);
     setDailyLimitReached(false);
-    const category = initialCategory ?? null; // null = guided mode
-    if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
-      onCategoryConsumed();
-    }
-    // Keep localStorage sync for immediate UX feedback
-    incrementDailySession();
-    getUserProfile()
-      .then((profile) => {
-        const characterId: CharacterId = profile?.characterId ?? "character-a";
-        start(characterId, category);
+    getSessionQuota()
+      .then((quota) => {
+        setServerQuota(quota);
+        setDailyLimitReached(!quota.canStart);
+        if (!quota.canStart) {
+          // Clear pending focused category so the UI does not remain in
+          // "準備しています..." state when start is blocked.
+          onCategoryConsumed?.();
+          return;
+        }
+
+        const category = initialCategory ?? null; // null = guided mode
+        if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
+          onCategoryConsumed();
+        }
+
+        getUserProfile()
+          .then((profile) => {
+            const characterId: CharacterId =
+              profile?.characterId ?? "character-a";
+            start(characterId, category);
+          })
+          .catch(() => {
+            start("character-a", category);
+          });
       })
       .catch(() => {
-        start("character-a", category);
+        // Fail-open when quota fetch fails.
+        const category = initialCategory ?? null; // null = guided mode
+        if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
+          onCategoryConsumed();
+        }
+        getUserProfile()
+          .then((profile) => {
+            const characterId: CharacterId =
+              profile?.characterId ?? "character-a";
+            start(characterId, category);
+          })
+          .catch(() => {
+            start("character-a", category);
+          });
       })
       .finally(() => {
         setIsStarting(false);
       });
-  }, [start, initialCategory, onCategoryConsumed, serverQuota]);
+  }, [start, initialCategory, onCategoryConsumed]);
 
   // Auto-start conversation when navigating from "このテーマで話す"
   const hasAutoStarted = useRef(false);
@@ -290,8 +301,7 @@ export function ConversationScreen({
         </div>
       );
     }
-    const remaining =
-      serverQuota !== null ? serverQuota.remaining : getRemainingSessionCount();
+    const remaining = serverQuota?.remaining;
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
         <p className="text-2xl text-text-primary font-medium mb-10">
@@ -312,9 +322,11 @@ export function ConversationScreen({
             >
               お話しする
             </button>
-            <p className="mt-6 text-lg text-text-secondary">
-              本日あと{remaining}回お話しできます
-            </p>
+            {remaining !== undefined && (
+              <p className="mt-6 text-lg text-text-secondary">
+                本日あと{remaining}回お話しできます
+              </p>
+            )}
           </>
         )}
       </div>
