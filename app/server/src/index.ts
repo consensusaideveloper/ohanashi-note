@@ -24,8 +24,9 @@ import { realtimeRoute } from "./routes/realtime.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
 
-// Start pending summary recovery (side-effect import starts the interval)
+// Start periodic background jobs (side-effect imports start the intervals)
 import "./lib/pending-summary-recovery.js";
+import "./lib/data-retention.js";
 import { authMiddleware } from "./middleware/auth.js";
 
 // --- Configuration ---
