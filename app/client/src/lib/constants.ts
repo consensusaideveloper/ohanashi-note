@@ -801,7 +801,7 @@ export const MAX_SESSION_DURATION_MS = 20 * 60 * 1000;
 /** Fraction of session time elapsed before showing the warning (85% = ~3 min left). */
 export const SESSION_WARNING_THRESHOLD = 0.85;
 /** Maximum number of conversation sessions per day. */
-export const MAX_DAILY_SESSIONS = 5;
+export const MAX_DAILY_SESSIONS = 3;
 
 // --- Audio player ---
 /** Skip duration in seconds for audio player forward/backward buttons. */
