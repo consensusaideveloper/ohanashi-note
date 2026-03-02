@@ -4,7 +4,7 @@ import { ONBOARDING_CONVERSATION_MESSAGES } from "../lib/constants";
 import { useFontSize } from "../contexts/FontSizeContext";
 import { useOnboardingConversation } from "../hooks/useOnboardingConversation";
 import { StatusIndicator } from "./StatusIndicator";
-import { AiOrb } from "./AiOrb";
+import { AiFace } from "./AiFace";
 import { ErrorDisplay } from "./ErrorDisplay";
 
 import type { ReactNode } from "react";
@@ -32,6 +32,7 @@ export function OnboardingConversation({
     transcript,
     pendingAssistantText,
     audioLevel,
+    characterId,
     start,
     stop,
     retry,
@@ -114,13 +115,13 @@ export function OnboardingConversation({
         )}
       </div>
 
-      {/* Orb area */}
+      {/* Face area */}
       <div className="flex-none flex items-center justify-center py-8">
-        <AiOrb
+        <AiFace
           state={state}
           audioLevel={audioLevel}
           onMicToggle={handleOrbClick}
-          characterName="話し相手"
+          characterId={characterId}
         />
       </div>
 

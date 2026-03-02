@@ -28,6 +28,7 @@ import { useWebRTC } from "./useWebRTC";
 
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";
 import type {
+  CharacterId,
   ConfirmationLevel,
   ConversationState,
   ErrorType,
@@ -51,6 +52,7 @@ interface State {
   errorType: ErrorType | null;
   transcript: TranscriptEntry[];
   pendingAssistantText: string;
+  characterId: CharacterId;
 }
 
 type Action =
@@ -62,13 +64,17 @@ type Action =
   | { type: "ERROR"; errorType: ErrorType }
   | { type: "ADD_USER_TRANSCRIPT"; text: string }
   | { type: "APPEND_ASSISTANT_DELTA"; delta: string }
-  | { type: "FINALIZE_ASSISTANT_TRANSCRIPT"; text: string };
+  | { type: "FINALIZE_ASSISTANT_TRANSCRIPT"; text: string }
+  | { type: "SET_CHARACTER"; characterId: CharacterId };
+
+const DEFAULT_CHARACTER_ID: CharacterId = "character-a";
 
 const initialState: State = {
   conversationState: "idle",
   errorType: null,
   transcript: [],
   pendingAssistantText: "",
+  characterId: DEFAULT_CHARACTER_ID,
 };
 
 function reducer(state: State, action: Action): State {
@@ -111,6 +117,8 @@ function reducer(state: State, action: Action): State {
         ],
         pendingAssistantText: "",
       };
+    case "SET_CHARACTER":
+      return { ...state, characterId: action.characterId };
     default:
       return state;
   }
@@ -131,6 +139,7 @@ export interface UseOnboardingConversationReturn {
   transcript: TranscriptEntry[];
   pendingAssistantText: string;
   audioLevel: number;
+  characterId: CharacterId;
   start: () => void;
   stop: () => void;
   retry: () => void;
@@ -289,6 +298,7 @@ export function useOnboardingConversation({
             );
             return;
           }
+          dispatch({ type: "SET_CHARACTER", characterId: character.id });
           void saveUserProfile({
             characterId: character.id,
             updatedAt: Date.now(),
@@ -688,6 +698,7 @@ export function useOnboardingConversation({
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
     audioLevel: webrtc.audioLevel,
+    characterId: state.characterId,
     start,
     stop,
     retry,
