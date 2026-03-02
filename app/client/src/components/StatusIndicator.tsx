@@ -5,14 +5,10 @@ import type { ConversationState } from "../types/conversation";
 
 interface StatusIndicatorProps {
   state: ConversationState;
-  characterName: string;
 }
 
-export function StatusIndicator({
-  state,
-  characterName,
-}: StatusIndicatorProps): ReactNode {
-  const message = getStatusMessage(state, characterName);
+export function StatusIndicator({ state }: StatusIndicatorProps): ReactNode {
+  const message = getStatusMessage(state);
 
   return (
     <div className="text-center px-4">
@@ -23,19 +19,16 @@ export function StatusIndicator({
   );
 }
 
-function getStatusMessage(
-  state: ConversationState,
-  characterName: string,
-): string {
+function getStatusMessage(state: ConversationState): string {
   switch (state) {
     case "idle":
-      return `${characterName}とお話ししましょう`;
+      return "お話ししましょう";
     case "connecting":
       return UI_MESSAGES.connecting;
     case "listening":
       return UI_MESSAGES.listening;
     case "ai-speaking":
-      return `${characterName}がお答えしています`;
+      return "お答えしています";
     case "error":
       return "";
   }

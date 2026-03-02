@@ -21,8 +21,6 @@ const STATE_GRADIENTS: Record<string, string> = {
   error: "from-error/10 to-bg-primary",
 };
 
-const CHARACTER_NAME = "のんびり";
-
 export function OnboardingConversation({
   onComplete,
 }: OnboardingConversationProps): ReactNode {
@@ -112,7 +110,7 @@ export function OnboardingConversation({
         {state === "error" && errorType !== null ? (
           <ErrorDisplay errorType={errorType} onRetry={retry} />
         ) : (
-          <StatusIndicator state={state} characterName={CHARACTER_NAME} />
+          <StatusIndicator state={state} />
         )}
       </div>
 
@@ -122,7 +120,7 @@ export function OnboardingConversation({
           state={state}
           audioLevel={audioLevel}
           onMicToggle={handleOrbClick}
-          characterName={CHARACTER_NAME}
+          characterName="話し相手"
         />
       </div>
 

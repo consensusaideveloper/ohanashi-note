@@ -297,7 +297,7 @@ export function useOnboardingConversation({
               sendResult(
                 JSON.stringify({
                   success: true,
-                  message: `次回の会話から「${character.name}」がお相手します`,
+                  message: "次回の会話から話し方が変わります",
                 }),
               );
             })

@@ -66,6 +66,40 @@
   --animate-flow: flow 3s ease-in-out infinite;
   --animate-fade-in: fadeIn 300ms ease-in-out;
   --animate-slide-up: slideUp 300ms ease-out;
+  --animate-blink: blink 5s ease-in-out infinite;
+}
+
+/* --- Per-character orb color overrides --- */
+/* connecting / error states are character-agnostic and stay as @theme defaults */
+
+/* character-a: のんびり（若草色・穏やかさ） */
+[data-character="character-a"] {
+  --color-orb-idle-from: #7ba68c;
+  --color-orb-idle-to: #a8c5b3;
+  --color-orb-listening-from: #b8d4a8;
+  --color-orb-listening-to: #7ba68c;
+  --color-orb-speaking-from: #7ba68c;
+  --color-orb-speaking-to: #a8c5b3;
+}
+
+/* character-b: しっかり（浅葱色・信頼感） */
+[data-character="character-b"] {
+  --color-orb-idle-from: #6ba8a9;
+  --color-orb-idle-to: #96c5c6;
+  --color-orb-listening-from: #8fc4c5;
+  --color-orb-listening-to: #6ba8a9;
+  --color-orb-speaking-from: #6ba8a9;
+  --color-orb-speaking-to: #96c5c6;
+}
+
+/* character-c: にこにこ（杏色・温かさ） */
+[data-character="character-c"] {
+  --color-orb-idle-from: #e8935a;
+  --color-orb-idle-to: #f0b88a;
+  --color-orb-listening-from: #f0c75e;
+  --color-orb-listening-to: #e8935a;
+  --color-orb-speaking-from: #e8935a;
+  --color-orb-speaking-to: #f0b88a;
 }
 
 /* --- Keyframe Animations --- */
@@ -125,6 +159,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  0%,
+  94%,
+  100% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0.1);
   }
 }
 

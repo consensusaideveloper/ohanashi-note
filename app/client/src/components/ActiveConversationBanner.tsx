@@ -1,13 +1,11 @@
 import type { ReactNode } from "react";
 
 interface ActiveConversationBannerProps {
-  characterName: string;
   onReturn: () => void;
 }
 
 /** Fixed banner shown on non-conversation screens when a voice session is active. */
 export function ActiveConversationBanner({
-  characterName,
   onReturn,
 }: ActiveConversationBannerProps): ReactNode {
   return (
@@ -19,9 +17,7 @@ export function ActiveConversationBanner({
         aria-label="会話画面に戻る"
       >
         <span className="w-2.5 h-2.5 rounded-full bg-text-on-accent animate-pulse" />
-        <span className="text-lg font-medium">
-          {characterName}とお話し中です — タップで戻る
-        </span>
+        <span className="text-lg font-medium">お話し中です — タップで戻る</span>
       </button>
     </div>
   );

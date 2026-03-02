@@ -7,7 +7,7 @@ import {
   useVoiceActionRef,
 } from "./contexts/VoiceActionContext";
 import { useConversation } from "./hooks/useConversation";
-import { CHARACTERS, getCharacterById } from "./lib/characters";
+import { CHARACTERS } from "./lib/characters";
 import {
   UI_MESSAGES,
   VOICE_SCREEN_MAP,
@@ -656,7 +656,7 @@ function AppContent(): ReactNode {
           });
           return {
             success: true,
-            message: `次回の会話から${character.name}がお相手します`,
+            message: `次回の会話から話し方が変わります`,
           };
         } catch {
           return {
@@ -892,10 +892,6 @@ function AppContent(): ReactNode {
   // Active conversation banner state
   const isConversationActive =
     conversation.state !== "idle" && conversation.state !== "error";
-  const activeCharacterName =
-    conversation.characterId !== null
-      ? getCharacterById(conversation.characterId).name
-      : null;
 
   const renderScreen = (): ReactNode => {
     switch (screen) {
@@ -1059,7 +1055,7 @@ function AppContent(): ReactNode {
   const showConversationBanner =
     isConversationActive &&
     screen !== "conversation" &&
-    activeCharacterName !== null;
+    conversation.characterId !== null;
 
   const showLifecycleBanner = myLifecycleStatus !== "active";
 
@@ -1072,10 +1068,7 @@ function AppContent(): ReactNode {
 
       {/* Active conversation banner on non-conversation screens */}
       {showConversationBanner && !showLifecycleBanner && (
-        <ActiveConversationBanner
-          characterName={activeCharacterName}
-          onReturn={handleNavigateConversation}
-        />
+        <ActiveConversationBanner onReturn={handleNavigateConversation} />
       )}
 
       {/* Main content area */}

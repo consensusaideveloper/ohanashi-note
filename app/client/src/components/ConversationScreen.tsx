@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
 import { UI_MESSAGES } from "../lib/constants";
 import {
@@ -9,8 +8,9 @@ import {
   getRemainingSessionCount,
 } from "../lib/usage-tracker";
 import { getSessionQuota } from "../lib/api";
+import { useOrientation } from "../hooks/useOrientation";
 import { StatusIndicator } from "./StatusIndicator";
-import { AiOrb } from "./AiOrb";
+import { AiFace } from "./AiFace";
 import { ErrorDisplay } from "./ErrorDisplay";
 
 import type { ReactNode } from "react";
@@ -32,6 +32,13 @@ const STATE_GRADIENTS: Record<string, string> = {
   listening: "from-active-glow/10 to-bg-primary",
   "ai-speaking": "from-accent-primary/10 to-bg-primary",
   error: "from-error/10 to-bg-primary",
+};
+
+/** Per-character background gradient for ai-speaking state. */
+const CHARACTER_SPEAKING_GRADIENTS: Record<CharacterId, string> = {
+  "character-a": "from-accent-secondary/10 to-bg-primary",
+  "character-b": "from-accent-tertiary/10 to-bg-primary",
+  "character-c": "from-accent-primary/10 to-bg-primary",
 };
 
 interface ConversationScreenProps {
@@ -60,7 +67,7 @@ export function ConversationScreen({
     transcript,
     pendingAssistantText,
     audioLevel,
-    characterId: activeCharacterId,
+    characterId,
     summaryStatus,
     remainingMs,
     sessionWarningShown,
@@ -69,6 +76,9 @@ export function ConversationScreen({
     stop,
     retry,
   } = conversation;
+
+  const orientation = useOrientation();
+  const isLandscape = orientation === "landscape";
 
   const [isStarting, setIsStarting] = useState(false);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
@@ -296,19 +306,20 @@ export function ConversationScreen({
     );
   }
 
-  // Conversation UI
-  const characterName =
-    activeCharacterId !== null
-      ? getCharacterById(activeCharacterId).name
-      : "話し相手";
-  const gradient = STATE_GRADIENTS[state] ?? STATE_GRADIENTS["idle"];
+  // Conversation UI — use per-character gradient for ai-speaking state
+  const gradient =
+    state === "ai-speaking" && characterId !== null
+      ? CHARACTER_SPEAKING_GRADIENTS[characterId]
+      : (STATE_GRADIENTS[state] ?? STATE_GRADIENTS["idle"]);
 
   return (
     <div
-      className={`min-h-dvh flex flex-col items-center bg-gradient-to-b ${gradient}`}
+      className={`min-h-dvh flex flex-col bg-gradient-to-b ${gradient} ${isLandscape ? "" : "items-center"}`}
     >
       {/* Top bar with end-conversation button and remaining time */}
-      <div className="flex-none w-full max-w-lg flex items-center justify-between px-4 pt-4">
+      <div
+        className={`flex-none w-full flex items-center justify-between px-4 pt-4 ${isLandscape ? "" : "max-w-lg"}`}
+      >
         <button
           type="button"
           className="min-w-11 min-h-11 flex items-center gap-1.5 rounded-full px-3 hover:bg-bg-surface/60 active:bg-bg-surface transition-colors"
@@ -346,61 +357,90 @@ export function ConversationScreen({
 
       {/* Session time warning banner */}
       {sessionWarningShown && (
-        <div className="flex-none w-full max-w-lg px-4 pt-2">
+        <div
+          className={`flex-none w-full px-4 pt-2 ${isLandscape ? "" : "max-w-lg"}`}
+        >
           <div className="rounded-card bg-warning/10 border border-warning/30 px-4 py-3 text-lg text-text-primary">
             {UI_MESSAGES.sessionWarning}
           </div>
         </div>
       )}
 
-      {/* Status area */}
-      <div className="flex-none pt-4 pb-6">
-        {state === "error" && errorType !== null ? (
-          <ErrorDisplay errorType={errorType} onRetry={retry} />
-        ) : (
-          <StatusIndicator state={state} characterName={characterName} />
-        )}
-      </div>
+      {/* Content area: portrait = column, landscape = side-by-side grid */}
+      <div
+        className={
+          isLandscape
+            ? "flex-1 grid grid-cols-2 gap-2 w-full overflow-hidden"
+            : "flex-1 flex flex-col items-center w-full"
+        }
+      >
+        {/* Face column (portrait: top section, landscape: left column) */}
+        <div
+          className={
+            isLandscape
+              ? "flex flex-col items-center justify-center gap-2"
+              : "contents"
+          }
+        >
+          {/* Status area */}
+          <div className={isLandscape ? "pb-2" : "flex-none pt-4 pb-6"}>
+            {state === "error" && errorType !== null ? (
+              <ErrorDisplay errorType={errorType} onRetry={retry} />
+            ) : (
+              <StatusIndicator state={state} />
+            )}
+          </div>
 
-      {/* Orb area */}
-      <div className="flex-none flex items-center justify-center py-8">
-        <AiOrb
-          state={state}
-          audioLevel={audioLevel}
-          onMicToggle={handleButtonClick}
-          characterName={characterName}
-        />
-      </div>
-
-      {/* Transcript area — notebook ruled lines */}
-      <div className="flex-1 w-full max-w-lg overflow-y-auto px-4 pb-8 notebook-lines">
-        {transcript.map((entry, index) => (
+          {/* Face area */}
           <div
-            key={`${entry.timestamp}-${index}`}
-            className={`mb-3 flex animate-fade-in ${
-              entry.role === "user" ? "justify-end" : "justify-start"
-            }`}
+            className={
+              isLandscape
+                ? "flex items-center justify-center"
+                : "flex-none flex items-center justify-center py-8"
+            }
           >
+            <AiFace
+              state={state}
+              audioLevel={audioLevel}
+              onMicToggle={handleButtonClick}
+              large={isLandscape}
+              characterId={characterId}
+            />
+          </div>
+        </div>
+
+        {/* Transcript column (portrait: bottom section, landscape: right column) */}
+        <div
+          className={`overflow-y-auto px-4 pb-8 notebook-lines ${isLandscape ? "" : "flex-1 w-full max-w-lg"}`}
+        >
+          {transcript.map((entry, index) => (
             <div
-              className={`max-w-[80%] rounded-card px-4 py-3 text-lg ${
-                entry.role === "user"
-                  ? "bg-accent-primary-light text-text-primary"
-                  : "bg-bg-surface text-text-primary shadow-sm"
+              key={`${entry.timestamp}-${index}`}
+              className={`mb-3 flex animate-fade-in ${
+                entry.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              {entry.text}
+              <div
+                className={`max-w-[80%] rounded-card px-4 py-3 text-lg ${
+                  entry.role === "user"
+                    ? "bg-accent-primary-light text-text-primary"
+                    : "bg-bg-surface text-text-primary shadow-sm"
+                }`}
+              >
+                {entry.text}
+              </div>
             </div>
-          </div>
-        ))}
-        {/* Show pending assistant text as it streams in */}
-        {pendingAssistantText && (
-          <div className="mb-3 flex justify-start animate-fade-in">
-            <div className="max-w-[80%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
-              {pendingAssistantText}
+          ))}
+          {/* Show pending assistant text as it streams in */}
+          {pendingAssistantText && (
+            <div className="mb-3 flex justify-start animate-fade-in">
+              <div className="max-w-[80%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
+                {pendingAssistantText}
+              </div>
             </div>
-          </div>
-        )}
-        <div ref={transcriptEndRef} />
+          )}
+          <div ref={transcriptEndRef} />
+        </div>
       </div>
     </div>
   );
