@@ -136,6 +136,7 @@ type OnboardingPhase = "none" | "conversation" | "complete";
 
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
+  const userUid = user?.uid ?? null;
   const [inviteToken, setInviteToken] = useState<string | null>(
     () => getInviteTokenFromUrl() ?? getPendingInviteToken(),
   );
@@ -147,6 +148,16 @@ function AuthGate(): ReactNode {
   );
   const [consentChecked, setConsentChecked] = useState(false);
 
+  // Reset auth-gate checks when the authenticated user changes.
+  // Without this, checks from a previous session can carry over and skip
+  // consent/onboarding for the next user.
+  useEffect(() => {
+    setConsentStatus(null);
+    setConsentChecked(false);
+    setOnboardingPhase("none");
+    setOnboardingChecked(false);
+  }, [userUid]);
+
   // Save invite token to localStorage immediately so it survives OAuth redirects
   useEffect(() => {
     if (inviteToken !== null && user === null) {
@@ -157,15 +168,22 @@ function AuthGate(): ReactNode {
   // Check if authenticated user has consented to current terms
   useEffect(() => {
     if (user !== null && inviteToken === null && !consentChecked) {
+      let cancelled = false;
       void checkTermsConsentStatus()
         .then((status) => {
+          if (cancelled) return;
           setConsentStatus(status);
           setConsentChecked(true);
         })
         .catch(() => {
+          if (cancelled) return;
           // Fail-open: if consent check fails, allow through to avoid locking users out
           setConsentChecked(true);
         });
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [user, inviteToken, consentChecked]);
 
@@ -178,17 +196,24 @@ function AuthGate(): ReactNode {
       (consentStatus === null || consentStatus.hasConsented) &&
       !onboardingChecked
     ) {
+      let cancelled = false;
       void getUserProfile()
         .then((profile) => {
+          if (cancelled) return;
           if (profile !== null && profile.name === "") {
             setOnboardingPhase("conversation");
           }
           setOnboardingChecked(true);
         })
         .catch(() => {
+          if (cancelled) return;
           // Skip onboarding if profile check fails — user can set name in Settings
           setOnboardingChecked(true);
         });
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [user, inviteToken, consentChecked, consentStatus, onboardingChecked]);
 
