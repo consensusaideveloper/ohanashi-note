@@ -5,6 +5,7 @@
 import { QUESTION_CATEGORIES } from "./questions";
 
 import type {
+  ConversationCategory,
   ConversationRecord,
   NoteEntry,
   QuestionCategory,
@@ -78,8 +79,9 @@ interface ScoredField {
   weight: number;
 }
 
-function getCategoryLabel(category: QuestionCategory | null): string {
+function getCategoryLabel(category: ConversationCategory | null): string {
   if (category === null) return "おまかせ";
+  if (category === "daily_chat") return "おしゃべり";
   const info = QUESTION_CATEGORIES.find((c) => c.id === category);
   return info?.label ?? category;
 }

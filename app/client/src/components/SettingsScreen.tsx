@@ -27,6 +27,8 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { PrintableEndingNote } from "./PrintableEndingNote";
 import { LegalDocumentViewer } from "./LegalDocumentViewer";
 import { Toast } from "./Toast";
+import { WellnessSettingsSection } from "./WellnessSettingsSection";
+import { PushNotificationSettings } from "./PushNotificationSettings";
 
 import type {
   CharacterId,
@@ -39,10 +41,12 @@ import type { ReactNode } from "react";
 
 interface SettingsScreenProps {
   lifecycleStatus: string;
+  onNavigateToWellnessPreview: () => void;
 }
 
 export function SettingsScreen({
   lifecycleStatus,
+  onNavigateToWellnessPreview,
 }: SettingsScreenProps): ReactNode {
   const { user, handleSignOut } = useAuthContext();
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
@@ -507,6 +511,12 @@ export function SettingsScreen({
             ))}
           </div>
         </section>
+
+        <WellnessSettingsSection
+          onNavigateToPreview={onNavigateToWellnessPreview}
+        />
+
+        <PushNotificationSettings />
 
         {/* Unified save button for speaking preferences + profile */}
         <section className="space-y-3">

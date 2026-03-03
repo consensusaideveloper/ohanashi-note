@@ -118,7 +118,7 @@ export function ConsentScreen({
     );
   }
 
-  const myRecord = consentStatus?.consentRecords?.[0] ?? null;
+  const myRecord = consentStatus?.consentRecords[0] ?? null;
   const hasResponded = myRecord !== null && myRecord.consented !== null;
 
   return (

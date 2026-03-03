@@ -6,7 +6,10 @@ import {
   getAllQuestionsListJson,
   getQuestionListForCategory,
 } from "../lib/questions.js";
-import type { QuestionCategory } from "../types/conversation.js";
+import type {
+  ConversationCategory,
+  QuestionCategory,
+} from "../types/conversation.js";
 
 // --- Types ---
 
@@ -17,7 +20,7 @@ export interface PreviousNoteEntry {
 }
 
 export interface SummarizeRequest {
-  category: QuestionCategory | null;
+  category: ConversationCategory | null;
   transcript: Array<{ role: "user" | "assistant"; text: string }>;
   /** Current note entries for relevant questions, enabling change-aware summaries. */
   previousNoteEntries?: PreviousNoteEntry[];
@@ -286,6 +289,45 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 名前が検出できない場合は null にしてください。`;
 }
 
+function buildDailyChatSystemPrompt(): string {
+  return `あなたは日常会話を要約するアシスタントです。
+
+以下の会話は「今日のおしゃべり（daily_chat）」モードです。エンディングノートの項目整理ではありません。
+
+【タスク】
+会話を分析し、以下のJSON形式で結果を返してください：
+
+{
+  "summary": "会話全体の要約（2〜3文、日本語）",
+  "oneLinerSummary": "会話内容を一言で表す短い要約（20〜40文字）",
+  "discussedCategories": [],
+  "keyPoints": {
+    "importantStatements": ["ユーザーが語った重要な発言（0〜5個）"],
+    "decisions": ["ユーザーが明確に決めたこと（0〜5個）"],
+    "undecidedItems": ["まだ迷っている・決まっていないこと（0〜5個）"]
+  },
+  "coveredQuestionIds": [],
+  "noteEntries": [],
+  "extractedUserName": "ユーザーの名前（検出できない場合はnull）",
+  "topicAdherence": "high",
+  "offTopicSummary": ""
+}
+
+【ルール】
+1. coveredQuestionIds は必ず空配列 [] にしてください。
+2. noteEntries は必ず空配列 [] にしてください。
+3. discussedCategories は必ず空配列 [] にしてください。
+4. 回答は日本語で記述してください。
+5. 必ず有効なJSONのみを返してください。説明文は不要です。
+6. oneLinerSummary は一覧カードの一行表示を想定し、40文字以内にしてください。
+7. クレジットカード番号、口座番号、パスワードなどの機密情報は「[保護済み]」に置き換えてください。
+
+【追加タスク - ユーザー名の検出】
+会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
+例：「太郎です」「まさこって呼んでください」→ "太郎"、"まさこ"
+名前が検出できない場合は null にしてください。`;
+}
+
 function truncateTranscript(
   transcript: Array<{ role: string; text: string }>,
 ): string {
@@ -350,13 +392,14 @@ function filterGroundedNoteEntries(
 }
 
 export function shouldFallbackToUngroundedEntries(
-  category: QuestionCategory | null,
+  category: ConversationCategory | null,
   modelNoteEntries: NoteEntry[],
   groundedNoteEntries: NoteEntry[],
 ): boolean {
   // In focused mode, losing all entries is worse UX than keeping model output.
   return (
     category !== null &&
+    category !== "daily_chat" &&
     modelNoteEntries.length > 0 &&
     groundedNoteEntries.length === 0
   );
@@ -476,7 +519,9 @@ export async function summarizeConversation(
     selectTranscriptForAnalysis(sanitizedTranscript);
 
   let systemPrompt: string;
-  if (request.category !== null) {
+  if (request.category === "daily_chat") {
+    systemPrompt = buildDailyChatSystemPrompt();
+  } else if (request.category !== null) {
     const questionListJson = getQuestionListForCategory(request.category);
     systemPrompt = buildSystemPrompt(
       request.category,
@@ -563,11 +608,13 @@ export async function summarizeConversation(
   const coveredQuestionIds = parsed.coveredQuestionIds.filter((questionId) =>
     groundedQuestionIdSet.has(questionId),
   );
+  const isDailyChat = request.category === "daily_chat";
 
   const finalized: SummarizeResponse = {
     ...parsed,
-    noteEntries: finalizedNoteEntries,
-    coveredQuestionIds,
+    noteEntries: isDailyChat ? [] : finalizedNoteEntries,
+    coveredQuestionIds: isDailyChat ? [] : coveredQuestionIds,
+    discussedCategories: isDailyChat ? [] : parsed.discussedCategories,
   };
 
   logger.info("Summarization complete", {

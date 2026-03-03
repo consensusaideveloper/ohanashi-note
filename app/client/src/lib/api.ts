@@ -1,8 +1,8 @@
 import { getIdToken } from "./auth";
 
 import type {
+  ConversationCategory,
   TranscriptEntry,
-  QuestionCategory,
   NoteEntry,
   KeyPoints,
 } from "../types/conversation";
@@ -102,7 +102,7 @@ export async function getAudioDownloadUrl(
 // --- Summarize ---
 
 export async function requestSummarize(
-  category: QuestionCategory | null,
+  category: ConversationCategory | null,
   transcript: TranscriptEntry[],
   previousNoteEntries?: NoteEntry[],
 ): Promise<SummarizeResult> {
@@ -152,7 +152,7 @@ export async function endRealtimeSession(sessionKey: string): Promise<void> {
 
 export async function requestEnhancedSummarize(
   conversationId: string,
-  category: QuestionCategory | null,
+  category: ConversationCategory | null,
   previousNoteEntries?: NoteEntry[],
 ): Promise<SummarizeResult> {
   const payload: Record<string, unknown> = { category };

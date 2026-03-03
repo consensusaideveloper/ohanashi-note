@@ -1,10 +1,12 @@
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 
 import { loadConfig } from "./config.js";
 
 import type { App } from "firebase-admin/app";
 import type { Auth, DecodedIdToken } from "firebase-admin/auth";
+import type { Messaging } from "firebase-admin/messaging";
 
 const config = loadConfig();
 
@@ -17,6 +19,7 @@ const adminApp: App = initializeApp({
 });
 
 const adminAuth: Auth = getAuth(adminApp);
+const adminMessaging: Messaging = getMessaging(adminApp);
 
 /**
  * Verify a Firebase ID token and return the decoded token.
@@ -33,3 +36,6 @@ export async function verifyIdToken(idToken: string): Promise<DecodedIdToken> {
 export async function deleteFirebaseUser(uid: string): Promise<void> {
   await adminAuth.deleteUser(uid);
 }
+
+/** Firebase Admin Messaging instance for sending push notifications. */
+export { adminMessaging };

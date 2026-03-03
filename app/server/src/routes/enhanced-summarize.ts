@@ -17,7 +17,7 @@ import {
 } from "../services/transcriber.js";
 
 import type { Context } from "hono";
-import type { QuestionCategory } from "../types/conversation.js";
+import type { ConversationCategory } from "../types/conversation.js";
 
 // --- Constants ---
 
@@ -33,6 +33,7 @@ const VALID_CATEGORIES = new Set([
   "legal",
   "trust",
   "support",
+  "daily_chat",
 ]);
 
 const TRANSCRIPTION_MODEL_NAME = "gpt-4o-mini-transcribe";
@@ -104,7 +105,8 @@ enhancedSummarizeRoute.post(
         );
       }
 
-      const validatedCategory = (category as QuestionCategory | null) ?? null;
+      const validatedCategory =
+        (category as ConversationCategory | null) ?? null;
 
       // Validate previousNoteEntries
       let validatedPreviousEntries: PreviousNoteEntry[] | undefined;

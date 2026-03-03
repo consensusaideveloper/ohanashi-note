@@ -10,6 +10,7 @@ import { getUserProfile } from "../lib/storage";
 
 import type { ReactNode } from "react";
 import type { CharacterId, SpeakingSpeed } from "../types/conversation";
+import type { UserProfile } from "../types/conversation";
 
 interface OnboardingCompleteProps {
   onStart: () => void;
@@ -17,6 +18,7 @@ interface OnboardingCompleteProps {
 
 const DEFAULT_CHARACTER_ID: CharacterId = "character-a";
 const DEFAULT_FONT_SIZE_KEY = "standard";
+const DEFAULT_FONT_SIZE_LABEL = "標準";
 const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
 const PROFILE_LOAD_MAX_RETRIES = 3;
 const PROFILE_LOAD_RETRY_DELAY_MS = 250;
@@ -27,7 +29,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-async function getUserProfileWithRetry() {
+async function getUserProfileWithRetry(): Promise<UserProfile | null> {
   for (let attempt = 0; attempt < PROFILE_LOAD_MAX_RETRIES; attempt += 1) {
     const profile = await getUserProfile();
     if (profile !== null) {
@@ -67,13 +69,10 @@ export function OnboardingComplete({
         const label =
           FONT_SIZE_LABELS[fontSize] ??
           FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ??
-          "";
+          DEFAULT_FONT_SIZE_LABEL;
         setFontSizeLabel(label);
 
-        setSpeakingSpeedLabel(
-          SPEAKING_SPEED_LABELS[speed] ??
-            SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED],
-        );
+        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {
@@ -83,7 +82,9 @@ export function OnboardingComplete({
         const character = getCharacterById(DEFAULT_CHARACTER_ID);
         setCharacterName(character.name);
         setCharacterDescription(character.description);
-        setFontSizeLabel(FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "");
+        setFontSizeLabel(
+          FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? DEFAULT_FONT_SIZE_LABEL,
+        );
         setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED]);
       })
       .finally(() => {

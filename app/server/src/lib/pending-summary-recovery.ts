@@ -14,9 +14,10 @@ import {
   transcribeFromR2,
   buildHybridTranscript,
 } from "../services/transcriber.js";
+import { recordWellnessCheckin } from "./wellness-checkin.js";
 import { logger } from "./logger.js";
 
-import type { QuestionCategory } from "../types/conversation.js";
+import type { ConversationCategory } from "../types/conversation.js";
 
 // --- Constants ---
 
@@ -82,7 +83,7 @@ async function recoverPendingSummaries(): Promise<void> {
         }
 
         let typedTranscript = transcript as TranscriptEntry[];
-        const category = row.category as QuestionCategory | null;
+        const category = row.category as ConversationCategory | null;
         let transcriptionModel: string | null = null;
 
         // Attempt re-transcription if audio is available
@@ -138,6 +139,9 @@ async function recoverPendingSummaries(): Promise<void> {
               eq(conversations.summaryStatus, "pending"),
             ),
           );
+
+        // Record wellness check-in after successful recovery (best-effort)
+        void recordWellnessCheckin(row.userId, row.id, result.oneLinerSummary);
 
         logger.info("Recovered pending summary", {
           conversationId: row.id,

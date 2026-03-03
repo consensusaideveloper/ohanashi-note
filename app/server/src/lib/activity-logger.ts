@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
 
 interface LogActivityParams {
   creatorId: string;
-  actorId: string;
+  actorId: string | null;
   actorRole: string;
   action: string;
   resourceType: string;

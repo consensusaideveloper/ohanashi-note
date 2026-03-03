@@ -17,6 +17,7 @@ import { ConsentScreen } from "./ConsentScreen";
 import { ConsentProgressTracker } from "./ConsentProgressTracker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Toast } from "./Toast";
+import { WellnessDashboardCard } from "./WellnessDashboardCard";
 
 import type { ReactNode } from "react";
 import type { FamilyConnection, LeaveCheckResult } from "../lib/family-api";
@@ -70,6 +71,7 @@ interface CreatorDetailViewProps {
   onBack: () => void;
   onViewNote: (creatorId: string, creatorName: string) => void;
   onViewTodos: (creatorId: string, creatorName: string) => void;
+  onViewWellnessHistory: (creatorId: string, creatorName: string) => void;
   onViewAccessManagement: (creatorId: string, creatorName: string) => void;
   onLeave: (creatorId: string) => void;
 }
@@ -79,6 +81,7 @@ export function CreatorDetailView({
   onBack,
   onViewNote,
   onViewTodos,
+  onViewWellnessHistory,
   onViewAccessManagement,
   onLeave,
 }: CreatorDetailViewProps): ReactNode {
@@ -215,6 +218,10 @@ export function CreatorDetailView({
     onViewTodos(connection.creatorId, connection.creatorName);
   }, [onViewTodos, connection.creatorId, connection.creatorName]);
 
+  const handleViewWellnessHistory = useCallback((): void => {
+    onViewWellnessHistory(connection.creatorId, connection.creatorName);
+  }, [onViewWellnessHistory, connection.creatorId, connection.creatorName]);
+
   // --- Leave handlers ---
   const handleOpenLeave = useCallback((): void => {
     setIsCheckingLeave(true);
@@ -314,6 +321,12 @@ export function CreatorDetailView({
           <LifecycleStatusBanner
             status={lifecycleStatus}
             creatorName={connection.creatorName}
+          />
+
+          <WellnessDashboardCard
+            creatorId={connection.creatorId}
+            creatorName={connection.creatorName}
+            onViewHistory={handleViewWellnessHistory}
           />
 
           {isLoadingLifecycle && (

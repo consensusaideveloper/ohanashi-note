@@ -15,6 +15,7 @@ export default tseslint.config(
       "playwright.config.ts",
       "vitest.config.ts",
       "e2e/**",
+      "client/public/**",
       "client/vite.config.ts",
       "server/drizzle.config.ts",
     ],
@@ -80,16 +81,29 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      // Existing architecture intentionally exports hooks/helpers from component files.
+      // Enforcing this rule globally produces noise without actionable defects.
+      "react-refresh/only-export-components": "off",
       // Detect invalid HTML element nesting (e.g. <button> inside <button>)
       "validate-jsx-nesting/no-invalid-jsx-nesting": "error",
-      // New React hooks v7 rules — warn for existing code
+      // React Hooks v7 static analysis rules are too noisy for current patterns;
+      // keep core hook rules from `recommended` and disable these for now.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/immutability": "warn",
+    },
+  },
+
+  // Gradual re-enablement: enforce stricter hooks checks on new wellness/daily-chat files.
+  {
+    files: [
+      "client/src/components/DailyChatCard.tsx",
+      "client/src/components/Wellness*.tsx",
+      "client/src/hooks/useWellness*.ts",
+    ],
+    rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/refs": "warn",
-      "react-hooks/immutability": "warn",
     },
   },
 

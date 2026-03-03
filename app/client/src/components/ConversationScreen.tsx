@@ -7,11 +7,12 @@ import { useOrientation } from "../hooks/useOrientation";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiFace } from "./AiFace";
 import { ErrorDisplay } from "./ErrorDisplay";
+import { DailyChatCard } from "./DailyChatCard";
 
 import type { ReactNode } from "react";
 import type { UseConversationReturn } from "../hooks/useConversation";
 import type { SessionQuota } from "../lib/api";
-import type { CharacterId, QuestionCategory } from "../types/conversation";
+import type { CharacterId, ConversationCategory } from "../types/conversation";
 
 /** Format remaining milliseconds as "mm:ss". */
 function formatRemainingTime(ms: number): string {
@@ -38,7 +39,7 @@ const CHARACTER_SPEAKING_GRADIENTS: Record<CharacterId, string> = {
 
 interface ConversationScreenProps {
   /** When set, starts in focused mode for this category (from EndingNote). */
-  initialCategory?: QuestionCategory;
+  initialCategory?: ConversationCategory;
   /** Called after the initialCategory has been consumed. */
   onCategoryConsumed?: () => void;
   /** Called when summarization status changes so parent can guard navigation. */
@@ -133,59 +134,72 @@ export function ConversationScreen({
     }
   }, [state, summaryStatus]);
 
-  const handleQuickStart = useCallback((): void => {
-    setIsStarting(true);
-    setDailyLimitReached(false);
-    getSessionQuota()
-      .then((quota) => {
-        setServerQuota(quota);
-        setDailyLimitReached(!quota.canStart);
-        if (!quota.canStart) {
-          // Clear pending focused category so the UI does not remain in
-          // "準備しています..." state when start is blocked.
-          onCategoryConsumed?.();
-          return;
-        }
+  const handleQuickStart = useCallback(
+    (overrideCategory?: ConversationCategory | null): void => {
+      const shouldConsumeInitialCategory =
+        overrideCategory === undefined &&
+        initialCategory !== undefined &&
+        onCategoryConsumed !== undefined;
+      const category = overrideCategory ?? initialCategory ?? null;
 
-        const category = initialCategory ?? null; // null = guided mode
-        if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
-          onCategoryConsumed();
-        }
+      setIsStarting(true);
+      setDailyLimitReached(false);
+      getSessionQuota()
+        .then((quota) => {
+          setServerQuota(quota);
+          setDailyLimitReached(!quota.canStart);
+          if (!quota.canStart) {
+            // Clear pending focused category so the UI does not remain in
+            // "準備しています..." state when start is blocked.
+            if (shouldConsumeInitialCategory) {
+              onCategoryConsumed();
+            }
+            return;
+          }
 
-        getUserProfile()
-          .then((profile) => {
-            const characterId: CharacterId =
-              profile?.characterId ?? "character-a";
-            start(characterId, category);
-          })
-          .catch(() => {
-            start("character-a", category);
-          });
-      })
-      .catch(() => {
-        // Fail-open when quota fetch fails.
-        const category = initialCategory ?? null; // null = guided mode
-        if (initialCategory !== undefined && onCategoryConsumed !== undefined) {
-          onCategoryConsumed();
-        }
-        getUserProfile()
-          .then((profile) => {
-            const characterId: CharacterId =
-              profile?.characterId ?? "character-a";
-            start(characterId, category);
-          })
-          .catch(() => {
-            start("character-a", category);
-          });
-      })
-      .finally(() => {
-        setIsStarting(false);
-      });
-  }, [start, initialCategory, onCategoryConsumed]);
+          if (shouldConsumeInitialCategory) {
+            onCategoryConsumed();
+          }
+
+          getUserProfile()
+            .then((profile) => {
+              const characterId: CharacterId =
+                profile?.characterId ?? "character-a";
+              start(characterId, category);
+            })
+            .catch(() => {
+              start("character-a", category);
+            });
+        })
+        .catch(() => {
+          // Fail-open when quota fetch fails.
+          if (shouldConsumeInitialCategory) {
+            onCategoryConsumed();
+          }
+          getUserProfile()
+            .then((profile) => {
+              const characterId: CharacterId =
+                profile?.characterId ?? "character-a";
+              start(characterId, category);
+            })
+            .catch(() => {
+              start("character-a", category);
+            });
+        })
+        .finally(() => {
+          setIsStarting(false);
+        });
+    },
+    [start, initialCategory, onCategoryConsumed],
+  );
+
+  const handleStartDailyChat = useCallback((): void => {
+    handleQuickStart("daily_chat");
+  }, [handleQuickStart]);
 
   // Auto-start conversation when navigating from "このテーマで話す"
   const hasAutoStarted = useRef(false);
-  const previousInitialCategoryRef = useRef<QuestionCategory | undefined>(
+  const previousInitialCategoryRef = useRef<ConversationCategory | undefined>(
     initialCategory,
   );
 
@@ -281,7 +295,7 @@ export function ConversationScreen({
         <button
           type="button"
           className="mt-8 min-h-14 min-w-48 rounded-full bg-accent-primary text-text-on-accent text-xl px-8 py-4 font-bold shadow-lg"
-          onClick={handleQuickStart}
+          onClick={(): void => handleQuickStart()}
         >
           新しくお話しする
         </button>
@@ -314,20 +328,21 @@ export function ConversationScreen({
             </p>
           </div>
         ) : (
-          <>
+          <div className="w-full max-w-md space-y-4">
+            <DailyChatCard onSelect={handleStartDailyChat} />
             <button
               type="button"
-              className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
-              onClick={handleQuickStart}
+              className="mx-auto min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
+              onClick={(): void => handleQuickStart()}
             >
               お話しする
             </button>
             {remaining !== undefined && (
-              <p className="mt-6 text-lg text-text-secondary">
+              <p className="text-center text-lg text-text-secondary">
                 本日あと{remaining}回お話しできます
               </p>
             )}
-          </>
+          </div>
         )}
       </div>
     );

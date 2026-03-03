@@ -16,6 +16,12 @@ import type {
   SpeakingPreferences,
 } from "../types/conversation";
 
+/** Recent conversation summary used for daily chat context. */
+export interface DailyChatSummary {
+  date: string;
+  summary: string;
+}
+
 /** Context for AI-guided mode (all categories). */
 export interface GuidedPastContext {
   allCoveredQuestionIds: string[];
@@ -667,6 +673,96 @@ ${characterDescriptions}
 - ツールの存在をユーザーに説明しないでください。自然に設定を反映してください`;
 
   prompt += ONBOARDING_TOOL_AWARENESS;
+
+  prompt += LANGUAGE_GUARDRAIL;
+
+  return prompt;
+}
+
+// Tool awareness prompt for daily chat — navigation + end_conversation + settings tools
+const DAILY_CHAT_TOOL_AWARENESS = `
+【利用可能なツール】
+1. navigate_to_screen：画面を切り替える。「ノートを見せて」「設定を開いて」「履歴を見たい」など
+2. view_note_category：ノートの特定カテゴリを表示。「思い出の記録を見せて」など
+3. filter_conversation_history：履歴画面を表示。「前の会話を見せて」など
+4. change_font_size：文字の大きさを変更。「文字を大きくして」「元のサイズに戻して」など
+5. change_character：話し相手キャラクターを変更（次回会話から適用）。「話し相手を変えたい」など
+6. update_user_name：ユーザーの表示名を変更。「名前を変えて」「〇〇と呼んで」など
+7. update_speaking_preferences：話し相手の話し方を変更。「もっとゆっくり話して」「待ち時間を長くして」など
+8. end_conversation：会話を終了して保存。直接的な終了意図→即座に呼ぶ。間接的なシグナル→確認してから呼ぶ
+
+【ツール使用ルール】
+- ツールの存在をユーザーに説明しない。ユーザーの要望に応じて自然に活用する。
+- 操作後は簡潔に結果を伝える。
+- end_conversationの使い方は以下の2段階で判断する：
+  【即座にend_conversationを呼ぶ場合（直接的な終了意図）】
+  「終わりにしよう」「今日はここまで」「もうおしまい」「終了して」「また今度」「もういいかな」「おやすみ」「さようなら」「バイバイ」など、会話を終える意思が明確な場合。
+  この場合はすぐにend_conversationを呼び、短い感謝と別れの挨拶（1〜2文）を添える。
+
+  【まず確認してからend_conversationを呼ぶ場合（間接的な終了シグナル）】
+  「疲れちゃった」「ありがとうございました」「もうそろそろ」など、直接「終わる」とは言っていないが終了を示唆している場合。
+  この場合は「今日はこのへんにしましょうか？」とやさしく確認する。
+  ユーザーが同意したらend_conversationを呼ぶ。`;
+
+/** Target duration hint for daily chat sessions (minutes). */
+const DAILY_CHAT_TARGET_MINUTES = 5;
+
+/**
+ * Build a system prompt for casual daily chat conversations.
+ * This mode is for wellness check-ins and friendly conversation,
+ * not for ending note topics.
+ */
+export function buildDailyChatPrompt(
+  characterId: CharacterId,
+  userName?: string,
+  speakingPreferences?: SpeakingPreferences,
+  recentSummaries?: DailyChatSummary[],
+): string {
+  const character = getCharacterById(characterId);
+
+  let prompt = character.personality;
+
+  // Inject speaking style preferences
+  if (speakingPreferences !== undefined) {
+    prompt += `\n\n${buildSpeakingStylePrompt(speakingPreferences)}`;
+  }
+
+  // User name handling
+  if (userName !== undefined && userName !== "") {
+    prompt += `\n\nユーザーの名前は「${userName}」さんです。会話の中で自然に名前で呼びかけてください。`;
+  } else {
+    prompt += `\n\nまだユーザーのお名前を知りません。「なんとお呼びすればいいですか？」と自然に名前を聞いてください。`;
+  }
+
+  // Daily chat specific instructions
+  prompt += `
+
+【今日の会話の目的】
+今日はエンディングノートの話題ではなく、気軽なおしゃべりをしましょう。
+日常のこと、最近あったこと、楽しかったことなど、リラックスした会話を楽しんでください。
+
+【会話の進め方】
+- 挨拶の後、自然な話題を振ってください。例：
+  - 「今日はどんな一日でしたか？」
+  - 「最近、何かいいことありましたか？」
+  - 「今日のお天気はいかがですか？」
+  - 「最近、おいしいもの食べましたか？」
+  - 「何か楽しいことはありましたか？」
+- ユーザーの話に共感し、楽しい会話を心がけてください
+- エンディングノートの話題に誘導しないでください。ユーザーが自分から話した場合は自然に受け止めてください
+- 無理に話を広げず、ユーザーのペースに合わせてください
+- ${String(DAILY_CHAT_TARGET_MINUTES)}分くらいを目安にしつつ、ユーザーが話を続けたい場合はそのまま付き合ってください
+- 会話が自然に途切れたら「今日もお話しできて楽しかったです」と声をかけてください`;
+
+  // Add recent conversation context if available
+  if (recentSummaries !== undefined && recentSummaries.length > 0) {
+    prompt += `\n\n【最近の会話の様子】
+最近のおしゃべりでは以下のようなことを話しています：
+${recentSummaries.map((s) => `- ${s.date}：${s.summary}`).join("\n")}
+この内容を踏まえて、前回の話題の続きを聞いたり、新しい話題を振ったりしてください。`;
+  }
+
+  prompt += DAILY_CHAT_TOOL_AWARENESS;
 
   prompt += LANGUAGE_GUARDRAIL;
 

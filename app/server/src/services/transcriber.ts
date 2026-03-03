@@ -35,6 +35,19 @@ interface TranscriptEntry {
   timestamp?: number;
 }
 
+function isTranscriptionSegment(value: unknown): value is TranscriptionSegment {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj["start"] === "number" &&
+    typeof obj["end"] === "number" &&
+    typeof obj["text"] === "string"
+  );
+}
+
 // --- Helpers ---
 
 /** Map R2 content type to a file extension for the OpenAI API. */
@@ -92,7 +105,11 @@ export async function transcribeFromR2(
 
     const segments: TranscriptionSegment[] = [];
     if ("segments" in response && Array.isArray(response.segments)) {
-      for (const seg of response.segments) {
+      for (const seg of response.segments as unknown[]) {
+        if (!isTranscriptionSegment(seg)) {
+          continue;
+        }
+
         segments.push({
           start: seg.start,
           end: seg.end,

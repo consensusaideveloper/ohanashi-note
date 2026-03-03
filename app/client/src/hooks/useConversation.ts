@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useReducer, useState } from "react";
 import {
   SESSION_CONFIG,
   REALTIME_TOOLS,
+  DAILY_CHAT_TOOLS,
   CROSS_CATEGORY_RECORDS_LIMIT,
   FOCUSED_SUMMARIES_LIMIT,
   GUIDED_RECENT_SUMMARIES_LIMIT,
@@ -16,6 +17,7 @@ import { getCharacterById } from "../lib/characters";
 import {
   buildSessionPrompt,
   buildGuidedSessionPrompt,
+  buildDailyChatPrompt,
 } from "../lib/prompt-builder";
 import { listFamilyMembers, listAccessPresets } from "../lib/family-api";
 import {
@@ -56,6 +58,7 @@ import type {
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";
 import type {
   CharacterId,
+  ConversationCategory,
   ConversationRecord,
   ConversationState,
   ErrorType,
@@ -229,7 +232,10 @@ export interface UseConversationReturn {
   /** Monotonic signal incremented when AI-triggered auto-end is completed. */
   autoEndSignal: number;
   /** Start a conversation. Pass null for category to use AI-guided mode. */
-  start: (characterId: CharacterId, category: QuestionCategory | null) => void;
+  start: (
+    characterId: CharacterId,
+    category: ConversationCategory | null,
+  ) => void;
   /** Stop the conversation and disconnect. */
   stop: () => void;
   /** Retry after an error. */
@@ -376,7 +382,7 @@ function isRetryableSummarizeError(error: unknown): boolean {
 
 async function requestEnhancedSummarizeWithRetry(
   conversationId: string,
-  category: QuestionCategory | null,
+  category: ConversationCategory | null,
   previousEntries: NoteEntry[],
 ): Promise<SummarizeResult> {
   let lastError: unknown = null;
@@ -425,7 +431,7 @@ export function useConversation(): UseConversationReturn {
   // Conversation persistence refs
   const conversationIdRef = useRef<string | null>(null);
   const characterIdRef = useRef<CharacterId | null>(null);
-  const categoryRef = useRef<QuestionCategory | null>(null);
+  const categoryRef = useRef<ConversationCategory | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
 
   // Past conversation context (loaded on start, used in session config)
@@ -990,7 +996,7 @@ export function useConversation(): UseConversationReturn {
 
   // Start conversation — load past context, get token, connect via WebRTC
   const start = useCallback(
-    (characterId: CharacterId, category: QuestionCategory | null): void => {
+    (characterId: CharacterId, category: ConversationCategory | null): void => {
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
       categoryRef.current = category;
@@ -1015,7 +1021,7 @@ export function useConversation(): UseConversationReturn {
                 recordsResult.status === "fulfilled" ? recordsResult.value : [];
               if (recordsResult.status === "rejected") {
                 console.error("Failed to load conversations:", {
-                  error: recordsResult.reason,
+                  error: recordsResult.reason as unknown,
                 });
               }
 
@@ -1025,13 +1031,13 @@ export function useConversation(): UseConversationReturn {
                   : null;
               if (profileResult.status === "rejected") {
                 console.error("Failed to load user profile for session:", {
-                  error: profileResult.reason,
+                  error: profileResult.reason as unknown,
                 });
               }
 
               allRecordsRef.current = allRecords;
 
-              if (category !== null) {
+              if (category !== null && category !== "daily_chat") {
                 // FOCUSED MODE: build context for a specific category
                 const pastRecords = allRecords.filter(
                   (r) => r.category === category,
@@ -1068,7 +1074,7 @@ export function useConversation(): UseConversationReturn {
                   crossCategorySummaries,
                 };
                 guidedContextRef.current = null;
-              } else {
+              } else if (category === null) {
                 // GUIDED MODE: build context across all categories
                 const allCoveredIds: string[] = [];
                 for (const record of allRecords) {
@@ -1094,6 +1100,10 @@ export function useConversation(): UseConversationReturn {
                   recentSummaries,
                 };
                 pastContextRef.current = null;
+              } else {
+                // DAILY CHAT MODE: no note-based context needed.
+                pastContextRef.current = null;
+                guidedContextRef.current = null;
               }
 
               userNameRef.current = profile?.name ?? null;
@@ -1153,7 +1163,28 @@ export function useConversation(): UseConversationReturn {
               const character = getCharacterById(characterId);
               const familyCtx = familyContextRef.current ?? undefined;
               let instructions: string;
-              if (category !== null) {
+              if (category === "daily_chat") {
+                const recentDailyChatSummaries = allRecords
+                  .filter(
+                    (r) =>
+                      r.category === "daily_chat" &&
+                      ((r.oneLinerSummary !== undefined &&
+                        r.oneLinerSummary !== "") ||
+                        (r.summary !== null && r.summary !== "")),
+                  )
+                  .slice(0, 5)
+                  .map((r) => ({
+                    date: new Date(r.startedAt).toLocaleDateString("ja-JP"),
+                    summary: r.oneLinerSummary ?? r.summary ?? "",
+                  }));
+
+                instructions = buildDailyChatPrompt(
+                  characterId,
+                  userNameRef.current ?? undefined,
+                  prefs,
+                  recentDailyChatSummaries,
+                );
+              } else if (category !== null) {
                 instructions = buildSessionPrompt(
                   characterId,
                   category,
@@ -1187,7 +1218,10 @@ export function useConversation(): UseConversationReturn {
               const sessionConfig = {
                 instructions,
                 voice: character.voice,
-                tools: [...REALTIME_TOOLS],
+                tools:
+                  category === "daily_chat"
+                    ? [...DAILY_CHAT_TOOLS]
+                    : [...REALTIME_TOOLS],
                 turn_detection: turnDetection,
               };
 
@@ -1273,6 +1307,10 @@ export function useConversation(): UseConversationReturn {
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
     const category = categoryRef.current;
+    const summarizeCategory: ConversationCategory | null = category;
+    const noteEntryCategory: QuestionCategory | null =
+      category !== null && category !== "daily_chat" ? category : null;
+    const isDailyChat = category === "daily_chat";
     const charId = characterIdRef.current;
     const recordingPromise = stopLocalRecording();
 
@@ -1294,10 +1332,9 @@ export function useConversation(): UseConversationReturn {
       dispatch({ type: "SUMMARY_PENDING" });
 
       // Gather previous note entries for change-aware summarization
-      const previousEntries = collectCurrentNoteEntries(
-        allRecordsRef.current,
-        category,
-      );
+      const previousEntries = isDailyChat
+        ? []
+        : collectCurrentNoteEntries(allRecordsRef.current, noteEntryCategory);
 
       saveConversation(record)
         .then(async () => {
@@ -1334,7 +1371,7 @@ export function useConversation(): UseConversationReturn {
             try {
               result = await requestEnhancedSummarizeWithRetry(
                 convId,
-                category,
+                summarizeCategory,
                 previousEntries,
               );
             } catch (enhancedError: unknown) {
@@ -1349,7 +1386,7 @@ export function useConversation(): UseConversationReturn {
             }
           } else {
             result = await requestSummarize(
-              category,
+              summarizeCategory,
               record.transcript,
               previousEntries,
             );
@@ -1373,12 +1410,13 @@ export function useConversation(): UseConversationReturn {
 
           await updateConversation(convId, {
             summary: result.summary,
-            coveredQuestionIds: result.coveredQuestionIds,
-            noteEntries: result.noteEntries,
+            coveredQuestionIds: isDailyChat ? [] : result.coveredQuestionIds,
+            noteEntries: isDailyChat ? [] : result.noteEntries,
             summaryStatus: "completed",
             oneLinerSummary: result.oneLinerSummary,
-            discussedCategories:
-              result.discussedCategories as QuestionCategory[],
+            discussedCategories: isDailyChat
+              ? []
+              : (result.discussedCategories as QuestionCategory[]),
             keyPoints: result.keyPoints,
             topicAdherence: result.topicAdherence,
             offTopicSummary: result.offTopicSummary,

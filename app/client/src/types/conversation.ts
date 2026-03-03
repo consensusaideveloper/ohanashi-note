@@ -38,6 +38,8 @@ export type QuestionCategory =
   | "trust"
   | "support";
 
+export type ConversationCategory = QuestionCategory | "daily_chat";
+
 export type CharacterId = "character-a" | "character-b" | "character-c";
 
 export type OpenAIVoice =
@@ -79,7 +81,7 @@ export interface KeyPoints {
 
 export interface ConversationRecord {
   id: string;
-  category: QuestionCategory | null;
+  category: ConversationCategory | null;
   characterId: CharacterId | null;
   startedAt: number;
   endedAt: number | null;

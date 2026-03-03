@@ -55,11 +55,15 @@ import { TodoDetailScreen } from "./components/TodoDetailScreen";
 import { FamilyConversationDetail } from "./components/FamilyConversationDetail";
 import { ParticipantAccessScreen } from "./components/ParticipantAccessScreen";
 import { TermsConsentScreen } from "./components/TermsConsentScreen";
+import { WellnessPreviewScreen } from "./components/WellnessPreviewScreen";
+import { WellnessHistoryScreen } from "./components/WellnessHistoryScreen";
+import { ProgressDashboard } from "./components/ProgressDashboard";
 import { checkTermsConsentStatus } from "./lib/legal-api";
 
 import type { ReactNode, ErrorInfo } from "react";
 import type { ConsentStatus } from "./lib/legal-api";
 import type {
+  ConversationCategory,
   ConfirmationLevel,
   QuestionCategory,
   SilenceDuration,
@@ -74,13 +78,16 @@ type AppScreen =
   | "detail"
   | "note"
   | "settings"
+  | "wellness-preview"
+  | "wellness-history"
   | "family-dashboard"
   | "family-creator-detail"
   | "family-note"
   | "family-todos"
   | "family-todo-detail"
   | "family-conversation-detail"
-  | "family-access-management";
+  | "family-access-management"
+  | "progress";
 
 /** Pending voice action that requires UI confirmation before executing. */
 interface VoiceConfirmAction {
@@ -446,7 +453,7 @@ function AppContent(): ReactNode {
 
   // Pending category for focused mode (from EndingNote "このテーマで話す")
   const [pendingCategory, setPendingCategory] = useState<
-    QuestionCategory | undefined
+    ConversationCategory | undefined
   >(undefined);
 
   // Voice action confirmation state (Tier 2)
@@ -460,7 +467,7 @@ function AppContent(): ReactNode {
       conversation.stop();
       const category = voiceConfirm.actionData["category"];
       if (category !== undefined) {
-        setPendingCategory(category as QuestionCategory);
+        setPendingCategory(category as ConversationCategory);
       }
       setScreen("conversation");
     } else {
@@ -528,6 +535,30 @@ function AppContent(): ReactNode {
     navigateWithGuard("settings");
   }, [navigateWithGuard]);
 
+  const handleNavigateWellnessPreview = useCallback((): void => {
+    navigateWithGuard("wellness-preview");
+  }, [navigateWithGuard]);
+
+  const handleBackFromWellnessPreview = useCallback((): void => {
+    setScreen("settings");
+  }, []);
+
+  const handleNavigateProgress = useCallback((): void => {
+    navigateWithGuard("progress");
+  }, [navigateWithGuard]);
+
+  const handleBackFromProgress = useCallback((): void => {
+    setScreen("note");
+  }, []);
+
+  const handleStartFromProgress = useCallback(
+    (category: QuestionCategory): void => {
+      setPendingCategory(category);
+      setScreen("conversation");
+    },
+    [],
+  );
+
   const handleNavigateFamily = useCallback((): void => {
     navigateWithGuard("family-dashboard");
   }, [navigateWithGuard]);
@@ -587,6 +618,15 @@ function AppContent(): ReactNode {
     [],
   );
 
+  const handleViewWellnessHistoryFromDetail = useCallback(
+    (creatorId: string, creatorName: string): void => {
+      setSelectedCreatorId(creatorId);
+      setSelectedCreatorName(creatorName);
+      setScreen("wellness-history");
+    },
+    [],
+  );
+
   const handleSelectTodo = useCallback((todoId: string): void => {
     setSelectedTodoId(todoId);
     setScreen("family-todo-detail");
@@ -604,6 +644,14 @@ function AppContent(): ReactNode {
     setSelectedTodoId(null);
     setScreen("family-todos");
   }, []);
+
+  const handleBackFromWellnessHistory = useCallback((): void => {
+    if (selectedConnection !== null) {
+      setScreen("family-creator-detail");
+    } else {
+      setScreen("family-dashboard");
+    }
+  }, [selectedConnection]);
 
   const handleViewSourceNote = useCallback((category: string): void => {
     setNoteFocusCategory(category);
@@ -990,10 +1038,25 @@ function AppContent(): ReactNode {
             onStartConversation={handleStartFromNote}
             onViewConversation={handleViewConversationFromNote}
             onPrintNote={handleOpenPrintNote}
+            onNavigateProgress={handleNavigateProgress}
           />
         );
       case "settings":
-        return <SettingsScreen lifecycleStatus={myLifecycleStatus} />;
+        return (
+          <SettingsScreen
+            lifecycleStatus={myLifecycleStatus}
+            onNavigateToWellnessPreview={handleNavigateWellnessPreview}
+          />
+        );
+      case "wellness-preview":
+        return <WellnessPreviewScreen onBack={handleBackFromWellnessPreview} />;
+      case "progress":
+        return (
+          <ProgressDashboard
+            onBack={handleBackFromProgress}
+            onStartConversation={handleStartFromProgress}
+          />
+        );
       case "family-dashboard":
         return <FamilyScreen onSelectCreator={handleSelectCreatorDetail} />;
       case "family-creator-detail":
@@ -1007,8 +1070,21 @@ function AppContent(): ReactNode {
             onBack={handleBackFromCreatorDetail}
             onViewNote={handleViewNoteFromDetail}
             onViewTodos={handleViewTodosFromDetail}
+            onViewWellnessHistory={handleViewWellnessHistoryFromDetail}
             onViewAccessManagement={handleViewAccessManagement}
             onLeave={handleLeaveFamily}
+          />
+        );
+      case "wellness-history":
+        if (selectedCreatorId === null) {
+          setScreen("family-dashboard");
+          return null;
+        }
+        return (
+          <WellnessHistoryScreen
+            creatorId={selectedCreatorId}
+            creatorName={selectedCreatorName}
+            onBack={handleBackFromWellnessHistory}
           />
         );
       case "family-note":
@@ -1095,6 +1171,9 @@ function AppContent(): ReactNode {
 
   const isTabHidden =
     screen === "detail" ||
+    screen === "wellness-preview" ||
+    screen === "wellness-history" ||
+    screen === "progress" ||
     screen === "family-creator-detail" ||
     screen === "family-todo-detail" ||
     screen === "family-conversation-detail" ||
@@ -1102,6 +1181,7 @@ function AppContent(): ReactNode {
   const isFamilyScreen =
     screen === "family-dashboard" ||
     screen === "family-creator-detail" ||
+    screen === "wellness-history" ||
     screen === "family-note" ||
     screen === "family-todos" ||
     screen === "family-todo-detail" ||

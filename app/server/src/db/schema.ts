@@ -443,3 +443,79 @@ export const todoVisibility = pgTable(
     unique("uq_todo_visibility").on(table.todoId, table.familyMemberId),
   ],
 );
+
+// --- Push Subscriptions (FCM token registration for push notifications) ---
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fcmToken: text("fcm_token").notNull(),
+    deviceType: text("device_type").notNull().default("web"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_push_subscriptions_user").on(table.userId),
+    unique("uq_push_subscriptions_token").on(table.fcmToken),
+  ],
+);
+
+// --- Notification Preferences (per-user push notification settings) ---
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  pushEnabled: boolean("push_enabled").notNull().default(true),
+  pushWellness: boolean("push_wellness").notNull().default(true),
+  pushMilestones: boolean("push_milestones").notNull().default(true),
+  pushFamily: boolean("push_family").notNull().default(true),
+  createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+});
+
+// --- Wellness Settings (per-creator opt-in wellness configuration) ---
+
+export const wellnessSettings = pgTable("wellness_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  frequency: text("frequency").notNull().default("daily"),
+  sharingLevel: text("sharing_level").notNull().default("activity_only"),
+  enabledAt: timestamp("enabled_at", tz),
+  lastNotifiedAt: timestamp("last_notified_at", tz),
+  createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+});
+
+// --- Wellness Check-ins (daily activity records for wellness tracking) ---
+
+export const wellnessCheckins = pgTable(
+  "wellness_checkins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    hadConversation: boolean("had_conversation").notNull().default(false),
+    conversationId: uuid("conversation_id"),
+    summary: text("summary"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_wellness_checkins_creator_date").on(table.creatorId, table.date),
+    unique("uq_wellness_checkins_creator_date").on(table.creatorId, table.date),
+  ],
+);

@@ -124,6 +124,10 @@ Every data-fetching hook/component must follow this pattern:
 - **Icons**: Use inline SVGs for icons. Do not add icon library dependencies (e.g., Lucide, Heroicons, Font Awesome).
 - Use standard Tailwind spacing utilities (`min-h-11`, `min-w-11`) instead of arbitrary values (`min-h-[44px]`). Use `rounded-card` for card-like containers instead of `rounded-[20px]`.
 
+## Linting Augmentation
+
+- `react-hooks/set-state-in-effect` and `react-hooks/refs` are currently `off` globally because large swaths of legacy code trigger noisy warnings; whenever you touch new files, opt in to these rules immediately (see `app/eslint.config.js`). For wellness/daily_chat additions we already enforce the warnings and refactor effects to avoid synchronous `setState` or ref writes (use cancel flags + explicit reload triggers instead). Keep that pattern in mind when expanding to other areas.
+
 ## Accessibility
 
 - Use semantic HTML elements (`<button>`, `<a>`, `<input>`) for interactive elements. Never use `<div>` or `<span>` with click handlers as button substitutes.

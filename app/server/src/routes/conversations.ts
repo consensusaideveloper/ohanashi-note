@@ -11,6 +11,8 @@ import {
   isDeletionBlocked,
 } from "../lib/lifecycle-helpers.js";
 import { deleteConversationAudioFile } from "../lib/r2-cleanup.js";
+import { recordWellnessCheckin } from "../lib/wellness-checkin.js";
+import { checkAndNotifyMilestones } from "../lib/milestone-checker.js";
 
 import type { Context } from "hono";
 
@@ -239,6 +241,27 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
         },
       });
 
+    // Record wellness check-in if summary is completed (best-effort)
+    if (values.summaryStatus === "completed") {
+      void recordWellnessCheckin(
+        userId,
+        id,
+        typeof values.oneLinerSummary === "string"
+          ? values.oneLinerSummary
+          : null,
+      );
+    }
+
+    // Check for milestone achievements (best-effort)
+    void checkAndNotifyMilestones(userId, userId).catch((error: unknown) => {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to check milestones after conversation save", {
+        userId,
+        conversationId: id,
+        error: msg,
+      });
+    });
+
     return c.json({ success: true }, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -343,6 +366,17 @@ conversationsRoute.patch("/api/conversations/:id", async (c: Context) => {
           eq(conversations.userId, userId),
         ),
       );
+
+    // Record wellness check-in when summary becomes completed (best-effort).
+    if (updates["summaryStatus"] === "completed") {
+      void recordWellnessCheckin(
+        userId,
+        conversationId,
+        typeof updates["oneLinerSummary"] === "string"
+          ? updates["oneLinerSummary"]
+          : null,
+      );
+    }
 
     return c.json({ success: true });
   } catch (error) {

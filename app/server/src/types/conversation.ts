@@ -10,3 +10,5 @@ export type QuestionCategory =
   | "legal"
   | "trust"
   | "support";
+
+export type ConversationCategory = QuestionCategory | "daily_chat";

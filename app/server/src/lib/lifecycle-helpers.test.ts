@@ -34,7 +34,6 @@ vi.mock("./logger.js", () => ({
   },
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let db: typeof import("../db/connection.js").db;
 
 beforeEach(async () => {

@@ -14,6 +14,7 @@ const VALID_CATEGORIES = new Set([
   "legal",
   "trust",
   "support",
+  "daily_chat",
 ]);
 
 const summarize = new Hono();
@@ -124,6 +125,7 @@ summarize.post("/api/summarize", async (c) => {
         | "legal"
         | "trust"
         | "support"
+        | "daily_chat"
         | null,
       transcript: transcript as Array<{
         role: "user" | "assistant";

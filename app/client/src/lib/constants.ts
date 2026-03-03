@@ -734,6 +734,39 @@ export const UI_MESSAGES = {
     detailLoadFailed: "やることの読み込みがうまくいきませんでした",
     visibilityFailed: "表示設定の変更がうまくいきませんでした",
   },
+  wellness: {
+    settingsTitle: "見守り設定",
+    settingsDescription: "ご家族があなたの会話の様子を確認できるようになります",
+    enableLabel: "見守りを有効にする",
+    frequencyLabel: "チェックの頻度",
+    sharingLevelLabel: "共有する情報",
+    noFamilyMembers: "見守り機能を使うには、先にご家族を登録してください",
+    saved: "見守り設定を保存しました",
+    saveFailed: "見守り設定の保存に失敗しました",
+    loadFailed: "見守り設定の読み込みに失敗しました",
+    dashboardTitle: "見守り",
+    dashboardDescription: "ご家族の会話の様子を確認できます",
+    lastConversation: "最後の会話",
+    currentStreak: "連続会話日数",
+    streakUnit: "日",
+    inactive: "しばらくお話ししていません",
+    inactiveDays: "日間お話ししていません",
+    active: "おげんきです",
+    noData: "まだ会話の記録がありません",
+    activityTrendTitle: "最近の様子",
+    hadConversation: "会話あり",
+    noConversation: "会話なし",
+    historyTitle: "過去の記録",
+    frequencyDaily: "毎日",
+    frequencyEvery2Days: "2日に1回",
+    frequencyEvery3Days: "3日に1回",
+    sharingActivityOnly: "会話の有無のみ",
+    sharingActivityAndSummary: "会話の有無と内容のまとめ",
+    lifecycleNotActive:
+      "この方のノートは現在特別な状態のため、見守り情報が限定されています",
+    dailyChatButton: "おしゃべりする",
+    dailyChatDescription: "気軽におしゃべりしましょう",
+  },
   creatorLifecycle: {
     bannerDeathReported:
       "ご家族から逝去の報告がありました。誤りの場合は代表者の方にご連絡ください。",
@@ -790,6 +823,42 @@ export const UI_MESSAGES = {
     playbackSpeed: "再生速度",
     seekPosition: "再生位置",
     playerLabel: "音声プレーヤー",
+  },
+  push: {
+    settingsTitle: "通知設定",
+    settingsDescription: "大事なお知らせをプッシュ通知でお届けします",
+    enableLabel: "プッシュ通知",
+    wellnessLabel: "見守りのお知らせ",
+    milestonesLabel: "ノートの進み具合",
+    familyLabel: "家族のお知らせ",
+    permissionTitle: "お知らせ機能について",
+    permissionBody:
+      "大事なお知らせをお届けするために、通知の許可をお願いします。\nいつでも設定から変更できます。",
+    permissionAllow: "通知を許可する",
+    permissionLater: "あとで",
+    permissionDenied:
+      "通知がブロックされています。端末の設定から許可してください。",
+    saved: "通知設定を保存しました",
+    saveFailed: "通知設定の保存に失敗しました",
+    loadFailed: "通知設定の読み込みに失敗しました",
+    a2hsTitle: "ホーム画面に追加",
+    a2hsBody: "ホーム画面に追加すると、通知を受け取れるようになります。",
+    a2hsStep1: "画面下の共有ボタン（□に↑）をタップ",
+    a2hsStep2: "「ホーム画面に追加」を選択",
+    a2hsDismiss: "閉じる",
+    notSupported: "お使いの端末では通知機能をご利用いただけません",
+  },
+  progress: {
+    pageTitle: "進み具合",
+    overallLabel: "全体の進み具合",
+    categoryLabel: "カテゴリ別",
+    milestonesTitle: "達成したこと",
+    startConversation: "お話しする",
+    noProgress:
+      "まだお話しした記録がありません。\nお話しすると、ここに進み具合が表示されます。",
+    loadFailed: "進み具合を読み込めませんでした",
+    retryButton: "もう一度読み込む",
+    itemUnit: "項目",
   },
   sessionWarning: "まもなくお時間です。お話をまとめましょう。",
   sessionExpired: "お時間になりましたので、今日のお話はここまでにしましょう。",
@@ -899,6 +968,57 @@ const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const ONBOARDING_TOOLS = REALTIME_TOOLS.filter((t) =>
   ONBOARDING_TOOL_NAMES.has(t.name),
 );
+
+// --- Daily chat conversation ---
+/** Tool names used during daily chat conversations. */
+const DAILY_CHAT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "navigate_to_screen",
+  "view_note_category",
+  "filter_conversation_history",
+  "change_font_size",
+  "change_character",
+  "update_user_name",
+  "update_speaking_preferences",
+  "end_conversation",
+]);
+
+/** Subset of REALTIME_TOOLS for daily chat conversations. */
+export const DAILY_CHAT_TOOLS = REALTIME_TOOLS.filter((t) =>
+  DAILY_CHAT_TOOL_NAMES.has(t.name),
+);
+
+/** Display label for the daily chat conversation category. */
+export const DAILY_CHAT_CATEGORY_LABEL = "おしゃべり";
+
+// --- Wellness settings options ---
+
+/** Frequency options for wellness check settings UI. */
+export const WELLNESS_FREQUENCY_OPTIONS: readonly {
+  readonly value: "daily" | "every_2_days" | "every_3_days";
+  readonly label: string;
+}[] = [
+  { value: "daily", label: "毎日" },
+  { value: "every_2_days", label: "2日に1回" },
+  { value: "every_3_days", label: "3日に1回" },
+] as const;
+
+/** Sharing level options for wellness check settings UI. */
+export const WELLNESS_SHARING_OPTIONS: readonly {
+  readonly value: "activity_only" | "activity_and_summary";
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  {
+    value: "activity_only",
+    label: "会話の有無のみ",
+    description: "会話をしたかどうかだけを共有します",
+  },
+  {
+    value: "activity_and_summary",
+    label: "会話の有無と内容のまとめ",
+    description: "会話の有無に加えて、話した内容のまとめも共有します",
+  },
+] as const;
 
 export const ONBOARDING_CONVERSATION_MESSAGES = {
   title: "会話でご案内します",
@@ -1021,6 +1141,55 @@ export const INVITE_SHARE_MESSAGES = {
   shareText:
     "おはなしノートの家族に登録してください。下のリンクを開いてログインすると登録できます。",
 } as const;
+
+// --- Milestone definitions ---
+/** Milestones based on overall ending-note completion progress. */
+export const MILESTONE_DEFINITIONS: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly threshold: number;
+}[] = [
+  {
+    id: "first_question",
+    label: "はじめの一歩",
+    description: "はじめての質問に答えました",
+    threshold: 1,
+  },
+  {
+    id: "ten_questions",
+    label: "10の記録",
+    description: "10項目を記録しました",
+    threshold: 10,
+  },
+  {
+    id: "quarter_complete",
+    label: "4分の1達成",
+    description: "全体の25%を記録しました",
+    threshold: 28,
+  },
+  {
+    id: "half_complete",
+    label: "半分達成！",
+    description: "全体の50%を記録しました",
+    threshold: 55,
+  },
+  {
+    id: "three_quarters",
+    label: "あと少し",
+    description: "全体の75%を記録しました",
+    threshold: 83,
+  },
+  {
+    id: "complete",
+    label: "すべて達成！",
+    description: "すべての項目を記録しました",
+    threshold: 110,
+  },
+] as const;
+
+/** localStorage key for tracking A2HS guide dismissal. */
+export const A2HS_GUIDE_DISMISSED_KEY = "a2hs_guide_dismissed";
 
 // --- Text display ---
 export const TRANSCRIPT_PREVIEW_MAX_LENGTH = 80;

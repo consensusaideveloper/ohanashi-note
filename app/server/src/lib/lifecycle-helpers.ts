@@ -11,9 +11,11 @@ import {
   lifecycleActionLog,
   noteLifecycle,
   notifications,
+  notificationPreferences,
   users,
 } from "../db/schema.js";
 import { deleteUserAudioFiles } from "./r2-cleanup.js";
+import { sendPushToUsers } from "./push-sender.js";
 import { logger } from "./logger.js";
 
 // --- Creator name lookup ---
@@ -78,8 +80,58 @@ export async function getActiveFamilyMembers(
 
 // --- Notification helper ---
 
+/** Notification type to preference field mapping for push filtering. */
+const NOTIFICATION_PUSH_CATEGORY: Record<
+  string,
+  "pushWellness" | "pushFamily"
+> = {
+  wellness_inactive: "pushWellness",
+  wellness_alert: "pushWellness",
+};
+
+/** Default push preference category for notification types not explicitly mapped. */
+const DEFAULT_PUSH_CATEGORY = "pushFamily" as const;
+
+/**
+ * Filter user IDs to only those with the relevant push preference enabled.
+ * Users without a preference row default to enabled.
+ */
+async function filterByPushPreference(
+  userIds: string[],
+  preferenceField: "pushWellness" | "pushFamily",
+): Promise<string[]> {
+  if (userIds.length === 0) return [];
+
+  const eligible: string[] = [];
+
+  for (const userId of userIds) {
+    try {
+      const prefs = await db.query.notificationPreferences.findFirst({
+        where: eq(notificationPreferences.userId, userId),
+        columns: { pushEnabled: true, pushWellness: true, pushFamily: true },
+      });
+
+      // No row means defaults (all enabled)
+      if (prefs === undefined) {
+        eligible.push(userId);
+        continue;
+      }
+
+      if (prefs.pushEnabled && prefs[preferenceField]) {
+        eligible.push(userId);
+      }
+    } catch {
+      // Best-effort: include user if preference check fails
+      eligible.push(userId);
+    }
+  }
+
+  return eligible;
+}
+
 /**
  * Create a notification for each specified user.
+ * Also sends push notifications to users with the relevant preference enabled.
  * Best-effort: logs errors but does not throw — notifications should never
  * block critical lifecycle operations.
  */
@@ -108,6 +160,26 @@ export async function notifyFamilyMembers(
       type,
       relatedCreatorId,
       memberCount: memberUserIds.length,
+      error: msg,
+    });
+  }
+
+  // Send push notifications (best-effort)
+  try {
+    const pushCategory =
+      NOTIFICATION_PUSH_CATEGORY[type] ?? DEFAULT_PUSH_CATEGORY;
+    const eligibleUserIds = await filterByPushPreference(
+      memberUserIds,
+      pushCategory,
+    );
+    if (eligibleUserIds.length > 0) {
+      void sendPushToUsers(eligibleUserIds, title, message, { type });
+    }
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to send push notifications to family", {
+      type,
+      relatedCreatorId,
       error: msg,
     });
   }
