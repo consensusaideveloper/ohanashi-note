@@ -1014,8 +1014,12 @@ export function useConversation(): UseConversationReturn {
               const allRecords =
                 recordsResult.status === "fulfilled" ? recordsResult.value : [];
               if (recordsResult.status === "rejected") {
+                const recordsErrorMessage =
+                  recordsResult.reason instanceof Error
+                    ? recordsResult.reason.message
+                    : "Unknown error";
                 console.error("Failed to load conversations:", {
-                  error: recordsResult.reason,
+                  error: recordsErrorMessage,
                 });
               }
 
@@ -1024,8 +1028,12 @@ export function useConversation(): UseConversationReturn {
                   ? profileResult.value
                   : null;
               if (profileResult.status === "rejected") {
+                const profileErrorMessage =
+                  profileResult.reason instanceof Error
+                    ? profileResult.reason.message
+                    : "Unknown error";
                 console.error("Failed to load user profile for session:", {
-                  error: profileResult.reason,
+                  error: profileErrorMessage,
                 });
               }
 

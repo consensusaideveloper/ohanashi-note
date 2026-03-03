@@ -9,7 +9,11 @@ import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
 
 import type { ReactNode } from "react";
-import type { CharacterId, SpeakingSpeed } from "../types/conversation";
+import type {
+  CharacterId,
+  SpeakingSpeed,
+  UserProfile,
+} from "../types/conversation";
 
 interface OnboardingCompleteProps {
   onStart: () => void;
@@ -27,7 +31,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-async function getUserProfileWithRetry() {
+async function getUserProfileWithRetry(): Promise<UserProfile | null> {
   for (let attempt = 0; attempt < PROFILE_LOAD_MAX_RETRIES; attempt += 1) {
     const profile = await getUserProfile();
     if (profile !== null) {
@@ -70,10 +74,7 @@ export function OnboardingComplete({
           "";
         setFontSizeLabel(label);
 
-        setSpeakingSpeedLabel(
-          SPEAKING_SPEED_LABELS[speed] ??
-            SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED],
-        );
+        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {

@@ -46,6 +46,33 @@ function getFileExtension(contentType: string): string {
   return "webm";
 }
 
+function parseTranscriptionSegments(value: unknown): TranscriptionSegment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsedSegments: TranscriptionSegment[] = [];
+  for (const rawSegment of value) {
+    if (typeof rawSegment !== "object" || rawSegment === null) {
+      continue;
+    }
+    const candidate = rawSegment as Record<string, unknown>;
+    const start = candidate["start"];
+    const end = candidate["end"];
+    const text = candidate["text"];
+
+    if (
+      typeof start === "number" &&
+      typeof end === "number" &&
+      typeof text === "string"
+    ) {
+      parsedSegments.push({ start, end, text });
+    }
+  }
+
+  return parsedSegments;
+}
+
 // --- Main functions ---
 
 /**
@@ -90,16 +117,8 @@ export async function transcribeFromR2(
       response_format: "json",
     });
 
-    const segments: TranscriptionSegment[] = [];
-    if ("segments" in response && Array.isArray(response.segments)) {
-      for (const seg of response.segments) {
-        segments.push({
-          start: seg.start,
-          end: seg.end,
-          text: seg.text,
-        });
-      }
-    }
+    const responseRecord = response as unknown as Record<string, unknown>;
+    const segments = parseTranscriptionSegments(responseRecord["segments"]);
 
     logger.info("Re-transcription completed", {
       audioStorageKey,

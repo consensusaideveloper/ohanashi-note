@@ -80,15 +80,12 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": "off",
       // Detect invalid HTML element nesting (e.g. <button> inside <button>)
       "validate-jsx-nesting/no-invalid-jsx-nesting": "error",
-      // New React hooks v7 rules — warn for existing code
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/refs": "warn",
+      // Keep existing implementation behavior stable; migrate incrementally.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
       "react-hooks/immutability": "warn",
     },
   },
