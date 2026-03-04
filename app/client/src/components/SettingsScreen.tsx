@@ -161,13 +161,11 @@ export function SettingsScreen({
         applyProfileUpdate(
           {
             ...profile,
-            speakingSpeed:
-              profile.speakingSpeed ?? ("normal" as SpeakingSpeed),
+            speakingSpeed: profile.speakingSpeed ?? ("normal" as SpeakingSpeed),
             silenceDuration:
               profile.silenceDuration ?? ("normal" as SilenceDuration),
             confirmationLevel:
-              profile.confirmationLevel ??
-              ("normal" as ConfirmationLevel),
+              profile.confirmationLevel ?? ("normal" as ConfirmationLevel),
           },
           true,
         );

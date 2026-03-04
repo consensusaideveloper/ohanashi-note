@@ -78,8 +78,7 @@ function getProfileSpeakingPreferences(
   return {
     speakingSpeed: profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED,
     silenceDuration: profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION,
-    confirmationLevel:
-      profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL,
+    confirmationLevel: profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL,
   };
 }
 
@@ -541,7 +540,10 @@ export function useOnboardingConversation({
   }, []);
 
   const persistOnboardingConversation = useCallback(
-    (transcript: readonly TranscriptEntry[], characterId: CharacterId): void => {
+    (
+      transcript: readonly TranscriptEntry[],
+      characterId: CharacterId,
+    ): void => {
       const hasUserContent = transcript.some(
         (entry) => entry.role === "user" && entry.text.trim().length > 0,
       );

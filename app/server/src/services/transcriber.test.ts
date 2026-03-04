@@ -6,8 +6,16 @@ describe("buildHybridTranscript", () => {
   it("appends a synthetic user turn when original transcript has no user turns", () => {
     const result = buildHybridTranscript(
       [
-        { role: "assistant", text: "好きな食べ物はありますか", timestamp: 1000 },
-        { role: "assistant", text: "ほかにもあれば教えてください", timestamp: 2000 },
+        {
+          role: "assistant",
+          text: "好きな食べ物はありますか",
+          timestamp: 1000,
+        },
+        {
+          role: "assistant",
+          text: "ほかにもあれば教えてください",
+          timestamp: 2000,
+        },
       ],
       {
         text: "みかんとそばが好きです",
@@ -26,7 +34,11 @@ describe("buildHybridTranscript", () => {
   it("fills empty user turns instead of dropping re-transcribed text", () => {
     const result = buildHybridTranscript(
       [
-        { role: "assistant", text: "好きな食べ物を教えてください", timestamp: 1000 },
+        {
+          role: "assistant",
+          text: "好きな食べ物を教えてください",
+          timestamp: 1000,
+        },
         { role: "user", text: "", timestamp: 2000 },
         { role: "assistant", text: "飲み物も教えてください", timestamp: 3000 },
         { role: "user", text: "", timestamp: 4000 },

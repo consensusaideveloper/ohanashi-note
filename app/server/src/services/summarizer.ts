@@ -397,8 +397,8 @@ export function filterSubstantiveDecisions(decisions: string[]): string[] {
     const normalized = normalizeForGrounding(decision);
     if (normalized.length === 0) continue;
 
-    const isNonSubstantive = NON_SUBSTANTIVE_DECISION_PATTERNS.some(
-      (pattern) => normalized.includes(normalizeForGrounding(pattern)),
+    const isNonSubstantive = NON_SUBSTANTIVE_DECISION_PATTERNS.some((pattern) =>
+      normalized.includes(normalizeForGrounding(pattern)),
     );
     if (isNonSubstantive) continue;
     if (seen.has(normalized)) continue;
@@ -420,10 +420,9 @@ export function filterMeaningfulImportantStatements(
     const normalized = normalizeForGrounding(trimmed);
     if (normalized.length < 3) continue;
 
-    const isNonSubstantive =
-      NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS.some((pattern) =>
-        normalized.includes(normalizeForGrounding(pattern)),
-      );
+    const isNonSubstantive = NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS.some(
+      (pattern) => normalized.includes(normalizeForGrounding(pattern)),
+    );
     if (isNonSubstantive) continue;
     if (seen.has(normalized)) continue;
     seen.add(normalized);
@@ -446,7 +445,8 @@ function splitUserStatementCandidates(
     const parts =
       entry.text
         .split(/\r?\n/)
-        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]) ?? [];
+        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]) ??
+      [];
 
     for (const part of parts) {
       const trimmed = part.trim();
@@ -555,7 +555,10 @@ export function extractFallbackImportantStatements(
     .filter((text) => filterMeaningfulImportantStatements([text]).length > 0)
     .sort((a, b) => b.length - a.length)[0];
 
-  if (longestUserTurn !== undefined && !overlapsGroundedNoteEntry(longestUserTurn, noteEntries)) {
+  if (
+    longestUserTurn !== undefined &&
+    !overlapsGroundedNoteEntry(longestUserTurn, noteEntries)
+  ) {
     return [longestUserTurn];
   }
 
@@ -825,7 +828,10 @@ export async function summarizeConversation(
   const finalizedImportantStatements =
     filteredImportantStatements.length > 0
       ? filteredImportantStatements
-      : extractFallbackImportantStatements(userOnlyTranscript, finalizedNoteEntries);
+      : extractFallbackImportantStatements(
+          userOnlyTranscript,
+          finalizedNoteEntries,
+        );
 
   const finalized: SummarizeResponse = {
     ...parsed,

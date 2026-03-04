@@ -354,9 +354,7 @@ function splitTextAcrossTurns(fullText: string, turnCount: number): string[] {
       const bucketIndex = Math.min(sentenceIndex, turnCount - 1);
       const currentBucket = buckets[bucketIndex] ?? "";
       buckets[bucketIndex] =
-        currentBucket.length > 0
-          ? `${currentBucket} ${sentence}`
-          : sentence;
+        currentBucket.length > 0 ? `${currentBucket} ${sentence}` : sentence;
       if (bucketIndex < turnCount - 1) {
         sentenceIndex += 1;
       }
@@ -424,7 +422,11 @@ function buildSimpleReplacementTranscript(
       const idx = userIndices[i];
       const originalEntry = idx !== undefined ? result[idx] : undefined;
       const chunk = chunks[i];
-      if (idx === undefined || originalEntry === undefined || chunk === undefined) {
+      if (
+        idx === undefined ||
+        originalEntry === undefined ||
+        chunk === undefined
+      ) {
         continue;
       }
       result[idx] = { ...originalEntry, text: chunk };

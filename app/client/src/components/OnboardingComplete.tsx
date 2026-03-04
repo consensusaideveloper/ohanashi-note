@@ -69,8 +69,7 @@ export function OnboardingComplete({
         const charId = profile?.characterId ?? DEFAULT_CHARACTER_ID;
         const fontSize = profile?.fontSize ?? DEFAULT_FONT_SIZE_KEY;
         const speed = profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED;
-        const silence =
-          profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION;
+        const silence = profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION;
         const confirmation =
           profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL;
 
@@ -88,9 +87,7 @@ export function OnboardingComplete({
 
         setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
         setSilenceDurationLabel(SILENCE_DURATION_LABELS[silence]);
-        setConfirmationLevelLabel(
-          CONFIRMATION_LEVEL_LABELS[confirmation],
-        );
+        setConfirmationLevelLabel(CONFIRMATION_LEVEL_LABELS[confirmation]);
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {

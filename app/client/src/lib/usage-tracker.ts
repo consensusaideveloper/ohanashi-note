@@ -55,6 +55,15 @@ export function incrementDailySession(): void {
   writeUsage(usage);
 }
 
+/** Clear the daily session usage from localStorage. */
+export function clearDailySessionUsage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Silently fail if localStorage is unavailable
+  }
+}
+
 /** Get the number of remaining sessions for today. */
 export function getRemainingSessionCount(): number {
   const usage = readUsage();

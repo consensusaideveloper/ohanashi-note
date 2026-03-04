@@ -839,7 +839,8 @@ export function useConversation(): UseConversationReturn {
 
       const updatedTurnDetection = {
         ...turnDetectionRef.current,
-        silence_duration_ms: SILENCE_DURATION_MS_MAP[preferences.silenceDuration],
+        silence_duration_ms:
+          SILENCE_DURATION_MS_MAP[preferences.silenceDuration],
       };
       turnDetectionRef.current = updatedTurnDetection;
 

@@ -118,9 +118,9 @@ export function useWebRTC(): UseWebRTCReturn {
   const remoteAudioContextRef = useRef<AudioContext | null>(null);
   const remoteAudioAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const remoteAudioLevelTimerRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
+  const remoteAudioLevelTimerRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
   const remoteAudioEpochRef = useRef(0);
   const remoteAudioPendingEpochRef = useRef<number | null>(null);
   const remoteAudioLastActiveAtRef = useRef(0);
@@ -222,17 +222,20 @@ export function useWebRTC(): UseWebRTCReturn {
     setAudioLevel(0);
   }, []);
 
-  const emitRemoteAudioCompleted = useCallback((completedEpoch: number): void => {
-    if (remoteAudioPendingEpochRef.current !== null) {
-      remoteAudioPendingEpochRef.current = null;
-    }
-    for (const subscription of remoteAudioEndHandlersRef.current) {
-      if (subscription.targetEpoch <= completedEpoch) {
-        remoteAudioEndHandlersRef.current.delete(subscription);
-        subscription.handler();
+  const emitRemoteAudioCompleted = useCallback(
+    (completedEpoch: number): void => {
+      if (remoteAudioPendingEpochRef.current !== null) {
+        remoteAudioPendingEpochRef.current = null;
       }
-    }
-  }, []);
+      for (const subscription of remoteAudioEndHandlersRef.current) {
+        if (subscription.targetEpoch <= completedEpoch) {
+          remoteAudioEndHandlersRef.current.delete(subscription);
+          subscription.handler();
+        }
+      }
+    },
+    [],
+  );
 
   const stopRemoteAudioMonitor = useCallback((): void => {
     if (remoteAudioLevelTimerRef.current !== null) {
@@ -421,7 +424,8 @@ export function useWebRTC(): UseWebRTCReturn {
             audioElementRef.current = audio;
             const handleEnded = (): void => {
               const completedEpoch =
-                remoteAudioPendingEpochRef.current ?? remoteAudioEpochRef.current;
+                remoteAudioPendingEpochRef.current ??
+                remoteAudioEpochRef.current;
               if (completedEpoch > 0) {
                 emitRemoteAudioCompleted(completedEpoch);
               }
@@ -506,7 +510,12 @@ export function useWebRTC(): UseWebRTCReturn {
         setStatus("failed");
       }
     },
-    [emitRemoteAudioCompleted, releaseResources, startAudioLevelMonitor, startRemoteAudioMonitor],
+    [
+      emitRemoteAudioCompleted,
+      releaseResources,
+      startAudioLevelMonitor,
+      startRemoteAudioMonitor,
+    ],
   );
 
   // Clean up on unmount

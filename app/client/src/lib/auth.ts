@@ -10,6 +10,7 @@ import { firebaseAuth } from "./firebase";
 import type { User, Unsubscribe } from "firebase/auth";
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 /**
  * Sign in with Google using a popup window.

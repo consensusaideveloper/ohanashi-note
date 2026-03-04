@@ -83,10 +83,7 @@ describe("filterSubstantiveDecisions", () => {
 
   it("deduplicates surviving decisions", () => {
     expect(
-      filterSubstantiveDecisions([
-        "遺言書を作成する",
-        "遺言書を作成する ",
-      ]),
+      filterSubstantiveDecisions(["遺言書を作成する", "遺言書を作成する "]),
     ).toEqual(["遺言書を作成する"]);
   });
 });
@@ -130,7 +127,10 @@ describe("extractFallbackImportantStatements", () => {
       extractFallbackImportantStatements(
         [
           { role: "assistant", text: "好きなものを教えてください" },
-          { role: "user", text: "好きな食べ物はそばです。写真を撮るのが好きです。" },
+          {
+            role: "user",
+            text: "好きな食べ物はそばです。写真を撮るのが好きです。",
+          },
         ],
         [
           {

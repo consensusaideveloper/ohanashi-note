@@ -78,10 +78,7 @@ describe("buildFlexibleNoteItems", () => {
       {
         conversationId: "conv-1",
         startedAt: 1000,
-        importantStatements: [
-          "好きな食べ物はそば",
-          "写真を撮るのが好き",
-        ],
+        importantStatements: ["好きな食べ物はそば", "写真を撮るのが好き"],
         noteEntries: [
           {
             answer: "好きな食べ物はそば",
