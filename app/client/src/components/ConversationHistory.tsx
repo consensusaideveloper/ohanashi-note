@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 
 import { getCharacterShortName } from "../lib/characters";
 import { TRANSCRIPT_PREVIEW_MAX_LENGTH, UI_MESSAGES } from "../lib/constants";
-import { listConversations } from "../lib/storage";
+import {
+  listConversations,
+  subscribeToConversationUpdates,
+} from "../lib/storage";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 
 import type { ReactNode } from "react";
@@ -206,6 +209,12 @@ export function ConversationHistory({
 
   useEffect(() => {
     loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    return subscribeToConversationUpdates(() => {
+      loadConversations();
+    });
   }, [loadConversations]);
 
   const filteredConversations = useMemo(() => {

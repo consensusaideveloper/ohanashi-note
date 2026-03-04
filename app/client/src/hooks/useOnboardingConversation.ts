@@ -20,13 +20,25 @@ import {
 } from "../lib/constants";
 import { getAcceptedUserTranscript } from "../lib/audio";
 import { getCharacterById } from "../lib/characters";
+import { computeContentHash } from "../lib/integrity";
 import {
   hasExplicitConversationEndIntent,
   hasOnboardingCompletionSignal,
 } from "../lib/conversation-end";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
-import { getUserProfile, saveUserProfile } from "../lib/storage";
-import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
+import {
+  getConversation,
+  getUserProfile,
+  listConversations,
+  saveConversation,
+  saveUserProfile,
+  updateConversation,
+} from "../lib/storage";
+import {
+  connectRealtimeSession,
+  endRealtimeSession,
+  requestSummarize,
+} from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";
@@ -34,8 +46,11 @@ import type {
   CharacterId,
   ConfirmationLevel,
   ConversationState,
+  ConversationRecord,
   ErrorType,
   FontSizeLevel,
+  NoteEntry,
+  QuestionCategory,
   SilenceDuration,
   SpeakingPreferences,
   SpeakingSpeed,
@@ -66,6 +81,36 @@ function getProfileSpeakingPreferences(
     confirmationLevel:
       profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL,
   };
+}
+
+function collectCurrentNoteEntries(
+  records: readonly ConversationRecord[],
+): NoteEntry[] {
+  if (records.length === 0) return [];
+
+  const entryMap = new Map<string, NoteEntry>();
+  const sorted = [...records].sort((a, b) => a.startedAt - b.startedAt);
+
+  for (const record of sorted) {
+    if (record.noteEntries === undefined) continue;
+    for (const entry of record.noteEntries) {
+      entryMap.set(entry.questionId, entry);
+    }
+  }
+
+  return Array.from(entryMap.values());
+}
+
+function shouldPersistOnboardingConversation(result: {
+  noteEntries: NoteEntry[];
+  discussedCategories: string[];
+  topicAdherence: "high" | "medium" | "low";
+}): boolean {
+  return (
+    result.noteEntries.length > 0 ||
+    result.discussedCategories.length > 0 ||
+    result.topicAdherence !== "low"
+  );
 }
 
 function normalizePreferenceToken(value: string): string {
@@ -494,6 +539,83 @@ export function useOnboardingConversation({
       }),
     ]);
   }, []);
+
+  const persistOnboardingConversation = useCallback(
+    (transcript: readonly TranscriptEntry[], characterId: CharacterId): void => {
+      const hasUserContent = transcript.some(
+        (entry) => entry.role === "user" && entry.text.trim().length > 0,
+      );
+      if (!hasUserContent || transcript.length === 0) {
+        return;
+      }
+
+      const firstEntry = transcript[0];
+      const conversationId = crypto.randomUUID();
+      const recordTranscript = [...transcript];
+      const startedAt =
+        firstEntry !== undefined ? firstEntry.timestamp : Date.now();
+      const endedAt = Date.now();
+
+      listConversations()
+        .then((records) => {
+          const previousEntries = collectCurrentNoteEntries(records);
+          return requestSummarize(null, recordTranscript, previousEntries);
+        })
+        .then(async (result) => {
+          if (!shouldPersistOnboardingConversation(result)) {
+            return;
+          }
+
+          const record: ConversationRecord = {
+            id: conversationId,
+            category: null,
+            characterId,
+            startedAt,
+            endedAt,
+            transcript: recordTranscript,
+            summary: result.summary,
+            coveredQuestionIds: result.coveredQuestionIds,
+            noteEntries: result.noteEntries,
+            summaryStatus: "completed",
+            oneLinerSummary: result.oneLinerSummary,
+            discussedCategories:
+              result.discussedCategories as QuestionCategory[],
+            keyPoints: result.keyPoints,
+            topicAdherence: result.topicAdherence,
+            offTopicSummary: result.offTopicSummary,
+            audioAvailable: false,
+          };
+
+          await saveConversation(record);
+
+          const fullRecord = await getConversation(conversationId);
+          const integrityHash = await computeContentHash(fullRecord ?? record);
+          await updateConversation(conversationId, {
+            integrityHash,
+            integrityHashedAt: Date.now(),
+          });
+
+          if (
+            result.extractedUserName !== undefined &&
+            result.extractedUserName !== null &&
+            result.extractedUserName !== ""
+          ) {
+            const currentProfile = await getUserProfile();
+            await saveUserProfile({
+              name: result.extractedUserName,
+              characterId: currentProfile?.characterId,
+              updatedAt: Date.now(),
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to persist onboarding conversation:", {
+            error,
+          });
+        });
+    },
+    [],
+  );
 
   const applySpeakingPreferencesToSession = useCallback(
     (preferences: SpeakingPreferences): void => {
@@ -1036,6 +1158,10 @@ export function useOnboardingConversation({
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
     resetMicGuard();
+    const currentTranscript = state.transcript;
+    const currentCharacterId = state.characterId;
+
+    persistOnboardingConversation(currentTranscript, currentCharacterId);
 
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
@@ -1058,6 +1184,9 @@ export function useOnboardingConversation({
       onCompleteRef.current();
     });
   }, [
+    state.transcript,
+    state.characterId,
+    persistOnboardingConversation,
     webrtc,
     resetEndConversationFlow,
     waitForPendingProfileSaves,

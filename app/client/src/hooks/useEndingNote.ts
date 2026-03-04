@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 
-import { listConversations } from "../lib/storage";
+import {
+  listConversations,
+  subscribeToConversationUpdates,
+} from "../lib/storage";
 import { getQuestionsByCategory, QUESTION_CATEGORIES } from "../lib/questions";
 
 import type {
@@ -165,6 +168,12 @@ export function useEndingNote(): UseEndingNoteReturn {
         setIsLoading(false);
       });
   }, [refreshKey]);
+
+  useEffect(() => {
+    return subscribeToConversationUpdates(() => {
+      refresh();
+    });
+  }, [refresh]);
 
   return { categories, isLoading, error, refresh };
 }

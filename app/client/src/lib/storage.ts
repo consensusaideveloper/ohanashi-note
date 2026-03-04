@@ -10,8 +10,16 @@ import type {
 } from "../types/conversation";
 
 type UserProfileUpdateListener = (updates: Partial<UserProfile>) => void;
+type ConversationUpdateListener = () => void;
 
 const userProfileUpdateListeners = new Set<UserProfileUpdateListener>();
+const conversationUpdateListeners = new Set<ConversationUpdateListener>();
+
+function notifyConversationUpdated(): void {
+  for (const listener of conversationUpdateListeners) {
+    listener();
+  }
+}
 
 // --- Server response types ---
 
@@ -82,6 +90,7 @@ export async function saveConversation(
     method: "POST",
     body: JSON.stringify(record),
   });
+  notifyConversationUpdated();
 }
 
 export async function updateConversation(
@@ -92,6 +101,7 @@ export async function updateConversation(
     method: "PATCH",
     body: JSON.stringify(updates),
   });
+  notifyConversationUpdated();
 }
 
 export async function getConversation(
@@ -120,6 +130,16 @@ export async function deleteConversation(id: string): Promise<void> {
   await fetchWithAuth(`/api/conversations/${id}`, {
     method: "DELETE",
   });
+  notifyConversationUpdated();
+}
+
+export function subscribeToConversationUpdates(
+  listener: ConversationUpdateListener,
+): () => void {
+  conversationUpdateListeners.add(listener);
+  return () => {
+    conversationUpdateListeners.delete(listener);
+  };
 }
 
 // --- Filtered queries (computed client-side from full list) ---
