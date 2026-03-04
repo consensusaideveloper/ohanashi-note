@@ -3,6 +3,7 @@ import { useEffect, useCallback, useRef } from "react";
 import { useFamilyEndingNote } from "../hooks/useFamilyEndingNote";
 import { SETTINGS_MESSAGES, UI_MESSAGES } from "../lib/constants";
 import { CategoryNoteSection } from "./CategoryNoteSection";
+import { ConversationInsightsSection } from "./ConversationInsightsSection";
 
 import type { ReactNode } from "react";
 
@@ -23,8 +24,14 @@ export function FamilyNoteView({
   onPrintNote,
   focusCategory,
 }: FamilyNoteViewProps): ReactNode {
-  const { categories, isRepresentative, isLoading, error, refresh } =
-    useFamilyEndingNote(creatorId);
+  const {
+    categories,
+    flexibleNotes,
+    isRepresentative,
+    isLoading,
+    error,
+    refresh,
+  } = useFamilyEndingNote(creatorId);
   const hasScrolledRef = useRef(false);
 
   // Refresh data when the view becomes visible
@@ -159,6 +166,12 @@ export function FamilyNoteView({
       {/* Category sections */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
         <div className="space-y-3 max-w-lg mx-auto">
+          {flexibleNotes.length > 0 && (
+            <ConversationInsightsSection
+              items={flexibleNotes}
+              onViewConversation={onViewConversation}
+            />
+          )}
           {categories.length === 0 && (
             <div className="rounded-card border border-border-light bg-bg-surface p-6 text-center space-y-2">
               <p className="text-lg text-text-secondary">

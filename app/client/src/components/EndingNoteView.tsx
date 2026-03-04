@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useEndingNote } from "../hooks/useEndingNote";
 import { SETTINGS_MESSAGES, UI_MESSAGES } from "../lib/constants";
 import { CategoryNoteSection } from "./CategoryNoteSection";
+import { ConversationInsightsSection } from "./ConversationInsightsSection";
 
 import type { ReactNode } from "react";
 import type { QuestionCategory } from "../types/conversation";
@@ -18,7 +19,8 @@ export function EndingNoteView({
   onViewConversation,
   onPrintNote,
 }: EndingNoteViewProps): ReactNode {
-  const { categories, isLoading, error, refresh } = useEndingNote();
+  const { categories, flexibleNotes, isLoading, error, refresh } =
+    useEndingNote();
 
   // Refresh data when the view becomes visible
   useEffect(() => {
@@ -98,6 +100,12 @@ export function EndingNoteView({
       {/* Category sections */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
         <div className="space-y-3 max-w-lg mx-auto">
+          {flexibleNotes.length > 0 && (
+            <ConversationInsightsSection
+              items={flexibleNotes}
+              onViewConversation={onViewConversation}
+            />
+          )}
           {categories.map((cat) => (
             <CategoryNoteSection
               key={cat.category}

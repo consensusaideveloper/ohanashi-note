@@ -53,6 +53,65 @@ export interface SummarizeResponse {
 const MAX_TRANSCRIPT_CHARS = 30_000;
 const MODEL = "gpt-5-nano";
 const TEMPERATURE = 1;
+const NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS = [
+  "こんにちは",
+  "こんばんは",
+  "おはよう",
+  "よろしく",
+  "ありがとうございます",
+  "ありがとう",
+  "わかりました",
+  "そうですね",
+  "大丈夫です",
+  "今日はここまで",
+  "今日は会話を終",
+  "会話を終",
+  "会話を終了",
+  "お話を終",
+  "話を終",
+  "ここで終",
+  "ここまでにする",
+  "また今度",
+  "またこんど",
+  "いったん終",
+  "次の画面",
+  "画面を切り替",
+  "設定を完了",
+  "設定が完了",
+  "設定を終",
+  "設定を済ませ",
+  "話す速さ",
+  "待ち時間",
+  "確認の頻度",
+  "文字の大きさ",
+  "話し相手",
+  "キャラクター",
+] as const;
+const NON_SUBSTANTIVE_DECISION_PATTERNS = [
+  "今日はここまで",
+  "今日は会話を終",
+  "会話を終",
+  "会話を終了",
+  "お話を終",
+  "話を終",
+  "ここで終",
+  "ここまでにする",
+  "また今度",
+  "またこんど",
+  "いったん終",
+  "次の画面",
+  "画面を切り替",
+  "設定を完了",
+  "設定が完了",
+  "設定を終",
+  "設定を済ませ",
+  "話す速さ",
+  "待ち時間",
+  "確認の頻度",
+  "文字の大きさ",
+  "話し相手",
+  "キャラクター",
+] as const;
 
 const RESPONSE_JSON_SCHEMA = {
   name: "summarize_response",
@@ -201,6 +260,9 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 7. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
 8. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
 9. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
+9.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。例: 好き嫌い、習慣、価値観、印象的な思い出、人間関係、気がかりだったこと。
+9.3. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
+9.5. keyPoints.decisions には、エンディングノートの内容として意味のある決定事項だけを入れてください。会話終了、また今度にする、次の画面へ進む、アプリ設定を変える、といった会話操作・画面操作・設定操作は含めないでください。
 10. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
@@ -270,6 +332,9 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 8. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
 9. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
 10. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
+10.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。例: 好き嫌い、習慣、価値観、印象的な思い出、人間関係、気がかりだったこと。
+10.3. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
+10.5. keyPoints.decisions には、エンディングノートの内容として意味のある決定事項だけを入れてください。会話終了、また今度にする、次の画面へ進む、アプリ設定を変える、といった会話操作・画面操作・設定操作は含めないでください。
 11. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
     - medium: テーマ外の話題がいくつかあったが、メインはエンディングノートの内容だった
@@ -311,6 +376,50 @@ function normalizeForGrounding(text: string): string {
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[「」『』"'`.,!?！？。、…・〜ー～()［］[\]{}]/g, "");
+}
+
+export function filterSubstantiveDecisions(decisions: string[]): string[] {
+  const filtered: string[] = [];
+  const seen = new Set<string>();
+
+  for (const decision of decisions) {
+    const normalized = normalizeForGrounding(decision);
+    if (normalized.length === 0) continue;
+
+    const isNonSubstantive = NON_SUBSTANTIVE_DECISION_PATTERNS.some(
+      (pattern) => normalized.includes(normalizeForGrounding(pattern)),
+    );
+    if (isNonSubstantive) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    filtered.push(decision.trim());
+  }
+
+  return filtered;
+}
+
+export function filterMeaningfulImportantStatements(
+  statements: string[],
+): string[] {
+  const filtered: string[] = [];
+  const seen = new Set<string>();
+
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+    const normalized = normalizeForGrounding(trimmed);
+    if (normalized.length < 3) continue;
+
+    const isNonSubstantive =
+      NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS.some((pattern) =>
+        normalized.includes(normalizeForGrounding(pattern)),
+      );
+    if (isNonSubstantive) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    filtered.push(trimmed);
+  }
+
+  return filtered;
 }
 
 function filterGroundedNoteEntries(
@@ -575,6 +684,13 @@ export async function summarizeConversation(
     ...parsed,
     noteEntries: finalizedNoteEntries,
     coveredQuestionIds,
+    keyPoints: {
+      ...parsed.keyPoints,
+      importantStatements: filterMeaningfulImportantStatements(
+        parsed.keyPoints.importantStatements,
+      ),
+      decisions: filterSubstantiveDecisions(parsed.keyPoints.decisions),
+    },
   };
 
   logger.info("Summarization complete", {

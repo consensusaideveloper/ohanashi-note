@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
+import { buildFlexibleNoteItems } from "../lib/flexible-notes";
 import {
   getAccessibleCategories,
   getFamilyConversations,
@@ -8,6 +9,7 @@ import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 
 import type { FamilyConversation } from "../lib/family-api";
 import type { NoteEntry } from "../types/conversation";
+import type { FlexibleNoteItem } from "../lib/flexible-notes";
 import type {
   CategoryNoteData,
   NoteEntryVersion,
@@ -17,6 +19,7 @@ import type {
 
 interface UseFamilyEndingNoteReturn {
   categories: CategoryNoteData[];
+  flexibleNotes: FlexibleNoteItem[];
   isRepresentative: boolean;
   isLoading: boolean;
   error: boolean;
@@ -33,6 +36,17 @@ function isNoteEntry(value: unknown): value is NoteEntry {
     typeof obj["questionTitle"] === "string" &&
     typeof obj["answer"] === "string"
   );
+}
+
+function getImportantStatements(value: unknown): string[] {
+  if (typeof value !== "object" || value === null) {
+    return [];
+  }
+  const raw = (value as Record<string, unknown>)["importantStatements"];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((item): item is string => typeof item === "string");
 }
 
 /**
@@ -149,6 +163,7 @@ export function useFamilyEndingNote(
   creatorId: string,
 ): UseFamilyEndingNoteReturn {
   const [categories, setCategories] = useState<CategoryNoteData[]>([]);
+  const [flexibleNotes, setFlexibleNotes] = useState<FlexibleNoteItem[]>([]);
   const [isRepresentative, setIsRepresentative] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -164,6 +179,18 @@ export function useFamilyEndingNote(
         setIsRepresentative(accessInfo.isRepresentative);
         setCategories(
           buildFamilyCategoryData(accessInfo.categories, conversations),
+        );
+        setFlexibleNotes(
+          buildFlexibleNoteItems(
+            conversations.map((conversation) => ({
+              conversationId: conversation.id,
+              startedAt: conversation.startedAt,
+              importantStatements: getImportantStatements(
+                conversation.keyPoints,
+              ),
+              noteEntries: conversation.noteEntries.filter(isNoteEntry),
+            })),
+          ),
         );
       })
       .catch((err: unknown) => {
@@ -182,5 +209,12 @@ export function useFamilyEndingNote(
     loadData();
   }, [loadData]);
 
-  return { categories, isRepresentative, isLoading, error, refresh: loadData };
+  return {
+    categories,
+    flexibleNotes,
+    isRepresentative,
+    isLoading,
+    error,
+    refresh: loadData,
+  };
 }

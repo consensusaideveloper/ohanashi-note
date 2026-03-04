@@ -14,7 +14,8 @@ interface PrintableEndingNoteProps {
 export function PrintableEndingNote({
   onClose,
 }: PrintableEndingNoteProps): ReactNode {
-  const { categories, isLoading, error, refresh } = useEndingNote();
+  const { categories, flexibleNotes, isLoading, error, refresh } =
+    useEndingNote();
   const [userName, setUserName] = useState("");
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export function PrintableEndingNote({
       subtitle={SETTINGS_MESSAGES.print.subtitle}
       userName={userName}
       categories={categories}
+      flexibleNotes={flexibleNotes}
       isLoading={isLoading}
       error={error}
       onRefresh={refresh}

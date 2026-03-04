@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  filterMeaningfulImportantStatements,
+  filterSubstantiveDecisions,
   selectTranscriptForAnalysis,
   shouldFallbackToUngroundedEntries,
 } from "./summarizer";
@@ -54,5 +56,57 @@ describe("shouldFallbackToUngroundedEntries", () => {
 
   it("does not fall back when model produced no entries", () => {
     expect(shouldFallbackToUngroundedEntries("house", [], [])).toBe(false);
+  });
+});
+
+describe("filterSubstantiveDecisions", () => {
+  it("removes conversation-ending decisions", () => {
+    expect(
+      filterSubstantiveDecisions([
+        "今日はここまでにする",
+        "また今度にする",
+        "葬儀は家族葬にする",
+      ]),
+    ).toEqual(["葬儀は家族葬にする"]);
+  });
+
+  it("removes app-setting decisions", () => {
+    expect(
+      filterSubstantiveDecisions([
+        "話す速さはゆっくりにする",
+        "文字の大きさは大きめにする",
+        "延命治療は希望しない",
+      ]),
+    ).toEqual(["延命治療は希望しない"]);
+  });
+
+  it("deduplicates surviving decisions", () => {
+    expect(
+      filterSubstantiveDecisions([
+        "遺言書を作成する",
+        "遺言書を作成する ",
+      ]),
+    ).toEqual(["遺言書を作成する"]);
+  });
+});
+
+describe("filterMeaningfulImportantStatements", () => {
+  it("removes filler and operation-like statements", () => {
+    expect(
+      filterMeaningfulImportantStatements([
+        "ありがとうございます",
+        "今日はここまでにする",
+        "甘いものよりせんべいが好き",
+      ]),
+    ).toEqual(["甘いものよりせんべいが好き"]);
+  });
+
+  it("deduplicates surviving statements", () => {
+    expect(
+      filterMeaningfulImportantStatements([
+        "雨の匂いが好き",
+        "雨の匂いが好き ",
+      ]),
+    ).toEqual(["雨の匂いが好き"]);
   });
 });

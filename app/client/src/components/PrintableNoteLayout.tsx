@@ -2,15 +2,18 @@ import { useCallback } from "react";
 
 import { SETTINGS_MESSAGES, UI_MESSAGES } from "../lib/constants";
 import { PrintableCategory } from "./PrintableCategory";
+import { PrintableInsightsSection } from "./PrintableInsightsSection";
 
 import type { ReactNode } from "react";
 import type { CategoryNoteData } from "../hooks/useEndingNote";
+import type { FlexibleNoteItem } from "../lib/flexible-notes";
 
 interface PrintableNoteLayoutProps {
   title: string;
   subtitle?: string;
   userName?: string;
   categories: CategoryNoteData[];
+  flexibleNotes: FlexibleNoteItem[];
   isLoading: boolean;
   error: boolean;
   onRefresh: () => void;
@@ -27,6 +30,7 @@ export function PrintableNoteLayout({
   subtitle,
   userName,
   categories,
+  flexibleNotes,
   isLoading,
   error,
   onRefresh,
@@ -49,6 +53,8 @@ export function PrintableNoteLayout({
   const categoriesWithEntries = categories.filter(
     (cat) => cat.noteEntries.length > 0,
   );
+  const hasPrintableContent =
+    categoriesWithEntries.length > 0 || flexibleNotes.length > 0;
 
   if (isLoading) {
     return (
@@ -142,10 +148,13 @@ export function PrintableNoteLayout({
         </header>
 
         {/* Category sections */}
-        {categoriesWithEntries.length > 0 ? (
-          categoriesWithEntries.map((cat) => (
-            <PrintableCategory key={cat.category} data={cat} />
-          ))
+        {hasPrintableContent ? (
+          <>
+            {categoriesWithEntries.map((cat) => (
+              <PrintableCategory key={cat.category} data={cat} />
+            ))}
+            <PrintableInsightsSection items={flexibleNotes} />
+          </>
         ) : (
           <p className="text-lg text-text-secondary text-center py-12">
             {SETTINGS_MESSAGES.print.noEntries}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
+import { buildFlexibleNoteItems } from "../lib/flexible-notes";
 import {
   listConversations,
   subscribeToConversationUpdates,
@@ -11,6 +12,7 @@ import type {
   NoteEntry,
   ConversationRecord,
 } from "../types/conversation";
+import type { FlexibleNoteItem } from "../lib/flexible-notes";
 
 /** A single historical version of a note entry from a past conversation. */
 export interface NoteEntryVersion {
@@ -48,6 +50,7 @@ export interface CategoryNoteData {
 
 interface UseEndingNoteReturn {
   categories: CategoryNoteData[];
+  flexibleNotes: FlexibleNoteItem[];
   isLoading: boolean;
   error: boolean;
   refresh: () => void;
@@ -145,6 +148,7 @@ export function buildCategoryData(
 
 export function useEndingNote(): UseEndingNoteReturn {
   const [categories, setCategories] = useState<CategoryNoteData[]>([]);
+  const [flexibleNotes, setFlexibleNotes] = useState<FlexibleNoteItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -159,6 +163,16 @@ export function useEndingNote(): UseEndingNoteReturn {
     listConversations()
       .then((records) => {
         setCategories(buildCategoryData(records));
+        setFlexibleNotes(
+          buildFlexibleNoteItems(
+            records.map((record) => ({
+              conversationId: record.id,
+              startedAt: record.startedAt,
+              importantStatements: record.keyPoints?.importantStatements ?? [],
+              noteEntries: record.noteEntries ?? [],
+            })),
+          ),
+        );
       })
       .catch((err: unknown) => {
         console.error("Failed to load ending note data:", { error: err });
@@ -175,5 +189,5 @@ export function useEndingNote(): UseEndingNoteReturn {
     });
   }, [refresh]);
 
-  return { categories, isLoading, error, refresh };
+  return { categories, flexibleNotes, isLoading, error, refresh };
 }

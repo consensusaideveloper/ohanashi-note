@@ -18,7 +18,7 @@ export function PrintableFamilyNote({
   creatorName,
   onClose,
 }: PrintableFamilyNoteProps): ReactNode {
-  const { categories, isLoading, error, refresh } =
+  const { categories, flexibleNotes, isLoading, error, refresh } =
     useFamilyEndingNote(creatorId);
 
   const handlePrint = useCallback((): void => {
@@ -35,6 +35,7 @@ export function PrintableFamilyNote({
       title={`${creatorName}さんのエンディングノート`}
       subtitle={SETTINGS_MESSAGES.print.subtitle}
       categories={categories}
+      flexibleNotes={flexibleNotes}
       isLoading={isLoading}
       error={error}
       onRefresh={refresh}
