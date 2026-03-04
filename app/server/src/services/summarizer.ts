@@ -87,6 +87,17 @@ const NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS = [
   "話し相手",
   "キャラクター",
 ] as const;
+const IMPORTANT_STATEMENT_HINT_PATTERNS = [
+  /好き|好きな|好み|お気に入り/u,
+  /嫌い|苦手|嫌だった/u,
+  /よく|いつも|たいてい|習慣/u,
+  /昔|若い頃|子どもの頃|思い出|忘れられない/u,
+  /大切|大事|こだわり|価値観/u,
+  /食べ|飲み|料理|お菓子|果物|お茶|コーヒー/u,
+  /趣味|旅行|音楽|映画|本|写真/u,
+  /家族|友達|友人|人づきあい/u,
+  /心配|気になる|気がかり/u,
+] as const;
 const NON_SUBSTANTIVE_DECISION_PATTERNS = [
   "今日はここまで",
   "今日は会話を終",
@@ -422,6 +433,135 @@ export function filterMeaningfulImportantStatements(
   return filtered;
 }
 
+function splitUserStatementCandidates(
+  transcript: Array<{ role: "user" | "assistant"; text: string }>,
+): string[] {
+  const candidates: string[] = [];
+
+  for (const entry of transcript) {
+    if (entry.role !== "user") {
+      continue;
+    }
+
+    const parts =
+      entry.text
+        .split(/\r?\n/)
+        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]) ?? [];
+
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (trimmed !== "") {
+        candidates.push(trimmed);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function scoreImportantStatementCandidate(text: string): number {
+  let score = 0;
+
+  for (const pattern of IMPORTANT_STATEMENT_HINT_PATTERNS) {
+    if (pattern.test(text)) {
+      score += 2;
+    }
+  }
+
+  if (text.length >= 8) {
+    score += 1;
+  }
+  if (text.length >= 16) {
+    score += 1;
+  }
+  if (text.length > 80) {
+    score -= 1;
+  }
+
+  return score;
+}
+
+function overlapsGroundedNoteEntry(
+  statement: string,
+  noteEntries: NoteEntry[],
+): boolean {
+  const normalizedStatement = normalizeForGrounding(statement);
+  if (normalizedStatement.length === 0) {
+    return false;
+  }
+
+  for (const entry of noteEntries) {
+    const answer = normalizeForGrounding(entry.answer);
+    const evidence = normalizeForGrounding(entry.sourceEvidence);
+    const candidates = [answer, evidence];
+
+    for (const candidate of candidates) {
+      if (candidate.length < 3) {
+        continue;
+      }
+      if (candidate === normalizedStatement) {
+        return true;
+      }
+      if (
+        Math.min(candidate.length, normalizedStatement.length) >= 8 &&
+        (candidate.includes(normalizedStatement) ||
+          normalizedStatement.includes(candidate))
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function extractFallbackImportantStatements(
+  transcript: Array<{ role: "user" | "assistant"; text: string }>,
+  noteEntries: NoteEntry[],
+): string[] {
+  const candidates = splitUserStatementCandidates(transcript)
+    .map((text, index) => ({
+      text,
+      index,
+      score: scoreImportantStatementCandidate(text),
+    }))
+    .filter(({ text, score }) => {
+      const filtered = filterMeaningfulImportantStatements([text]);
+      if (filtered.length === 0) {
+        return false;
+      }
+      if (overlapsGroundedNoteEntry(text, noteEntries)) {
+        return false;
+      }
+      return score >= 2;
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return a.index - b.index;
+    })
+    .slice(0, 5)
+    .sort((a, b) => a.index - b.index)
+    .map(({ text }) => text);
+
+  if (candidates.length > 0) {
+    return candidates;
+  }
+
+  const longestUserTurn = transcript
+    .filter((entry) => entry.role === "user")
+    .map((entry) => entry.text.trim())
+    .filter((text) => filterMeaningfulImportantStatements([text]).length > 0)
+    .sort((a, b) => b.length - a.length)[0];
+
+  if (longestUserTurn !== undefined && !overlapsGroundedNoteEntry(longestUserTurn, noteEntries)) {
+    return [longestUserTurn];
+  }
+
+  return [];
+}
+
 function filterGroundedNoteEntries(
   noteEntries: NoteEntry[],
   userTranscript: Array<{ role: "user" | "assistant"; text: string }>,
@@ -679,6 +819,13 @@ export async function summarizeConversation(
   const coveredQuestionIds = parsed.coveredQuestionIds.filter((questionId) =>
     groundedQuestionIdSet.has(questionId),
   );
+  const filteredImportantStatements = filterMeaningfulImportantStatements(
+    parsed.keyPoints.importantStatements,
+  );
+  const finalizedImportantStatements =
+    filteredImportantStatements.length > 0
+      ? filteredImportantStatements
+      : extractFallbackImportantStatements(userOnlyTranscript, finalizedNoteEntries);
 
   const finalized: SummarizeResponse = {
     ...parsed,
@@ -686,9 +833,7 @@ export async function summarizeConversation(
     coveredQuestionIds,
     keyPoints: {
       ...parsed.keyPoints,
-      importantStatements: filterMeaningfulImportantStatements(
-        parsed.keyPoints.importantStatements,
-      ),
+      importantStatements: finalizedImportantStatements,
       decisions: filterSubstantiveDecisions(parsed.keyPoints.decisions),
     },
   };
@@ -697,6 +842,7 @@ export async function summarizeConversation(
     category: request.category,
     coveredQuestions: finalized.coveredQuestionIds.length,
     noteEntries: finalized.noteEntries.length,
+    importantStatements: finalized.keyPoints.importantStatements.length,
     topicAdherence: finalized.topicAdherence,
     offTopicSummary: finalized.offTopicSummary,
   });

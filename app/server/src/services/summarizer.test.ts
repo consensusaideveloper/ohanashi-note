@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  extractFallbackImportantStatements,
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
   selectTranscriptForAnalysis,
@@ -108,5 +109,38 @@ describe("filterMeaningfulImportantStatements", () => {
         "雨の匂いが好き ",
       ]),
     ).toEqual(["雨の匂いが好き"]);
+  });
+});
+
+describe("extractFallbackImportantStatements", () => {
+  it("extracts preference-like statements from user transcript when model output is empty", () => {
+    expect(
+      extractFallbackImportantStatements(
+        [
+          { role: "assistant", text: "好きな食べ物はありますか" },
+          { role: "user", text: "そばが好きです。飲み物はお茶が好きです。" },
+        ],
+        [],
+      ),
+    ).toEqual(["そばが好きです。", "飲み物はお茶が好きです。"]);
+  });
+
+  it("does not duplicate information already captured as note entries", () => {
+    expect(
+      extractFallbackImportantStatements(
+        [
+          { role: "assistant", text: "好きなものを教えてください" },
+          { role: "user", text: "好きな食べ物はそばです。写真を撮るのが好きです。" },
+        ],
+        [
+          {
+            questionId: "memories-08",
+            questionTitle: "自分史・趣味・好きなもの",
+            answer: "好きな食べ物はそば",
+            sourceEvidence: "好きな食べ物はそばです",
+          },
+        ],
+      ),
+    ).toEqual(["写真を撮るのが好きです。"]);
   });
 });
