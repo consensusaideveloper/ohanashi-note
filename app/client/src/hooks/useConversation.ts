@@ -468,6 +468,7 @@ export function useConversation(): UseConversationReturn {
 
   // Stable ref for stop so the session timer can call it without stale closures
   const stopRef = useRef<() => void>(() => {});
+  const cleanupRealtimeSessionRef = useRef<() => void>(() => {});
 
   // End-conversation flow refs
   const endConversationRequestedRef = useRef(false);
@@ -767,6 +768,10 @@ export function useConversation(): UseConversationReturn {
       });
     }
   }, [webrtc, clearSessionTimer, resetEndConversationFlow, resetMicGuard]);
+
+  useEffect(() => {
+    cleanupRealtimeSessionRef.current = cleanupRealtimeSession;
+  }, [cleanupRealtimeSession]);
 
   const requestEndConversation = useCallback(
     (source: "tool" | "user_intent"): void => {
@@ -1534,10 +1539,10 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => {
     return () => {
       autoEndStopTriggerRef.current = false;
-      cleanupRealtimeSession();
+      cleanupRealtimeSessionRef.current();
       discardLocalRecording();
     };
-  }, [discardLocalRecording, cleanupRealtimeSession]);
+  }, [discardLocalRecording]);
 
   // Mid-conversation session config update is not supported with WebRTC GA protocol
   // (session is pre-configured via client_secrets). Changes will apply to the next session.

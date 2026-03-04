@@ -338,6 +338,7 @@ export function useOnboardingConversation({
 
   // Stable ref for stop
   const stopRef = useRef<() => void>(() => {});
+  const cleanupRealtimeSessionRef = useRef<() => void>(() => {});
 
   // Stable ref for onComplete to avoid stale closures
   const onCompleteRef = useRef(onComplete);
@@ -435,6 +436,10 @@ export function useOnboardingConversation({
       });
     }
   }, [webrtc, resetEndConversationFlow, resetMicGuard]);
+
+  useEffect(() => {
+    cleanupRealtimeSessionRef.current = cleanupRealtimeSession;
+  }, [cleanupRealtimeSession]);
 
   const enqueueProfileSave = useCallback(
     (updates: Partial<UserProfile>): Promise<void> => {
@@ -1006,9 +1011,9 @@ export function useOnboardingConversation({
 
   useEffect(() => {
     return () => {
-      cleanupRealtimeSession();
+      cleanupRealtimeSessionRef.current();
     };
-  }, [cleanupRealtimeSession]);
+  }, []);
 
   return {
     state: state.conversationState,
