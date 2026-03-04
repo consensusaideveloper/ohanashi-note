@@ -313,6 +313,75 @@ function buildProportionalTranscript(
   return result;
 }
 
+function buildSyntheticUserTurn(
+  original: TranscriptEntry[],
+  fullText: string,
+): TranscriptEntry[] {
+  const trimmed = fullText.trim();
+  if (trimmed.length === 0) {
+    return original;
+  }
+
+  const lastEntry = original[original.length - 1];
+  const syntheticTimestamp =
+    lastEntry?.timestamp !== undefined ? lastEntry.timestamp + 1 : undefined;
+
+  return [
+    ...original,
+    {
+      role: "user",
+      text: trimmed,
+      ...(syntheticTimestamp !== undefined
+        ? { timestamp: syntheticTimestamp }
+        : {}),
+    },
+  ];
+}
+
+function splitTextAcrossTurns(fullText: string, turnCount: number): string[] {
+  const trimmed = fullText.trim();
+  if (trimmed.length === 0 || turnCount <= 0) {
+    return [];
+  }
+
+  const sentences =
+    trimmed.match(/[^。！？!?]+[。！？!?]?/g)?.map((part) => part.trim()) ?? [];
+
+  if (sentences.length > 1) {
+    const buckets = Array.from({ length: turnCount }, () => "");
+    let sentenceIndex = 0;
+    for (const sentence of sentences) {
+      const bucketIndex = Math.min(sentenceIndex, turnCount - 1);
+      const currentBucket = buckets[bucketIndex] ?? "";
+      buckets[bucketIndex] =
+        currentBucket.length > 0
+          ? `${currentBucket} ${sentence}`
+          : sentence;
+      if (bucketIndex < turnCount - 1) {
+        sentenceIndex += 1;
+      }
+    }
+    return buckets
+      .map((bucket) => bucket.trim())
+      .filter((bucket) => bucket !== "");
+  }
+
+  const chunks: string[] = [];
+  let charOffset = 0;
+  for (let i = 0; i < turnCount; i++) {
+    const remainingTurns = turnCount - i;
+    const remainingChars = trimmed.length - charOffset;
+    const charCount =
+      i === turnCount - 1
+        ? remainingChars
+        : Math.max(1, Math.round(remainingChars / remainingTurns));
+    const chunk = trimmed.slice(charOffset, charOffset + charCount).trim();
+    chunks.push(chunk);
+    charOffset += charCount;
+  }
+  return chunks;
+}
+
 /**
  * Simple replacement: distribute the full re-transcription text
  * across user turns proportionally by original text length.
@@ -325,7 +394,9 @@ function buildSimpleReplacementTranscript(
     .map((entry, i) => (entry.role === "user" ? i : -1))
     .filter((i) => i >= 0);
 
-  if (userIndices.length === 0) return original;
+  if (userIndices.length === 0) {
+    return buildSyntheticUserTurn(original, fullText);
+  }
 
   // If only one user turn, replace directly
   if (userIndices.length === 1) {
@@ -345,7 +416,22 @@ function buildSimpleReplacementTranscript(
     return sum + (entry !== undefined ? entry.text.length : 0);
   }, 0);
 
-  if (totalOriginalChars === 0) return original;
+  if (totalOriginalChars === 0) {
+    const chunks = splitTextAcrossTurns(fullText, userIndices.length);
+    const result = [...original];
+
+    for (let i = 0; i < userIndices.length; i++) {
+      const idx = userIndices[i];
+      const originalEntry = idx !== undefined ? result[idx] : undefined;
+      const chunk = chunks[i];
+      if (idx === undefined || originalEntry === undefined || chunk === undefined) {
+        continue;
+      }
+      result[idx] = { ...originalEntry, text: chunk };
+    }
+
+    return result;
+  }
 
   const result = [...original];
   let charOffset = 0;
