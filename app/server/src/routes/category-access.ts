@@ -54,6 +54,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   support: "支援制度",
 };
 
+function isValidCategoryId(categoryId: string): boolean {
+  return ALL_CATEGORIES.includes(categoryId as (typeof ALL_CATEGORIES)[number]);
+}
+
 // --- Helpers ---
 
 /**
@@ -156,6 +160,22 @@ function hasAccessibleContent(
     }
   }
   return false;
+}
+
+async function getActiveTargetMember(
+  creatorId: string,
+  familyMemberId: string,
+): Promise<{ id: string; memberId: string; role: string } | null> {
+  return (
+    (await db.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.id, familyMemberId),
+        eq(familyMembers.creatorId, creatorId),
+        eq(familyMembers.isActive, true),
+      ),
+      columns: { id: true, memberId: true, role: true },
+    })) ?? null
+  );
 }
 
 // --- Route ---
@@ -291,6 +311,31 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
       );
     }
 
+    if (!isValidCategoryId(categoryId)) {
+      return c.json(
+        { error: "無効なカテゴリです", code: "INVALID_CATEGORY" },
+        400,
+      );
+    }
+
+    const targetMember = await getActiveTargetMember(creatorId, familyMemberId);
+    if (!targetMember) {
+      return c.json(
+        { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+        404,
+      );
+    }
+
+    if (targetMember.role === "representative") {
+      return c.json(
+        {
+          error: "代表者には個別のカテゴリ付与は不要です",
+          code: "REPRESENTATIVE_ALREADY_HAS_ACCESS",
+        },
+        400,
+      );
+    }
+
     const [created] = await db
       .insert(categoryAccess)
       .values({
@@ -322,21 +367,15 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
     });
 
     // Send notification to the affected member (best-effort)
-    const member = await db.query.familyMembers.findFirst({
-      where: eq(familyMembers.id, familyMemberId),
-      columns: { memberId: true },
-    });
-    if (member) {
-      const creatorName = await getCreatorName(creatorId);
-      const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
-      await notifyFamilyMembers(
-        [member.memberId],
-        "category_access_granted",
-        "カテゴリへのアクセスが許可されました",
-        `${creatorName}さんのノートの「${categoryLabel}」カテゴリが閲覧可能になりました`,
-        creatorId,
-      );
-    }
+    const creatorName = await getCreatorName(creatorId);
+    const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
+    await notifyFamilyMembers(
+      [targetMember.memberId],
+      "category_access_granted",
+      "カテゴリへのアクセスが許可されました",
+      `${creatorName}さんのノートの「${categoryLabel}」カテゴリが閲覧可能になりました`,
+      creatorId,
+    );
 
     return c.json(
       {
@@ -434,6 +473,34 @@ categoryAccessRoute.delete(
         );
       }
 
+      if (!isValidCategoryId(categoryId)) {
+        return c.json(
+          { error: "無効なカテゴリです", code: "INVALID_CATEGORY" },
+          400,
+        );
+      }
+
+      const targetMember = await getActiveTargetMember(
+        creatorId,
+        familyMemberId,
+      );
+      if (!targetMember) {
+        return c.json(
+          { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+          404,
+        );
+      }
+
+      if (targetMember.role === "representative") {
+        return c.json(
+          {
+            error: "代表者のカテゴリアクセスは個別に取り消せません",
+            code: "REPRESENTATIVE_ACCESS_CANNOT_BE_REVOKED",
+          },
+          400,
+        );
+      }
+
       const result = await db
         .delete(categoryAccess)
         .where(
@@ -466,21 +533,15 @@ categoryAccessRoute.delete(
       });
 
       // Send notification to the affected member (best-effort)
-      const member = await db.query.familyMembers.findFirst({
-        where: eq(familyMembers.id, familyMemberId),
-        columns: { memberId: true },
-      });
-      if (member) {
-        const creatorName = await getCreatorName(creatorId);
-        const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
-        await notifyFamilyMembers(
-          [member.memberId],
-          "category_access_revoked",
-          "カテゴリへのアクセスが変更されました",
-          `${creatorName}さんのノートの「${categoryLabel}」カテゴリへのアクセスが変更されました`,
-          creatorId,
-        );
-      }
+      const creatorName = await getCreatorName(creatorId);
+      const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
+      await notifyFamilyMembers(
+        [targetMember.memberId],
+        "category_access_revoked",
+        "カテゴリへのアクセスが変更されました",
+        `${creatorName}さんのノートの「${categoryLabel}」カテゴリへのアクセスが変更されました`,
+        creatorId,
+      );
 
       return c.json({ success: true });
     } catch (error) {

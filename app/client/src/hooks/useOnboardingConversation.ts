@@ -7,15 +7,13 @@ import { useCallback, useEffect, useRef, useReducer } from "react";
 import {
   SESSION_CONFIG,
   ONBOARDING_TOOLS,
-  MIN_TRANSCRIPT_LENGTH,
   FONT_SIZE_LABELS,
   SPEAKING_SPEED_LABELS,
   SILENCE_DURATION_LABELS,
   CONFIRMATION_LEVEL_LABELS,
   RETRY_DELAY_MS,
 } from "../lib/constants";
-import { isNoiseTranscript } from "../lib/audio";
-import { isIOSDevice } from "../lib/platform";
+import { getAcceptedUserTranscript } from "../lib/audio";
 import { getCharacterById } from "../lib/characters";
 import {
   hasExplicitConversationEndIntent,
@@ -44,8 +42,8 @@ const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
 const END_CONVERSATION_FALLBACK_MS = 12000;
 const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
 
-/** Delay (ms) after AI finishes speaking before re-enabling the mic on iOS. */
-const IOS_MIC_REENABLE_DELAY_MS = 300;
+/** Delay (ms) after AI finishes speaking before re-enabling the mic. */
+const MIC_REENABLE_DELAY_MS = 300;
 
 function normalizePreferenceToken(value: string): string {
   return value
@@ -330,11 +328,12 @@ export function useOnboardingConversation({
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
 
-  // iOS echo guard: cache platform check and manage mic re-enable timer
-  const isIOSRef = useRef(isIOSDevice());
   const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const micGuardActiveRef = useRef(false);
+  const ignoreUserTranscriptsUntilRef = useRef(0);
+  const ignoredInputItemIdsRef = useRef<Set<string>>(new Set());
   const pendingProfileSavesRef = useRef<Set<Promise<void>>>(new Set());
 
   // Stable ref for stop
@@ -373,6 +372,69 @@ export function useOnboardingConversation({
     }
     clearEndConversationTimers();
   }, [clearEndConversationTimers]);
+
+  const releaseMicGuardNow = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = false;
+    ignoreUserTranscriptsUntilRef.current = 0;
+    webrtc.setMicEnabled(true);
+  }, [webrtc]);
+
+  const engageMicGuard = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = true;
+    webrtc.setMicEnabled(false);
+  }, [webrtc]);
+
+  const scheduleMicGuardRelease = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+    }
+    micGuardActiveRef.current = true;
+    ignoreUserTranscriptsUntilRef.current = Date.now() + MIC_REENABLE_DELAY_MS;
+    micReenableTimerRef.current = setTimeout(() => {
+      micReenableTimerRef.current = null;
+      micGuardActiveRef.current = false;
+      ignoreUserTranscriptsUntilRef.current = 0;
+      webrtc.setMicEnabled(true);
+    }, MIC_REENABLE_DELAY_MS);
+  }, [webrtc]);
+
+  const resetMicGuard = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = false;
+    ignoreUserTranscriptsUntilRef.current = 0;
+    ignoredInputItemIdsRef.current.clear();
+  }, []);
+
+  const cleanupRealtimeSession = useCallback((): void => {
+    resetEndConversationFlow();
+    aiSpeakingRef.current = false;
+    resetMicGuard();
+    webrtc.disconnect();
+
+    const key = sessionKeyRef.current;
+    if (key !== "") {
+      sessionKeyRef.current = "";
+      endRealtimeSession(key).catch((err: unknown) => {
+        console.error(
+          "Failed to end onboarding realtime session after error:",
+          {
+            error: err,
+          },
+        );
+      });
+    }
+  }, [webrtc, resetEndConversationFlow, resetMicGuard]);
 
   const enqueueProfileSave = useCallback(
     (updates: Partial<UserProfile>): Promise<void> => {
@@ -652,11 +714,8 @@ export function useOnboardingConversation({
           // entire audio.input object and remove the transcription config.
 
           dispatch({ type: "CONNECTED" });
-          // iOS echo guard: mute mic before greeting so the AEC warm-up
-          // period does not cause the AI's output to be detected as speech.
-          if (isIOSRef.current) {
-            webrtc.setMicEnabled(false);
-          }
+          // Keep the mic muted until the first greeting finishes.
+          engageMicGuard();
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
@@ -672,14 +731,7 @@ export function useOnboardingConversation({
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
             dispatch({ type: "AI_SPEAKING" });
-            // iOS echo guard: keep mic muted while AI speaks
-            if (isIOSRef.current) {
-              if (micReenableTimerRef.current !== null) {
-                clearTimeout(micReenableTimerRef.current);
-                micReenableTimerRef.current = null;
-              }
-              webrtc.setMicEnabled(false);
-            }
+            engageMicGuard();
           }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
@@ -695,13 +747,22 @@ export function useOnboardingConversation({
           break;
 
         case "conversation.item.input_audio_transcription.completed": {
-          const trimmed = event.transcript.trim();
-          if (
-            trimmed.length >= MIN_TRANSCRIPT_LENGTH &&
-            !isNoiseTranscript(trimmed)
-          ) {
-            dispatch({ type: "ADD_USER_TRANSCRIPT", text: trimmed });
-            if (hasExplicitConversationEndIntent(trimmed)) {
+          if (ignoredInputItemIdsRef.current.delete(event.item_id)) {
+            break;
+          }
+          if (micGuardActiveRef.current) {
+            break;
+          }
+          const acceptedTranscript = getAcceptedUserTranscript(
+            event.transcript,
+            {
+              receivedAt: Date.now(),
+              ignoreUntil: ignoreUserTranscriptsUntilRef.current,
+            },
+          );
+          if (acceptedTranscript !== null) {
+            dispatch({ type: "ADD_USER_TRANSCRIPT", text: acceptedTranscript });
+            if (hasExplicitConversationEndIntent(acceptedTranscript)) {
               requestEndConversation("user_intent");
             }
           }
@@ -711,13 +772,7 @@ export function useOnboardingConversation({
         case "response.done": {
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
-          // iOS echo guard: re-enable mic after a short delay for echo to dissipate
-          if (isIOSRef.current) {
-            micReenableTimerRef.current = setTimeout(() => {
-              micReenableTimerRef.current = null;
-              webrtc.setMicEnabled(true);
-            }, IOS_MIC_REENABLE_DELAY_MS);
-          }
+          scheduleMicGuardRelease();
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -766,19 +821,19 @@ export function useOnboardingConversation({
         }
 
         case "input_audio_buffer.speech_started":
-          // Cancel pending end flow only when user actually barges in while AI is speaking.
+          if (micGuardActiveRef.current) {
+            if (micReenableTimerRef.current === null) {
+              ignoredInputItemIdsRef.current.add(event.item_id);
+              break;
+            }
+            releaseMicGuardNow();
+          }
+
+          // Cancel pending end flow only when user actually barges in.
           if (endConversationRequestedRef.current && aiSpeakingRef.current) {
             resetEndConversationFlow();
           }
           aiSpeakingRef.current = false;
-          // iOS echo guard: cancel pending re-enable and enable immediately
-          if (isIOSRef.current) {
-            if (micReenableTimerRef.current !== null) {
-              clearTimeout(micReenableTimerRef.current);
-              micReenableTimerRef.current = null;
-            }
-            webrtc.setMicEnabled(true);
-          }
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -815,6 +870,9 @@ export function useOnboardingConversation({
     [
       webrtc,
       handleFunctionCall,
+      engageMicGuard,
+      releaseMicGuardNow,
+      scheduleMicGuardRelease,
       resetEndConversationFlow,
       requestEndConversation,
     ],
@@ -835,8 +893,21 @@ export function useOnboardingConversation({
     }
   }, [webrtc.status]);
 
+  useEffect(() => {
+    if (state.conversationState === "error") {
+      cleanupRealtimeSession();
+    }
+  }, [state.conversationState, cleanupRealtimeSession]);
+
+  useEffect(() => {
+    return webrtc.onRemoteAudioPlaybackFailed(() => {
+      dispatch({ type: "ERROR", errorType: "unknown" });
+    });
+  }, [webrtc]);
+
   // Start the onboarding conversation
   const start = useCallback((): void => {
+    resetMicGuard();
     dispatch({ type: "CONNECT" });
 
     // Step 1: Request mic access first (must be in user gesture context for iOS)
@@ -883,18 +954,13 @@ export function useOnboardingConversation({
           dispatch({ type: "ERROR", errorType: "network" });
         }
       });
-  }, [webrtc]);
+  }, [webrtc, resetMicGuard]);
 
   // Stop the conversation and clean up
   const stop = useCallback((): void => {
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
-
-    // iOS echo guard: clean up mic re-enable timer
-    if (micReenableTimerRef.current !== null) {
-      clearTimeout(micReenableTimerRef.current);
-      micReenableTimerRef.current = null;
-    }
+    resetMicGuard();
 
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
@@ -915,7 +981,12 @@ export function useOnboardingConversation({
     void waitForPendingProfileSaves().finally(() => {
       onCompleteRef.current();
     });
-  }, [webrtc, resetEndConversationFlow, waitForPendingProfileSaves]);
+  }, [
+    webrtc,
+    resetEndConversationFlow,
+    waitForPendingProfileSaves,
+    resetMicGuard,
+  ]);
 
   // Keep stopRef in sync
   useEffect(() => {
@@ -925,18 +996,19 @@ export function useOnboardingConversation({
   // Retry after an error
   const retry = useCallback((): void => {
     resetEndConversationFlow();
+    resetMicGuard();
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
     setTimeout(() => {
       start();
     }, RETRY_DELAY_MS);
-  }, [webrtc, start, resetEndConversationFlow]);
+  }, [webrtc, start, resetEndConversationFlow, resetMicGuard]);
 
   useEffect(() => {
     return () => {
-      resetEndConversationFlow();
+      cleanupRealtimeSession();
     };
-  }, [resetEndConversationFlow]);
+  }, [cleanupRealtimeSession]);
 
   return {
     state: state.conversationState,

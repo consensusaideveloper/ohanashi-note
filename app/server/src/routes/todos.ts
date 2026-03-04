@@ -73,6 +73,23 @@ interface GenerateTodosSummary {
   skippedInvalidCount: number;
 }
 
+const ALL_CATEGORIES = [
+  "memories",
+  "people",
+  "house",
+  "medical",
+  "funeral",
+  "money",
+  "work",
+  "digital",
+  "legal",
+  "trust",
+  "support",
+] as const;
+
+const VALID_TODO_STATUSES = new Set(["pending", "in_progress", "completed"]);
+const VALID_TODO_PRIORITIES = new Set(["high", "medium", "low"]);
+
 // --- Helpers ---
 
 /**
@@ -276,6 +293,41 @@ function buildTodoTitleKey(
   title: string,
 ): string {
   return `${sourceCategory ?? ""}:${normalizeTodoText(title)}`;
+}
+
+function isValidSourceCategory(category: string): boolean {
+  return ALL_CATEGORIES.includes(category as (typeof ALL_CATEGORIES)[number]);
+}
+
+function parseOptionalDueDate(value: unknown): Date | null | "invalid" {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return "invalid";
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
+async function getActiveCreatorFamilyMember(
+  creatorId: string,
+  familyMemberId: string,
+): Promise<{
+  id: string;
+  memberId: string;
+  role: string;
+} | null> {
+  return (
+    (await db.query.familyMembers.findFirst({
+      where: and(
+        eq(familyMembers.id, familyMemberId),
+        eq(familyMembers.creatorId, creatorId),
+        eq(familyMembers.isActive, true),
+      ),
+      columns: { id: true, memberId: true, role: true },
+    })) ?? null
+  );
 }
 
 // --- Route ---
@@ -492,8 +544,43 @@ todoRoute.post("/api/todos/:creatorId", async (c: Context) => {
       typeof body["assigneeId"] === "string" ? body["assigneeId"] : null;
     const priority =
       typeof body["priority"] === "string" ? body["priority"] : "medium";
-    const dueDate =
-      typeof body["dueDate"] === "string" ? new Date(body["dueDate"]) : null;
+    const dueDate = parseOptionalDueDate(body["dueDate"]);
+
+    if (sourceCategory !== null && !isValidSourceCategory(sourceCategory)) {
+      return c.json(
+        { error: "カテゴリが正しくありません", code: "INVALID_CATEGORY" },
+        400,
+      );
+    }
+
+    if (!VALID_TODO_PRIORITIES.has(priority)) {
+      return c.json(
+        { error: "優先度が正しくありません", code: "INVALID_PRIORITY" },
+        400,
+      );
+    }
+
+    if (dueDate === "invalid") {
+      return c.json(
+        { error: "期限の日付が正しくありません", code: "INVALID_DUE_DATE" },
+        400,
+      );
+    }
+
+    let validatedAssigneeId: string | null = null;
+    if (assigneeId !== null) {
+      const assignee = await getActiveCreatorFamilyMember(
+        creatorId,
+        assigneeId,
+      );
+      if (!assignee) {
+        return c.json(
+          { error: "担当者が見つかりません", code: "ASSIGNEE_NOT_FOUND" },
+          404,
+        );
+      }
+      validatedAssigneeId = assignee.id;
+    }
 
     const [created] = await db
       .insert(todos)
@@ -505,7 +592,7 @@ todoRoute.post("/api/todos/:creatorId", async (c: Context) => {
         sourceCategory,
         sourceQuestionId,
         sourceAnswer,
-        assigneeId,
+        assigneeId: validatedAssigneeId,
         priority,
         dueDate,
         createdBy: userId,
@@ -613,6 +700,12 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
     if (role === "member") {
       // Members can only update status
       if (typeof body["status"] === "string") {
+        if (!VALID_TODO_STATUSES.has(body["status"])) {
+          return c.json(
+            { error: "ステータスが正しくありません", code: "INVALID_STATUS" },
+            400,
+          );
+        }
         updateFields["status"] = body["status"];
         historyEntries.push({
           action: "status_changed",
@@ -622,10 +715,17 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
     } else {
       // Representatives can update all fields
       if (typeof body["title"] === "string") {
-        updateFields["title"] = body["title"].trim();
+        const trimmedTitle = body["title"].trim();
+        if (trimmedTitle.length === 0) {
+          return c.json(
+            { error: "タイトルは必須です", code: "INVALID_TITLE" },
+            400,
+          );
+        }
+        updateFields["title"] = trimmedTitle;
         historyEntries.push({
           action: "title_changed",
-          metadata: { from: existing.title, to: body["title"].trim() },
+          metadata: { from: existing.title, to: trimmedTitle },
         });
       }
       if (
@@ -639,6 +739,12 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
         });
       }
       if (typeof body["status"] === "string") {
+        if (!VALID_TODO_STATUSES.has(body["status"])) {
+          return c.json(
+            { error: "ステータスが正しくありません", code: "INVALID_STATUS" },
+            400,
+          );
+        }
         updateFields["status"] = body["status"];
         historyEntries.push({
           action: "status_changed",
@@ -646,6 +752,12 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
         });
       }
       if (typeof body["priority"] === "string") {
+        if (!VALID_TODO_PRIORITIES.has(body["priority"])) {
+          return c.json(
+            { error: "優先度が正しくありません", code: "INVALID_PRIORITY" },
+            400,
+          );
+        }
         updateFields["priority"] = body["priority"];
         historyEntries.push({
           action: "priority_changed",
@@ -656,20 +768,38 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
         typeof body["assigneeId"] === "string" ||
         body["assigneeId"] === null
       ) {
-        updateFields["assigneeId"] = body["assigneeId"];
+        if (typeof body["assigneeId"] === "string") {
+          const assignee = await getActiveCreatorFamilyMember(
+            creatorId,
+            body["assigneeId"],
+          );
+          if (!assignee) {
+            return c.json(
+              { error: "担当者が見つかりません", code: "ASSIGNEE_NOT_FOUND" },
+              404,
+            );
+          }
+          updateFields["assigneeId"] = assignee.id;
+        } else {
+          updateFields["assigneeId"] = null;
+        }
         historyEntries.push({
           action: "assigned",
           metadata: {
             from: existing.assigneeId,
-            to: body["assigneeId"],
+            to: updateFields["assigneeId"],
           },
         });
       }
       if (typeof body["dueDate"] === "string" || body["dueDate"] === null) {
-        updateFields["dueDate"] =
-          typeof body["dueDate"] === "string"
-            ? new Date(body["dueDate"])
-            : null;
+        const dueDate = parseOptionalDueDate(body["dueDate"]);
+        if (dueDate === "invalid") {
+          return c.json(
+            { error: "期限の日付が正しくありません", code: "INVALID_DUE_DATE" },
+            400,
+          );
+        }
+        updateFields["dueDate"] = dueDate;
         historyEntries.push({
           action: "due_date_changed",
           metadata: {},
@@ -1399,6 +1529,27 @@ todoRoute.post(
           {
             error: "familyMemberId と hidden は必須です",
             code: "INVALID_BODY",
+          },
+          400,
+        );
+      }
+
+      const targetMember = await getActiveCreatorFamilyMember(
+        creatorId,
+        familyMemberId,
+      );
+      if (!targetMember) {
+        return c.json(
+          { error: "家族メンバーが見つかりません", code: "MEMBER_NOT_FOUND" },
+          404,
+        );
+      }
+
+      if (targetMember.role === "representative") {
+        return c.json(
+          {
+            error: "代表者の表示設定は変更できません",
+            code: "REPRESENTATIVE_VISIBILITY_NOT_ALLOWED",
           },
           400,
         );

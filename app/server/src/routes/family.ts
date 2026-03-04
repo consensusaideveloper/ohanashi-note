@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { Hono } from "hono";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, isNull } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import {
@@ -302,31 +302,96 @@ familyRoute.post("/api/family/invite/:token/accept", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const token = c.req.param("token");
 
-    // Look up invitation
-    const invitation = await db.query.familyInvitations.findFirst({
-      where: eq(familyInvitations.token, token),
+    const acceptResult = await db.transaction(async (tx) => {
+      const invitation = await tx.query.familyInvitations.findFirst({
+        where: eq(familyInvitations.token, token),
+      });
+
+      if (!invitation) {
+        return { type: "not_found" as const };
+      }
+
+      if (invitation.acceptedAt) {
+        return { type: "already_accepted" as const };
+      }
+
+      if (invitation.expiresAt.getTime() < Date.now()) {
+        return { type: "expired" as const };
+      }
+
+      if (invitation.creatorId === userId) {
+        return { type: "self_invite" as const };
+      }
+
+      const existingMember = await tx.query.familyMembers.findFirst({
+        where: and(
+          eq(familyMembers.creatorId, invitation.creatorId),
+          eq(familyMembers.memberId, userId),
+        ),
+        columns: { id: true },
+      });
+
+      if (existingMember) {
+        return { type: "already_member" as const };
+      }
+
+      const [claimedInvitation] = await tx
+        .update(familyInvitations)
+        .set({ acceptedAt: new Date() })
+        .where(
+          and(
+            eq(familyInvitations.id, invitation.id),
+            isNull(familyInvitations.acceptedAt),
+          ),
+        )
+        .returning({
+          creatorId: familyInvitations.creatorId,
+          relationship: familyInvitations.relationship,
+          relationshipLabel: familyInvitations.relationshipLabel,
+          role: familyInvitations.role,
+        });
+
+      if (!claimedInvitation) {
+        return { type: "already_accepted" as const };
+      }
+
+      const [member] = await tx
+        .insert(familyMembers)
+        .values({
+          creatorId: claimedInvitation.creatorId,
+          memberId: userId,
+          relationship: claimedInvitation.relationship,
+          relationshipLabel: claimedInvitation.relationshipLabel,
+          role: claimedInvitation.role,
+        })
+        .returning();
+
+      if (!member) {
+        throw new Error("Failed to create family membership");
+      }
+
+      return { type: "success" as const, member };
     });
 
-    if (!invitation) {
+    if (acceptResult.type === "not_found") {
       return c.json({ error: "招待が見つかりません", code: "NOT_FOUND" }, 404);
     }
 
-    if (invitation.acceptedAt) {
+    if (acceptResult.type === "already_accepted") {
       return c.json(
         { error: "この招待はすでに使用されています", code: "ALREADY_ACCEPTED" },
         410,
       );
     }
 
-    if (invitation.expiresAt.getTime() < Date.now()) {
+    if (acceptResult.type === "expired") {
       return c.json(
         { error: "招待の有効期限が切れています", code: "EXPIRED" },
         410,
       );
     }
 
-    // Prevent self-invitation
-    if (invitation.creatorId === userId) {
+    if (acceptResult.type === "self_invite") {
       return c.json(
         {
           error: "ご自身を家族として登録することはできません",
@@ -336,46 +401,14 @@ familyRoute.post("/api/family/invite/:token/accept", async (c: Context) => {
       );
     }
 
-    // Check for duplicate membership
-    const existingMember = await db.query.familyMembers.findFirst({
-      where: and(
-        eq(familyMembers.creatorId, invitation.creatorId),
-        eq(familyMembers.memberId, userId),
-      ),
-      columns: { id: true },
-    });
-
-    if (existingMember) {
+    if (acceptResult.type === "already_member") {
       return c.json(
         { error: "すでに家族として登録されています", code: "ALREADY_MEMBER" },
         409,
       );
     }
 
-    // Create family member record
-    const [member] = await db
-      .insert(familyMembers)
-      .values({
-        creatorId: invitation.creatorId,
-        memberId: userId,
-        relationship: invitation.relationship,
-        relationshipLabel: invitation.relationshipLabel,
-        role: invitation.role,
-      })
-      .returning();
-
-    if (!member) {
-      return c.json(
-        { error: "家族の登録に失敗しました", code: "CREATE_FAILED" },
-        500,
-      );
-    }
-
-    // Mark invitation as accepted
-    await db
-      .update(familyInvitations)
-      .set({ acceptedAt: new Date() })
-      .where(eq(familyInvitations.id, invitation.id));
+    const { member } = acceptResult;
 
     return c.json({
       id: member.id,

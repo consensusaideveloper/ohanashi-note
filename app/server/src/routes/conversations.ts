@@ -82,6 +82,8 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
+type ConversationWriteValues = Omit<typeof conversations.$inferInsert, "id">;
+
 // --- Route ---
 
 const conversationsRoute = new Hono();
@@ -195,7 +197,7 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
     const endedAt = body["endedAt"];
     const integrityHashedAt = body["integrityHashedAt"];
 
-    const values = {
+    const values: typeof conversations.$inferInsert = {
       id,
       userId,
       category: toStringOrNull(body["category"]),
@@ -228,18 +230,68 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
           : null,
     };
 
-    await db
-      .insert(conversations)
-      .values(values)
-      .onConflictDoUpdate({
-        target: conversations.id,
-        set: {
-          ...values,
-          id: undefined, // Don't update the PK
-        },
+    const { id: _conversationId, ...updateValues } = values;
+
+    const existing = await db.query.conversations.findFirst({
+      where: eq(conversations.id, id),
+      columns: { userId: true },
+    });
+
+    if (existing) {
+      if (existing.userId !== userId) {
+        return c.json(
+          {
+            error: "この会話IDはすでに別の会話で使用されています",
+            code: "CONFLICTING_CONVERSATION_ID",
+          },
+          409,
+        );
+      }
+
+      await db
+        .update(conversations)
+        .set(updateValues satisfies ConversationWriteValues)
+        .where(and(eq(conversations.id, id), eq(conversations.userId, userId)));
+
+      return c.json({ success: true, replaced: true });
+    }
+
+    try {
+      await db.insert(conversations).values(values);
+      return c.json({ success: true }, 201);
+    } catch (insertError: unknown) {
+      const isUniqueViolation =
+        typeof insertError === "object" &&
+        insertError !== null &&
+        "code" in insertError &&
+        (insertError as Record<string, unknown>)["code"] === "23505";
+
+      if (!isUniqueViolation) {
+        throw insertError;
+      }
+
+      const conflicting = await db.query.conversations.findFirst({
+        where: eq(conversations.id, id),
+        columns: { userId: true },
       });
 
-    return c.json({ success: true }, 201);
+      if (!conflicting || conflicting.userId !== userId) {
+        return c.json(
+          {
+            error: "この会話IDはすでに別の会話で使用されています",
+            code: "CONFLICTING_CONVERSATION_ID",
+          },
+          409,
+        );
+      }
+
+      await db
+        .update(conversations)
+        .set(updateValues satisfies ConversationWriteValues)
+        .where(and(eq(conversations.id, id), eq(conversations.userId, userId)));
+
+      return c.json({ success: true, replaced: true });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to save conversation", { error: message });

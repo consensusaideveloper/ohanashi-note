@@ -21,9 +21,55 @@ const MIME_TO_EXT: Record<string, string> = {
 
 const DEFAULT_EXT = "webm";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const FILE_TOO_LARGE_ERROR = "FILE_TOO_LARGE";
 
 function getExtension(mimeType: string): string {
   return MIME_TO_EXT[mimeType] ?? DEFAULT_EXT;
+}
+
+function normalizeMimeType(
+  contentType: string | null | undefined,
+): string | null {
+  if (contentType == null) {
+    return "audio/webm";
+  }
+  const normalized = contentType.trim().toLowerCase();
+  return MIME_TO_EXT[normalized] ? normalized : null;
+}
+
+async function readRequestBodyWithLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<Buffer> {
+  if (request.body === null) {
+    return Buffer.alloc(0);
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (value === undefined) {
+        continue;
+      }
+
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(FILE_TOO_LARGE_ERROR);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 }
 
 const audioUploadRoute = new Hono();
@@ -60,19 +106,42 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
 
     // Get the uploaded file
     const contentType = c.req.header("content-type");
-    const mimeType = contentType ?? "audio/webm";
+    const mimeType = normalizeMimeType(contentType);
+    if (mimeType === null) {
+      return c.json(
+        {
+          error: "音声形式がサポートされていません",
+          code: "INVALID_CONTENT_TYPE",
+        },
+        415,
+      );
+    }
 
     // Check content length
     const contentLength = c.req.header("content-length");
-    if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
+    if (contentLength) {
+      const parsedContentLength = Number.parseInt(contentLength, 10);
+      if (
+        Number.isNaN(parsedContentLength) ||
+        parsedContentLength < 0 ||
+        parsedContentLength > MAX_FILE_SIZE
+      ) {
+        return c.json(
+          { error: "ファイルサイズが大きすぎます", code: "FILE_TOO_LARGE" },
+          413,
+        );
+      }
+    }
+
+    // Stream the request body with a hard limit instead of buffering blindly.
+    const audioData = await readRequestBodyWithLimit(c.req.raw, MAX_FILE_SIZE);
+
+    if (audioData.byteLength > MAX_FILE_SIZE) {
       return c.json(
         { error: "ファイルサイズが大きすぎます", code: "FILE_TOO_LARGE" },
         413,
       );
     }
-
-    // Get the audio data
-    const audioData = await c.req.arrayBuffer();
 
     if (audioData.byteLength === 0) {
       return c.json({ error: "音声データが空です", code: "EMPTY_FILE" }, 400);
@@ -82,7 +151,7 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
     const storageKey = `audio/${userId}/${conversationId}.${ext}`;
 
     // Upload directly to R2 using the server-side client
-    await r2.uploadObject(storageKey, Buffer.from(audioData), mimeType);
+    await r2.uploadObject(storageKey, audioData, mimeType);
 
     logger.info("Audio uploaded successfully", {
       conversationId,
@@ -96,6 +165,12 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
       size: audioData.byteLength,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === FILE_TOO_LARGE_ERROR) {
+      return c.json(
+        { error: "ファイルサイズが大きすぎます", code: "FILE_TOO_LARGE" },
+        413,
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to upload audio", { error: message });
     return c.json(

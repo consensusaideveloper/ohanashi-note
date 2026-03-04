@@ -91,13 +91,26 @@ lifecycleRoute.post(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      // Auth: any registered family member (representative or member)
+      // Auth: representative required, fallback to member when no representative exists
       const role = await getUserRole(userId, creatorId);
 
-      if (role !== "representative" && role !== "member") {
-        return c.json(
-          { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
-          403,
+      if (role !== "representative") {
+        if (role !== "member") {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        const hasRep = await hasActiveRepresentative(creatorId);
+        if (hasRep) {
+          return c.json(
+            { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
+            403,
+          );
+        }
+        logger.info(
+          "Member performing representative action (no representative exists)",
+          { userId, creatorId, action: "report-death" },
         );
       }
 

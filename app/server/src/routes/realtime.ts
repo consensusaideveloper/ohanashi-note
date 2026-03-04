@@ -5,7 +5,7 @@
 
 import { Hono } from "hono";
 
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 
 import { getFirebaseUid } from "../middleware/auth.js";
 import { loadConfig } from "../lib/config.js";
@@ -19,46 +19,30 @@ import {
   SESSION_GRACE_PERIOD_MS,
 } from "../lib/session-limits.js";
 import { db } from "../db/connection.js";
-import { noteLifecycle, users } from "../db/schema.js";
+import { activityLog, noteLifecycle, users } from "../db/schema.js";
+import { normalizeStoredProfile } from "../lib/profile-validation.js";
+import {
+  validateRealtimeSessionConfig,
+  type ToolDefinition,
+  type TurnDetection,
+} from "../lib/realtime-session-config.js";
 
 // --- Constants ---
 
 const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 
 const REALTIME_MODEL = "gpt-realtime-mini";
+const REALTIME_SESSION_RESOURCE_TYPE = "realtime_session";
+const REALTIME_SESSION_STARTED_ACTION = "realtime_session_started";
+const REALTIME_SESSION_ENDED_ACTION = "realtime_session_ended";
+const REALTIME_ONBOARDING_SESSION_STARTED_ACTION =
+  "realtime_onboarding_started";
+const REALTIME_ONBOARDING_SESSION_ENDED_ACTION = "realtime_onboarding_ended";
+const MAX_INSTRUCTIONS_LENGTH = 50_000;
+const MAX_SDP_LENGTH = 200_000;
 
 /** Transcription model for GA Realtime API (replaces whisper-1 from beta). */
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
-
-// --- Types ---
-
-interface TurnDetection {
-  type: "server_vad";
-  threshold: number;
-  prefix_padding_ms: number;
-  silence_duration_ms: number;
-  create_response?: boolean;
-}
-
-interface ToolDefinition {
-  type: "function";
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
-
-interface SessionConfig {
-  instructions: string;
-  voice: string;
-  tools: ToolDefinition[];
-  turn_detection: TurnDetection;
-}
-
-interface ConnectRequestBody {
-  sessionConfig: SessionConfig;
-  sdp: string;
-  onboarding?: boolean;
-}
 
 interface SessionEndRequestBody {
   sessionKey: string;
@@ -80,10 +64,24 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
   const config = loadConfig();
 
   try {
-    const body: ConnectRequestBody = await c.req.json();
-    const { sessionConfig, sdp, onboarding } = body;
+    const body = await c.req.json<unknown>();
+    if (typeof body !== "object" || body === null) {
+      return c.json(
+        { error: "リクエストが不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+    const rawBody = body as Record<string, unknown>;
+    const sessionConfig = rawBody["sessionConfig"];
+    const sdp = rawBody["sdp"];
+    const onboarding = rawBody["onboarding"];
 
-    if (typeof sessionConfig.instructions !== "string") {
+    if (
+      typeof sessionConfig !== "object" ||
+      sessionConfig === null ||
+      typeof (sessionConfig as Record<string, unknown>)["instructions"] !==
+        "string"
+    ) {
       return c.json(
         { error: "セッション設定が不正です", code: "INVALID_REQUEST" },
         400,
@@ -96,10 +94,21 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
         400,
       );
     }
+    if (sdp.length > MAX_SDP_LENGTH) {
+      return c.json(
+        { error: "SDP offerが大きすぎます", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
 
     // --- User identification ---
     let userId: string | null = null;
     let isOnboarding = false;
+    let approvedSessionConfig: {
+      voice: string;
+      tools: readonly ToolDefinition[];
+      turnDetection: TurnDetection;
+    } | null = null;
 
     // In development without auth middleware, firebaseUid may not be set
     try {
@@ -110,9 +119,35 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       if (onboarding === true) {
         const userRow = await db.query.users.findFirst({
           where: eq(users.id, userId),
-          columns: { name: true },
+          columns: {
+            name: true,
+            characterId: true,
+            fontSize: true,
+            speakingSpeed: true,
+            silenceDuration: true,
+            confirmationLevel: true,
+          },
         });
-        isOnboarding = userRow !== undefined && userRow.name === "";
+        if (userRow !== undefined) {
+          const normalizedProfile = normalizeStoredProfile(userRow);
+          const priorSession = await db.query.activityLog.findFirst({
+            where: and(
+              eq(activityLog.creatorId, userId),
+              eq(activityLog.actorId, userId),
+              eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
+              or(
+                eq(activityLog.action, REALTIME_SESSION_STARTED_ACTION),
+                eq(
+                  activityLog.action,
+                  REALTIME_ONBOARDING_SESSION_STARTED_ACTION,
+                ),
+              ),
+            ),
+            columns: { id: true },
+          });
+          isOnboarding =
+            normalizedProfile.name === "" && priorSession === undefined;
+        }
       }
 
       // Quota check (skip for onboarding)
@@ -161,8 +196,33 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       }
     }
 
+    approvedSessionConfig = validateRealtimeSessionConfig(
+      sessionConfig,
+      isOnboarding,
+    );
+    if (approvedSessionConfig === null) {
+      return c.json(
+        { error: "セッション設定が不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+
     // --- Sanitize instructions ---
-    const sanitizedInstructions = sanitizeText(sessionConfig.instructions);
+    const sanitizedInstructions = sanitizeText(
+      (sessionConfig as Record<string, unknown>)["instructions"] as string,
+    );
+    if (sanitizedInstructions.trim().length === 0) {
+      return c.json(
+        { error: "instructions が不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+    if (sanitizedInstructions.length > MAX_INSTRUCTIONS_LENGTH) {
+      return c.json(
+        { error: "instructions が長すぎます", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
 
     // --- Build session config for OpenAI ---
     const openaiSession = {
@@ -170,16 +230,16 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       model: REALTIME_MODEL,
       output_modalities: ["audio"],
       instructions: sanitizedInstructions,
-      tools: sessionConfig.tools,
+      tools: approvedSessionConfig.tools,
       tool_choice: "auto",
       audio: {
         input: {
           transcription: { model: TRANSCRIPTION_MODEL },
-          turn_detection: sessionConfig.turn_detection,
+          turn_detection: approvedSessionConfig.turnDetection,
           noise_reduction: { type: "far_field" },
         },
         output: {
-          voice: sessionConfig.voice,
+          voice: approvedSessionConfig.voice,
         },
       },
     };
@@ -217,7 +277,7 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
     // --- Track session ---
     let sessionKey = "";
 
-    if (userId !== null && !isOnboarding) {
+    if (userId !== null) {
       const totalTimeoutMs = MAX_SESSION_DURATION_MS + SESSION_GRACE_PERIOD_MS;
       const timeoutId = setTimeout(() => {
         logger.info("Session timeout reached (realtime), cleaning up", {
@@ -228,6 +288,23 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       }, totalTimeoutMs);
 
       sessionKey = trackSessionStart(userId, timeoutId);
+
+      try {
+        await db.insert(activityLog).values({
+          creatorId: userId,
+          actorId: userId,
+          actorRole: "creator",
+          action: isOnboarding
+            ? REALTIME_ONBOARDING_SESSION_STARTED_ACTION
+            : REALTIME_SESSION_STARTED_ACTION,
+          resourceType: REALTIME_SESSION_RESOURCE_TYPE,
+          resourceId: sessionKey,
+          metadata: { onboarding: isOnboarding },
+        });
+      } catch (logError: unknown) {
+        trackSessionEnd(sessionKey);
+        throw logError;
+      }
     }
 
     logger.info("Realtime SDP exchange completed", {
@@ -262,6 +339,8 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
  */
 realtimeRoute.post("/api/realtime/session-end", async (c) => {
   try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
     const body: SessionEndRequestBody = await c.req.json();
     const { sessionKey } = body;
 
@@ -272,7 +351,41 @@ realtimeRoute.post("/api/realtime/session-end", async (c) => {
       );
     }
 
+    const sessionStart = await db.query.activityLog.findFirst({
+      where: and(
+        eq(activityLog.creatorId, userId),
+        eq(activityLog.actorId, userId),
+        or(
+          eq(activityLog.action, REALTIME_SESSION_STARTED_ACTION),
+          eq(activityLog.action, REALTIME_ONBOARDING_SESSION_STARTED_ACTION),
+        ),
+        eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
+        eq(activityLog.resourceId, sessionKey),
+      ),
+      columns: { id: true, action: true },
+    });
+
+    if (!sessionStart) {
+      return c.json(
+        { error: "セッションが見つかりません", code: "SESSION_NOT_FOUND" },
+        404,
+      );
+    }
+
     trackSessionEnd(sessionKey);
+
+    void db.insert(activityLog).values({
+      creatorId: userId,
+      actorId: userId,
+      actorRole: "creator",
+      action:
+        sessionStart.action === REALTIME_ONBOARDING_SESSION_STARTED_ACTION
+          ? REALTIME_ONBOARDING_SESSION_ENDED_ACTION
+          : REALTIME_SESSION_ENDED_ACTION,
+      resourceType: REALTIME_SESSION_RESOURCE_TYPE,
+      resourceId: sessionKey,
+      metadata: null,
+    });
 
     logger.info("Realtime session ended", { sessionKey });
     return c.json({ success: true });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { isNoiseTranscript } from "./audio";
+import { getAcceptedUserTranscript, isNoiseTranscript } from "./audio";
 
 describe("isNoiseTranscript", () => {
   it("detects known Whisper hallucination patterns", () => {
@@ -32,5 +32,30 @@ describe("isNoiseTranscript", () => {
     expect(isNoiseTranscript("ありがとうございました、今日はここまでで")).toBe(
       false,
     );
+  });
+});
+
+describe("getAcceptedUserTranscript", () => {
+  it("returns trimmed text for a valid transcript", () => {
+    expect(getAcceptedUserTranscript(" こんにちは ")).toBe("こんにちは");
+  });
+
+  it("rejects transcripts shorter than the minimum length", () => {
+    expect(getAcceptedUserTranscript("あ")).toBeNull();
+  });
+
+  it("rejects known noise transcripts", () => {
+    expect(
+      getAcceptedUserTranscript("ご視聴ありがとうございました"),
+    ).toBeNull();
+  });
+
+  it("rejects transcripts received during the audio guard window", () => {
+    expect(
+      getAcceptedUserTranscript("こんにちは", {
+        receivedAt: 999,
+        ignoreUntil: 1000,
+      }),
+    ).toBeNull();
   });
 });

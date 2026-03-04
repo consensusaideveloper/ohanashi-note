@@ -65,6 +65,8 @@ interface UseWebRTCReturn {
   removeMessageHandler: (handler: MessageHandler) => void;
   /** Subscribe to remote audio end events. */
   onRemoteAudioEnded: (handler: () => void) => () => void;
+  /** Subscribe to remote audio playback failure events. */
+  onRemoteAudioPlaybackFailed: (handler: () => void) => () => void;
   /** Enable or disable the mic audio track (mute/unmute without releasing the stream). */
   setMicEnabled: (enabled: boolean) => void;
 }
@@ -95,6 +97,9 @@ export function useWebRTC(): UseWebRTCReturn {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
   const remoteAudioEndHandlersRef = useRef<Set<() => void>>(new Set());
+  const remoteAudioPlaybackFailedHandlersRef = useRef<Set<() => void>>(
+    new Set(),
+  );
   const remoteAudioEndedListenerRef = useRef<(() => void) | null>(null);
 
   // Mic level analysis refs
@@ -124,6 +129,16 @@ export function useWebRTC(): UseWebRTCReturn {
       remoteAudioEndHandlersRef.current.add(handler);
       return () => {
         remoteAudioEndHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
+  const onRemoteAudioPlaybackFailed = useCallback(
+    (handler: () => void): (() => void) => {
+      remoteAudioPlaybackFailedHandlersRef.current.add(handler);
+      return () => {
+        remoteAudioPlaybackFailedHandlersRef.current.delete(handler);
       };
     },
     [],
@@ -297,7 +312,14 @@ export function useWebRTC(): UseWebRTCReturn {
             remoteAudioEndedListenerRef.current = handleEnded;
             audio.addEventListener("ended", handleEnded);
             // Play explicitly for iOS Safari autoplay policy
-            audio.play().catch(() => {});
+            audio.play().catch((error: unknown) => {
+              console.error("Remote audio playback failed:", {
+                error: error instanceof Error ? error.message : String(error),
+              });
+              remoteAudioPlaybackFailedHandlersRef.current.forEach((handler) =>
+                handler(),
+              );
+            });
           }
         };
 
@@ -387,6 +409,7 @@ export function useWebRTC(): UseWebRTCReturn {
     addMessageHandler,
     removeMessageHandler,
     onRemoteAudioEnded,
+    onRemoteAudioPlaybackFailed,
     setMicEnabled,
   };
 }

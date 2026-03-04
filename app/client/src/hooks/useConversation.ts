@@ -9,7 +9,6 @@ import {
   RETRY_DELAY_MS,
   MAX_SESSION_DURATION_MS,
   SESSION_WARNING_THRESHOLD,
-  MIN_TRANSCRIPT_LENGTH,
   SILENCE_DURATION_MS_MAP,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
@@ -27,9 +26,8 @@ import {
   saveUserProfile,
   saveAudioRecording,
 } from "../lib/storage";
-import { isNoiseTranscript } from "../lib/audio";
+import { getAcceptedUserTranscript } from "../lib/audio";
 import { computeContentHash, computeBlobHash } from "../lib/integrity";
-import { isIOSDevice } from "../lib/platform";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import {
   ApiError,
@@ -85,9 +83,8 @@ const ENHANCED_SUMMARIZE_MAX_ATTEMPTS = 3;
 const ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS = 1500;
 const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-/** Delay (ms) after AI finishes speaking before re-enabling the mic on iOS.
- * Allows residual echo from the last audio frame to dissipate. */
-const IOS_MIC_REENABLE_DELAY_MS = 300;
+/** Delay (ms) after AI finishes speaking before re-enabling the mic. */
+const MIC_REENABLE_DELAY_MS = 300;
 
 // --- State machine ---
 
@@ -488,16 +485,48 @@ export function useConversation(): UseConversationReturn {
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
 
-  // iOS echo guard: cache platform check and manage mic re-enable timer
-  const isIOSRef = useRef(isIOSDevice());
   const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const micGuardActiveRef = useRef(false);
+  const ignoreUserTranscriptsUntilRef = useRef(0);
+  const ignoredInputItemIdsRef = useRef<Set<string>>(new Set());
 
   // Keep transcript ref in sync with reducer state
   useEffect(() => {
     transcriptRef.current = state.transcript;
   }, [state.transcript]);
+
+  const clearSessionTimer = useCallback((): void => {
+    if (sessionTimerRef.current !== null) {
+      clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+    sessionStartTimeRef.current = null;
+  }, []);
+
+  const startSessionTimer = useCallback((): void => {
+    clearSessionTimer();
+    sessionStartTimeRef.current = Date.now();
+    dispatch({ type: "TICK_TIMER", remainingMs: MAX_SESSION_DURATION_MS });
+    sessionTimerRef.current = setInterval(() => {
+      const startTime = sessionStartTimeRef.current;
+      if (startTime === null) return;
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, MAX_SESSION_DURATION_MS - elapsed);
+      dispatch({ type: "TICK_TIMER", remainingMs: remaining });
+
+      const warningThreshold =
+        MAX_SESSION_DURATION_MS * SESSION_WARNING_THRESHOLD;
+      if (elapsed >= warningThreshold) {
+        dispatch({ type: "SESSION_WARNING_SHOWN" });
+      }
+
+      if (remaining <= 0) {
+        stopRef.current();
+      }
+    }, TIMER_INTERVAL_MS);
+  }, [clearSessionTimer]);
 
   const discardLocalRecording = useCallback((): void => {
     const recorder = mediaRecorderRef.current;
@@ -678,6 +707,67 @@ export function useConversation(): UseConversationReturn {
     clearEndConversationTimers();
   }, [clearEndConversationTimers]);
 
+  const releaseMicGuardNow = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = false;
+    ignoreUserTranscriptsUntilRef.current = 0;
+    webrtc.setMicEnabled(true);
+  }, [webrtc]);
+
+  const engageMicGuard = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = true;
+    webrtc.setMicEnabled(false);
+  }, [webrtc]);
+
+  const scheduleMicGuardRelease = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+    }
+    micGuardActiveRef.current = true;
+    ignoreUserTranscriptsUntilRef.current = Date.now() + MIC_REENABLE_DELAY_MS;
+    micReenableTimerRef.current = setTimeout(() => {
+      micReenableTimerRef.current = null;
+      micGuardActiveRef.current = false;
+      ignoreUserTranscriptsUntilRef.current = 0;
+      webrtc.setMicEnabled(true);
+    }, MIC_REENABLE_DELAY_MS);
+  }, [webrtc]);
+
+  const resetMicGuard = useCallback((): void => {
+    if (micReenableTimerRef.current !== null) {
+      clearTimeout(micReenableTimerRef.current);
+      micReenableTimerRef.current = null;
+    }
+    micGuardActiveRef.current = false;
+    ignoreUserTranscriptsUntilRef.current = 0;
+    ignoredInputItemIdsRef.current.clear();
+  }, []);
+
+  const cleanupRealtimeSession = useCallback((): void => {
+    clearSessionTimer();
+    resetEndConversationFlow();
+    aiSpeakingRef.current = false;
+    resetMicGuard();
+    webrtc.disconnect();
+
+    const key = sessionKeyRef.current;
+    if (key !== "") {
+      sessionKeyRef.current = "";
+      endRealtimeSession(key).catch((err: unknown) => {
+        console.error("Failed to end realtime session after error:", {
+          error: err,
+        });
+      });
+    }
+  }, [webrtc, clearSessionTimer, resetEndConversationFlow, resetMicGuard]);
+
   const requestEndConversation = useCallback(
     (source: "tool" | "user_intent"): void => {
       if (endConversationRequestedRef.current) {
@@ -805,11 +895,9 @@ export function useConversation(): UseConversationReturn {
           // entire audio.input object and remove the transcription config.
 
           dispatch({ type: "CONNECTED" });
-          // iOS echo guard: mute mic before greeting so the AEC warm-up
-          // period does not cause the AI's output to be detected as speech.
-          if (isIOSRef.current) {
-            webrtc.setMicEnabled(false);
-          }
+          startSessionTimer();
+          // Keep the mic muted until the first greeting finishes.
+          engageMicGuard();
           // Trigger AI to greet the user first
           webrtc.send({ type: "response.create" });
           break;
@@ -825,14 +913,7 @@ export function useConversation(): UseConversationReturn {
           if (!aiSpeakingRef.current) {
             aiSpeakingRef.current = true;
             dispatch({ type: "AI_SPEAKING" });
-            // iOS echo guard: keep mic muted while AI speaks
-            if (isIOSRef.current) {
-              if (micReenableTimerRef.current !== null) {
-                clearTimeout(micReenableTimerRef.current);
-                micReenableTimerRef.current = null;
-              }
-              webrtc.setMicEnabled(false);
-            }
+            engageMicGuard();
           }
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
@@ -845,13 +926,22 @@ export function useConversation(): UseConversationReturn {
           break;
 
         case "conversation.item.input_audio_transcription.completed": {
-          const trimmed = event.transcript.trim();
-          if (
-            trimmed.length >= MIN_TRANSCRIPT_LENGTH &&
-            !isNoiseTranscript(trimmed)
-          ) {
-            dispatch({ type: "ADD_USER_TRANSCRIPT", text: trimmed });
-            if (hasExplicitConversationEndIntent(trimmed)) {
+          if (ignoredInputItemIdsRef.current.delete(event.item_id)) {
+            break;
+          }
+          if (micGuardActiveRef.current) {
+            break;
+          }
+          const acceptedTranscript = getAcceptedUserTranscript(
+            event.transcript,
+            {
+              receivedAt: Date.now(),
+              ignoreUntil: ignoreUserTranscriptsUntilRef.current,
+            },
+          );
+          if (acceptedTranscript !== null) {
+            dispatch({ type: "ADD_USER_TRANSCRIPT", text: acceptedTranscript });
+            if (hasExplicitConversationEndIntent(acceptedTranscript)) {
               requestEndConversation("user_intent");
             }
           }
@@ -861,13 +951,7 @@ export function useConversation(): UseConversationReturn {
         case "response.done": {
           aiSpeakingRef.current = false;
           dispatch({ type: "AI_DONE" });
-          // iOS echo guard: re-enable mic after a short delay for echo to dissipate
-          if (isIOSRef.current) {
-            micReenableTimerRef.current = setTimeout(() => {
-              micReenableTimerRef.current = null;
-              webrtc.setMicEnabled(true);
-            }, IOS_MIC_REENABLE_DELAY_MS);
-          }
+          scheduleMicGuardRelease();
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -918,19 +1002,19 @@ export function useConversation(): UseConversationReturn {
         }
 
         case "input_audio_buffer.speech_started":
-          // Cancel pending end flow only when user actually barges in while AI is speaking.
+          if (micGuardActiveRef.current) {
+            if (micReenableTimerRef.current === null) {
+              ignoredInputItemIdsRef.current.add(event.item_id);
+              break;
+            }
+            releaseMicGuardNow();
+          }
+
+          // Cancel pending end flow only when user actually barges in.
           if (endConversationRequestedRef.current && aiSpeakingRef.current) {
             resetEndConversationFlow();
           }
           aiSpeakingRef.current = false;
-          // iOS echo guard: cancel pending re-enable and enable immediately
-          if (isIOSRef.current) {
-            if (micReenableTimerRef.current !== null) {
-              clearTimeout(micReenableTimerRef.current);
-              micReenableTimerRef.current = null;
-            }
-            webrtc.setMicEnabled(true);
-          }
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -968,8 +1052,12 @@ export function useConversation(): UseConversationReturn {
     [
       webrtc,
       handleFunctionCall,
+      engageMicGuard,
+      releaseMicGuardNow,
+      scheduleMicGuardRelease,
       resetEndConversationFlow,
       requestEndConversation,
+      startSessionTimer,
     ],
   );
 
@@ -988,9 +1076,22 @@ export function useConversation(): UseConversationReturn {
     }
   }, [webrtc.status]);
 
+  useEffect(() => {
+    if (state.conversationState === "error") {
+      cleanupRealtimeSession();
+    }
+  }, [state.conversationState, cleanupRealtimeSession]);
+
+  useEffect(() => {
+    return webrtc.onRemoteAudioPlaybackFailed(() => {
+      dispatch({ type: "ERROR", errorType: "unknown" });
+    });
+  }, [webrtc]);
+
   // Start conversation — load past context, get token, connect via WebRTC
   const start = useCallback(
     (characterId: CharacterId, category: QuestionCategory | null): void => {
+      resetMicGuard();
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
       categoryRef.current = category;
@@ -1228,32 +1329,16 @@ export function useConversation(): UseConversationReturn {
           } else {
             dispatch({ type: "ERROR", errorType: "network" });
           }
+          clearSessionTimer();
         });
-
-      // Start session timer
-      sessionStartTimeRef.current = Date.now();
-      dispatch({ type: "TICK_TIMER", remainingMs: MAX_SESSION_DURATION_MS });
-      sessionTimerRef.current = setInterval(() => {
-        const startTime = sessionStartTimeRef.current;
-        if (startTime === null) return;
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, MAX_SESSION_DURATION_MS - elapsed);
-        dispatch({ type: "TICK_TIMER", remainingMs: remaining });
-
-        // Show warning when threshold is reached
-        const warningThreshold =
-          MAX_SESSION_DURATION_MS * SESSION_WARNING_THRESHOLD;
-        if (elapsed >= warningThreshold) {
-          dispatch({ type: "SESSION_WARNING_SHOWN" });
-        }
-
-        // Auto-stop when time is up
-        if (remaining <= 0) {
-          stopRef.current();
-        }
-      }, TIMER_INTERVAL_MS);
     },
-    [webrtc, startLocalRecording, discardLocalRecording],
+    [
+      webrtc,
+      startLocalRecording,
+      discardLocalRecording,
+      resetMicGuard,
+      clearSessionTimer,
+    ],
   );
 
   // Stop conversation, save transcript, and request summary
@@ -1262,21 +1347,12 @@ export function useConversation(): UseConversationReturn {
     autoEndStopTriggerRef.current = false;
 
     // Clear session timer
-    if (sessionTimerRef.current !== null) {
-      clearInterval(sessionTimerRef.current);
-      sessionTimerRef.current = null;
-    }
-    sessionStartTimeRef.current = null;
+    clearSessionTimer();
 
     // Reset end-conversation state
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
-
-    // iOS echo guard: clean up mic re-enable timer
-    if (micReenableTimerRef.current !== null) {
-      clearTimeout(micReenableTimerRef.current);
-      micReenableTimerRef.current = null;
-    }
+    resetMicGuard();
 
     const currentTranscript = transcriptRef.current;
     const convId = conversationIdRef.current;
@@ -1441,7 +1517,13 @@ export function useConversation(): UseConversationReturn {
     if (shouldEmitAutoEndSignal) {
       setAutoEndSignal((n) => n + 1);
     }
-  }, [webrtc, stopLocalRecording, resetEndConversationFlow]);
+  }, [
+    webrtc,
+    stopLocalRecording,
+    resetEndConversationFlow,
+    resetMicGuard,
+    clearSessionTimer,
+  ]);
 
   // Keep stopRef in sync with the latest stop callback
   useEffect(() => {
@@ -1451,14 +1533,11 @@ export function useConversation(): UseConversationReturn {
   // Clean up session timer on unmount
   useEffect(() => {
     return () => {
-      if (sessionTimerRef.current !== null) {
-        clearInterval(sessionTimerRef.current);
-      }
       autoEndStopTriggerRef.current = false;
-      resetEndConversationFlow();
+      cleanupRealtimeSession();
       discardLocalRecording();
     };
-  }, [discardLocalRecording, resetEndConversationFlow]);
+  }, [discardLocalRecording, cleanupRealtimeSession]);
 
   // Mid-conversation session config update is not supported with WebRTC GA protocol
   // (session is pre-configured via client_secrets). Changes will apply to the next session.

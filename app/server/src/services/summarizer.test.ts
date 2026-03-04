@@ -34,9 +34,9 @@ describe("shouldFallbackToUngroundedEntries", () => {
     },
   ];
 
-  it("falls back in focused mode when grounding drops all entries", () => {
+  it("does not fall back in focused mode when grounding drops all entries", () => {
     expect(shouldFallbackToUngroundedEntries("house", modelEntries, [])).toBe(
-      true,
+      false,
     );
   });
 

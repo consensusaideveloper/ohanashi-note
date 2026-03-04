@@ -6,6 +6,7 @@ import { termsConsent } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
+import { extractTrustedIpAddress } from "../lib/request-ip.js";
 import {
   CURRENT_TERMS_VERSION,
   CURRENT_PRIVACY_VERSION,
@@ -99,10 +100,7 @@ termsConsentRoute.post("/api/terms-consent", async (c: Context) => {
       );
     }
 
-    const forwarded = c.req.header("x-forwarded-for");
-    const ipAddress = forwarded
-      ? (forwarded.split(",")[0]?.trim() ?? null)
-      : (c.req.header("x-real-ip") ?? null);
+    const ipAddress = extractTrustedIpAddress(c.req.raw.headers);
     const userAgent = c.req.header("user-agent") ?? null;
 
     const now = new Date();

@@ -138,16 +138,28 @@ accountRoute.delete("/api/account", async (c: Context) => {
       }
     }
 
-    // Clean up R2 audio files (best-effort)
+    // Clean up R2 audio files (best-effort) before removing DB records
     await deleteUserAudioFiles(userId);
 
-    // Delete Firebase Auth user FIRST — if this fails, no data is lost and the user can retry
-    await deleteFirebaseUser(firebaseUid);
-
-    // Delete from DB (cascades clean up everything)
+    // Delete DB data first so personal data is not left behind if auth cleanup fails.
     await db.delete(users).where(eq(users.id, userId));
 
-    logger.info("Account deleted", { userId, firebaseUid });
+    let firebaseDeleted = true;
+    try {
+      await deleteFirebaseUser(firebaseUid);
+    } catch (firebaseError: unknown) {
+      firebaseDeleted = false;
+      logger.error("Failed to delete Firebase user after DB deletion", {
+        userId,
+        firebaseUid,
+        error:
+          firebaseError instanceof Error
+            ? firebaseError.message
+            : String(firebaseError),
+      });
+    }
+
+    logger.info("Account deleted", { userId, firebaseUid, firebaseDeleted });
 
     return c.json({ success: true });
   } catch (error) {

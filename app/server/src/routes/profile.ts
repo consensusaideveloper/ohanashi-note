@@ -6,6 +6,10 @@ import { users } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
+import {
+  normalizeStoredProfile,
+  validateProfileUpdateValue,
+} from "../lib/profile-validation.js";
 
 import type { Context } from "hono";
 
@@ -40,14 +44,16 @@ profileRoute.get("/api/profile", async (c: Context) => {
       );
     }
 
+    const normalized = normalizeStoredProfile(row);
+
     const profile: ClientProfile = {
       id: userId,
-      name: row.name,
-      characterId: row.characterId,
-      fontSize: row.fontSize,
-      speakingSpeed: row.speakingSpeed,
-      silenceDuration: row.silenceDuration,
-      confirmationLevel: row.confirmationLevel,
+      name: normalized.name,
+      characterId: normalized.characterId,
+      fontSize: normalized.fontSize,
+      speakingSpeed: normalized.speakingSpeed,
+      silenceDuration: normalized.silenceDuration,
+      confirmationLevel: normalized.confirmationLevel,
       updatedAt: row.updatedAt.getTime(),
     };
 
@@ -73,30 +79,23 @@ profileRoute.put("/api/profile", async (c: Context) => {
       updatedAt: new Date(),
     };
 
-    if ("name" in body && typeof body["name"] === "string") {
-      updates["name"] = body["name"];
-    }
-    if ("characterId" in body) {
-      updates["characterId"] =
-        typeof body["characterId"] === "string" ? body["characterId"] : null;
-    }
-    if ("fontSize" in body && typeof body["fontSize"] === "string") {
-      updates["fontSize"] = body["fontSize"];
-    }
-    if ("speakingSpeed" in body && typeof body["speakingSpeed"] === "string") {
-      updates["speakingSpeed"] = body["speakingSpeed"];
-    }
-    if (
-      "silenceDuration" in body &&
-      typeof body["silenceDuration"] === "string"
-    ) {
-      updates["silenceDuration"] = body["silenceDuration"];
-    }
-    if (
-      "confirmationLevel" in body &&
-      typeof body["confirmationLevel"] === "string"
-    ) {
-      updates["confirmationLevel"] = body["confirmationLevel"];
+    for (const field of [
+      "name",
+      "characterId",
+      "fontSize",
+      "speakingSpeed",
+      "silenceDuration",
+      "confirmationLevel",
+    ] as const) {
+      if (!(field in body)) continue;
+      const validation = validateProfileUpdateValue(field, body[field]);
+      if ("error" in validation) {
+        return c.json(
+          { error: validation.error.message, code: validation.error.code },
+          400,
+        );
+      }
+      updates[field] = validation.normalized;
     }
 
     await db.update(users).set(updates).where(eq(users.id, userId));
@@ -113,14 +112,16 @@ profileRoute.put("/api/profile", async (c: Context) => {
       );
     }
 
+    const normalized = normalizeStoredProfile(row);
+
     const profile: ClientProfile = {
       id: userId,
-      name: row.name,
-      characterId: row.characterId,
-      fontSize: row.fontSize,
-      speakingSpeed: row.speakingSpeed,
-      silenceDuration: row.silenceDuration,
-      confirmationLevel: row.confirmationLevel,
+      name: normalized.name,
+      characterId: normalized.characterId,
+      fontSize: normalized.fontSize,
+      speakingSpeed: normalized.speakingSpeed,
+      silenceDuration: normalized.silenceDuration,
+      confirmationLevel: normalized.confirmationLevel,
       updatedAt: row.updatedAt.getTime(),
     };
 

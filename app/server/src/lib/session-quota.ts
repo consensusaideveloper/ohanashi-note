@@ -1,11 +1,10 @@
-// Combines DB conversation count and in-memory active sessions
-// to determine a user's remaining daily session quota.
+// Counts persisted realtime session start events to determine
+// a user's remaining daily session quota.
 
-import { and, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
-import { conversations } from "../db/schema.js";
-import { getActiveSessionCount } from "./session-tracker.js";
+import { activityLog } from "../db/schema.js";
 import { MAX_DAILY_SESSIONS, JST_TIMEZONE } from "./session-limits.js";
 import { logger } from "./logger.js";
 
@@ -52,8 +51,8 @@ function getJstDayStart(): Date {
 
 /**
  * Check the session quota for a given internal user ID.
- * Counts completed conversations (in DB with startedAt >= today JST)
- * plus active in-memory sessions.
+ * Counts persisted realtime session start events created when a session
+ * is successfully established.
  *
  * Fails open on DB errors to avoid blocking users.
  */
@@ -61,21 +60,20 @@ export async function getSessionQuota(userId: string): Promise<SessionQuota> {
   try {
     const dayStart = getJstDayStart();
 
-    // Count conversations in DB that started today (JST).
-    // Uses the existing idx_conversations_user_started index.
-    const dbRows = await db
-      .select({ id: conversations.id })
-      .from(conversations)
+    const [sessionUsage] = await db
+      .select({ value: count() })
+      .from(activityLog)
       .where(
         and(
-          eq(conversations.userId, userId),
-          gte(conversations.startedAt, dayStart),
+          eq(activityLog.creatorId, userId),
+          eq(activityLog.actorId, userId),
+          eq(activityLog.action, "realtime_session_started"),
+          eq(activityLog.resourceType, "realtime_session"),
+          gte(activityLog.createdAt, dayStart),
         ),
       );
 
-    const dbCount = dbRows.length;
-    const activeCount = getActiveSessionCount(userId);
-    const usedToday = dbCount + activeCount;
+    const usedToday = sessionUsage?.value ?? 0;
     const remaining = Math.max(0, MAX_DAILY_SESSIONS - usedToday);
 
     return {

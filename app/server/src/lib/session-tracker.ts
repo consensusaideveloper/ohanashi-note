@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 // In-memory tracker for active (in-progress) WebSocket sessions per user.
 // Used alongside the DB conversations table to enforce daily session limits
 // even for sessions that haven't been saved to the database yet.
@@ -52,8 +54,7 @@ export function trackSessionStart(
   userId: string,
   timeoutId: ReturnType<typeof setTimeout> | null,
 ): string {
-  const randomSuffix = Math.random().toString(36).slice(2, 8);
-  const sessionKey = `${userId}:${Date.now()}:${randomSuffix}`;
+  const sessionKey = crypto.randomUUID();
   activeSessions.set(sessionKey, {
     userId,
     startedAt: Date.now(),

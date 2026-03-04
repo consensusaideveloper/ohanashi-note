@@ -354,12 +354,10 @@ export function shouldFallbackToUngroundedEntries(
   modelNoteEntries: NoteEntry[],
   groundedNoteEntries: NoteEntry[],
 ): boolean {
-  // In focused mode, losing all entries is worse UX than keeping model output.
-  return (
-    category !== null &&
-    modelNoteEntries.length > 0 &&
-    groundedNoteEntries.length === 0
-  );
+  void category;
+  void modelNoteEntries;
+  void groundedNoteEntries;
+  return false;
 }
 
 export function selectTranscriptForAnalysis(
@@ -555,6 +553,15 @@ export async function summarizeConversation(
         modelEntries: parsed.noteEntries.length,
       },
     );
+  } else if (
+    request.category !== null &&
+    parsed.noteEntries.length > 0 &&
+    groundedNoteEntries.length === 0
+  ) {
+    logger.warn("Discarded ungrounded note entries in focused mode", {
+      category: request.category,
+      modelEntries: parsed.noteEntries.length,
+    });
   }
 
   const groundedQuestionIdSet = new Set(
