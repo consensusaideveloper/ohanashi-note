@@ -39,6 +39,12 @@ export const SESSION_CONFIG = {
   },
 } as const;
 
+/** Keep client-side session.update payloads aligned with server realtime config. */
+export const SESSION_AUDIO_INPUT_CONFIG = {
+  transcription: { model: "gpt-4o-mini-transcribe" },
+  noise_reduction: { type: "far_field" as const },
+} as const;
+
 // Function calling tools for the Realtime API session
 export const REALTIME_TOOLS = [
   {
@@ -912,7 +918,9 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   nameLabel: "お名前",
   characterLabel: "話し相手",
   fontSizeLabel: "文字の大きさ",
-  speakingSpeedLabel: "話し方",
+  speakingSpeedLabel: "話す速さ",
+  silenceDurationLabel: "待ち時間",
+  confirmationLevelLabel: "確認の頻度",
   description:
     "話し相手とお話しすると、大切な想いがノートにまとめられます。\nいつでも気軽にお話ししてくださいね。",
   startButton: "はじめる",

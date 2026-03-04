@@ -12,9 +12,15 @@ const DATA_CHANNEL_NAME = "oai-events";
 
 /** Interval for mic audio level analysis (roughly 60fps). */
 const AUDIO_LEVEL_INTERVAL_MS = 16;
+/** Interval for remote audio activity analysis. */
+const REMOTE_AUDIO_LEVEL_INTERVAL_MS = 50;
 
 /** Size of the AnalyserNode FFT for mic level detection. */
 const ANALYSER_FFT_SIZE = 256;
+/** RMS threshold above which remote audio is treated as active playback. */
+const REMOTE_AUDIO_ACTIVITY_THRESHOLD = 0.015;
+/** Sustained silence window required before treating remote audio as complete. */
+const REMOTE_AUDIO_SILENCE_MS = 1200;
 
 /**
  * Audio constraints tuned for iOS to prevent echo feedback.
@@ -39,6 +45,12 @@ const DEFAULT_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 type WebRTCStatus = "disconnected" | "connecting" | "connected" | "failed";
 
 type MessageHandler = (event: DataChannelServerEvent) => void;
+type RemoteAudioCompletionHandler = () => void;
+
+interface RemoteAudioCompletionSubscription {
+  handler: RemoteAudioCompletionHandler;
+  targetEpoch: number;
+}
 
 /** Callback that sends the SDP offer to a server and returns the answer SDP. */
 type SdpExchangeFn = (offerSdp: string) => Promise<string>;
@@ -96,11 +108,22 @@ export function useWebRTC(): UseWebRTCReturn {
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
-  const remoteAudioEndHandlersRef = useRef<Set<() => void>>(new Set());
+  const remoteAudioEndHandlersRef = useRef<
+    Set<RemoteAudioCompletionSubscription>
+  >(new Set());
   const remoteAudioPlaybackFailedHandlersRef = useRef<Set<() => void>>(
     new Set(),
   );
   const remoteAudioEndedListenerRef = useRef<(() => void) | null>(null);
+  const remoteAudioContextRef = useRef<AudioContext | null>(null);
+  const remoteAudioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const remoteAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const remoteAudioLevelTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+  const remoteAudioEpochRef = useRef(0);
+  const remoteAudioPendingEpochRef = useRef<number | null>(null);
+  const remoteAudioLastActiveAtRef = useRef(0);
 
   // Mic level analysis refs
   const analyserContextRef = useRef<AudioContext | null>(null);
@@ -126,9 +149,14 @@ export function useWebRTC(): UseWebRTCReturn {
 
   const onRemoteAudioEnded = useCallback(
     (handler: () => void): (() => void) => {
-      remoteAudioEndHandlersRef.current.add(handler);
+      const subscription: RemoteAudioCompletionSubscription = {
+        handler,
+        targetEpoch:
+          remoteAudioPendingEpochRef.current ?? remoteAudioEpochRef.current + 1,
+      };
+      remoteAudioEndHandlersRef.current.add(subscription);
       return () => {
-        remoteAudioEndHandlersRef.current.delete(handler);
+        remoteAudioEndHandlersRef.current.delete(subscription);
       };
     },
     [],
@@ -194,6 +222,89 @@ export function useWebRTC(): UseWebRTCReturn {
     setAudioLevel(0);
   }, []);
 
+  const emitRemoteAudioCompleted = useCallback((completedEpoch: number): void => {
+    if (remoteAudioPendingEpochRef.current !== null) {
+      remoteAudioPendingEpochRef.current = null;
+    }
+    for (const subscription of remoteAudioEndHandlersRef.current) {
+      if (subscription.targetEpoch <= completedEpoch) {
+        remoteAudioEndHandlersRef.current.delete(subscription);
+        subscription.handler();
+      }
+    }
+  }, []);
+
+  const stopRemoteAudioMonitor = useCallback((): void => {
+    if (remoteAudioLevelTimerRef.current !== null) {
+      clearInterval(remoteAudioLevelTimerRef.current);
+      remoteAudioLevelTimerRef.current = null;
+    }
+    if (remoteAudioSourceRef.current !== null) {
+      remoteAudioSourceRef.current.disconnect();
+      remoteAudioSourceRef.current = null;
+    }
+    remoteAudioAnalyserRef.current = null;
+    if (remoteAudioContextRef.current !== null) {
+      remoteAudioContextRef.current.close().catch(() => {});
+      remoteAudioContextRef.current = null;
+    }
+    remoteAudioPendingEpochRef.current = null;
+    remoteAudioLastActiveAtRef.current = 0;
+    remoteAudioEpochRef.current = 0;
+  }, []);
+
+  const startRemoteAudioMonitor = useCallback(
+    (stream: MediaStream): void => {
+      stopRemoteAudioMonitor();
+      try {
+        const ctx = new AudioContext();
+        remoteAudioContextRef.current = ctx;
+
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = ANALYSER_FFT_SIZE;
+        remoteAudioAnalyserRef.current = analyser;
+
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        remoteAudioSourceRef.current = source;
+
+        const dataArray = new Uint8Array(analyser.fftSize);
+
+        remoteAudioLevelTimerRef.current = setInterval(() => {
+          analyser.getByteTimeDomainData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const sample = ((dataArray[i] ?? 128) - 128) / 128;
+            sum += sample * sample;
+          }
+          const rms = Math.sqrt(sum / dataArray.length);
+          const now = Date.now();
+
+          if (rms >= REMOTE_AUDIO_ACTIVITY_THRESHOLD) {
+            if (remoteAudioPendingEpochRef.current === null) {
+              remoteAudioEpochRef.current += 1;
+              remoteAudioPendingEpochRef.current = remoteAudioEpochRef.current;
+            }
+            remoteAudioLastActiveAtRef.current = now;
+            return;
+          }
+
+          const pendingEpoch = remoteAudioPendingEpochRef.current;
+          if (
+            pendingEpoch !== null &&
+            remoteAudioLastActiveAtRef.current > 0 &&
+            now - remoteAudioLastActiveAtRef.current >= REMOTE_AUDIO_SILENCE_MS
+          ) {
+            emitRemoteAudioCompleted(pendingEpoch);
+          }
+        }, REMOTE_AUDIO_LEVEL_INTERVAL_MS);
+      } catch {
+        // Remote audio completion monitoring is best-effort. Fallback timers still apply.
+      }
+    },
+    [emitRemoteAudioCompleted, stopRemoteAudioMonitor],
+  );
+
   /** Request microphone access. Must be called from a user gesture handler. */
   const requestMicAccess = useCallback(async (): Promise<MediaStream> => {
     const constraints = isIOSDevice()
@@ -222,6 +333,7 @@ export function useWebRTC(): UseWebRTCReturn {
       const { preserveMicStream } = options;
 
       stopAudioLevelMonitor();
+      stopRemoteAudioMonitor();
 
       // Stop mic stream tracks
       const micStream = micStreamRef.current;
@@ -263,7 +375,7 @@ export function useWebRTC(): UseWebRTCReturn {
         peerConnectionRef.current = null;
       }
     },
-    [stopAudioLevelMonitor],
+    [stopAudioLevelMonitor, stopRemoteAudioMonitor],
   );
 
   const disconnect = useCallback((): void => {
@@ -302,12 +414,17 @@ export function useWebRTC(): UseWebRTCReturn {
         pc.ontrack = (event: RTCTrackEvent): void => {
           const remoteStream = event.streams[0];
           if (remoteStream !== undefined) {
+            startRemoteAudioMonitor(remoteStream);
             const audio = new Audio();
             audio.srcObject = remoteStream;
             audio.autoplay = true;
             audioElementRef.current = audio;
             const handleEnded = (): void => {
-              remoteAudioEndHandlersRef.current.forEach((handler) => handler());
+              const completedEpoch =
+                remoteAudioPendingEpochRef.current ?? remoteAudioEpochRef.current;
+              if (completedEpoch > 0) {
+                emitRemoteAudioCompleted(completedEpoch);
+              }
             };
             remoteAudioEndedListenerRef.current = handleEnded;
             audio.addEventListener("ended", handleEnded);
@@ -389,7 +506,7 @@ export function useWebRTC(): UseWebRTCReturn {
         setStatus("failed");
       }
     },
-    [releaseResources, startAudioLevelMonitor],
+    [emitRemoteAudioCompleted, releaseResources, startAudioLevelMonitor, startRemoteAudioMonitor],
   );
 
   // Clean up on unmount

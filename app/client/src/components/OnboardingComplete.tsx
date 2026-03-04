@@ -4,6 +4,8 @@ import {
   ONBOARDING_COMPLETE_MESSAGES,
   FONT_SIZE_LABELS,
   SPEAKING_SPEED_LABELS,
+  SILENCE_DURATION_LABELS,
+  CONFIRMATION_LEVEL_LABELS,
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
@@ -11,6 +13,8 @@ import { getUserProfile } from "../lib/storage";
 import type { ReactNode } from "react";
 import type {
   CharacterId,
+  ConfirmationLevel,
+  SilenceDuration,
   SpeakingSpeed,
   UserProfile,
 } from "../types/conversation";
@@ -22,6 +26,8 @@ interface OnboardingCompleteProps {
 const DEFAULT_CHARACTER_ID: CharacterId = "character-a";
 const DEFAULT_FONT_SIZE_KEY = "standard";
 const DEFAULT_SPEAKING_SPEED: SpeakingSpeed = "normal";
+const DEFAULT_SILENCE_DURATION: SilenceDuration = "normal";
+const DEFAULT_CONFIRMATION_LEVEL: ConfirmationLevel = "normal";
 const PROFILE_LOAD_MAX_RETRIES = 3;
 const PROFILE_LOAD_RETRY_DELAY_MS = 250;
 
@@ -52,6 +58,8 @@ export function OnboardingComplete({
   const [characterDescription, setCharacterDescription] = useState("");
   const [fontSizeLabel, setFontSizeLabel] = useState("");
   const [speakingSpeedLabel, setSpeakingSpeedLabel] = useState("");
+  const [silenceDurationLabel, setSilenceDurationLabel] = useState("");
+  const [confirmationLevelLabel, setConfirmationLevelLabel] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,6 +69,10 @@ export function OnboardingComplete({
         const charId = profile?.characterId ?? DEFAULT_CHARACTER_ID;
         const fontSize = profile?.fontSize ?? DEFAULT_FONT_SIZE_KEY;
         const speed = profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED;
+        const silence =
+          profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION;
+        const confirmation =
+          profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL;
 
         setUserName(name);
 
@@ -75,6 +87,10 @@ export function OnboardingComplete({
         setFontSizeLabel(label);
 
         setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
+        setSilenceDurationLabel(SILENCE_DURATION_LABELS[silence]);
+        setConfirmationLevelLabel(
+          CONFIRMATION_LEVEL_LABELS[confirmation],
+        );
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {
@@ -86,6 +102,12 @@ export function OnboardingComplete({
         setCharacterDescription(character.description);
         setFontSizeLabel(FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "");
         setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED]);
+        setSilenceDurationLabel(
+          SILENCE_DURATION_LABELS[DEFAULT_SILENCE_DURATION],
+        );
+        setConfirmationLevelLabel(
+          CONFIRMATION_LEVEL_LABELS[DEFAULT_CONFIRMATION_LEVEL],
+        );
       })
       .finally(() => {
         setLoading(false);
@@ -174,6 +196,26 @@ export function OnboardingComplete({
             </span>
             <span className="text-lg text-text-primary font-medium">
               {speakingSpeedLabel}
+            </span>
+          </div>
+
+          {/* Silence duration */}
+          <div className="flex items-center gap-3">
+            <span className="text-base text-text-secondary flex-shrink-0">
+              {ONBOARDING_COMPLETE_MESSAGES.silenceDurationLabel}
+            </span>
+            <span className="text-lg text-text-primary font-medium">
+              {silenceDurationLabel}
+            </span>
+          </div>
+
+          {/* Confirmation level */}
+          <div className="flex items-center gap-3">
+            <span className="text-base text-text-secondary flex-shrink-0">
+              {ONBOARDING_COMPLETE_MESSAGES.confirmationLevelLabel}
+            </span>
+            <span className="text-lg text-text-primary font-medium">
+              {confirmationLevelLabel}
             </span>
           </div>
         </div>

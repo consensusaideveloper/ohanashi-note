@@ -13,6 +13,9 @@ export interface RealtimeToolDefinition {
 
 export interface ResponseCreateEvent {
   type: "response.create";
+  response?: {
+    instructions?: string;
+  };
 }
 
 export interface ResponseCancelEvent {
@@ -32,8 +35,13 @@ export interface SessionUpdateEvent {
   type: "session.update";
   session: {
     type: "realtime";
+    instructions?: string;
+    tools?: RealtimeToolDefinition[];
     audio?: {
       input?: {
+        transcription?: {
+          model: string;
+        };
         turn_detection?: {
           type: "server_vad";
           threshold?: number;
@@ -41,6 +49,9 @@ export interface SessionUpdateEvent {
           silence_duration_ms?: number;
           create_response?: boolean;
         } | null;
+        noise_reduction?: {
+          type: "far_field" | "near_field";
+        };
       };
     };
   };

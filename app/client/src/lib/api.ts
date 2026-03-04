@@ -148,6 +148,16 @@ export async function endRealtimeSession(sessionKey: string): Promise<void> {
   });
 }
 
+export async function activateRealtimeSession(
+  sessionKey: string,
+): Promise<{ success: true; counted: boolean }> {
+  const response = await fetchWithAuth("/api/realtime/session-activate", {
+    method: "POST",
+    body: JSON.stringify({ sessionKey }),
+  });
+  return response.json() as Promise<{ success: true; counted: boolean }>;
+}
+
 // --- Enhanced Summarize (with re-transcription) ---
 
 export async function requestEnhancedSummarize(

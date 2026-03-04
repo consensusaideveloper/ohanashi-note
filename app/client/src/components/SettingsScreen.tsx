@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 import {
   getUserProfile,
   saveUserProfile,
+  subscribeToUserProfileUpdates,
   clearAllData,
   deleteAccount,
 } from "../lib/storage";
@@ -34,6 +35,7 @@ import type {
   FontSizeLevel,
   SilenceDuration,
   SpeakingSpeed,
+  UserProfile,
 } from "../types/conversation";
 import type { ReactNode } from "react";
 
@@ -89,6 +91,10 @@ export function SettingsScreen({
       savedConfirmationLevel,
     ],
   );
+  const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+  useEffect(() => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+  }, [hasUnsavedChanges]);
 
   // Dialog state
   const { fontSize, setFontSize } = useFontSize();
@@ -99,32 +105,81 @@ export function SettingsScreen({
   const [showTermsViewer, setShowTermsViewer] = useState(false);
   const [showPrivacyViewer, setShowPrivacyViewer] = useState(false);
 
-  useEffect(() => {
-    void getUserProfile().then((profile) => {
-      if (profile !== null) {
-        setName(profile.name);
+  const applyProfileUpdate = useCallback(
+    (profile: Partial<UserProfile>, overwriteDraft: boolean): void => {
+      if ("name" in profile && profile.name !== undefined) {
+        setSavedName(profile.name);
+        if (overwriteDraft) {
+          setName(profile.name);
+        }
+      }
+
+      if ("characterId" in profile) {
         const charId =
           profile.characterId !== undefined && profile.characterId !== null
             ? profile.characterId
             : ("character-a" as CharacterId);
-        setSelectedCharacterId(charId);
-        const speed = profile.speakingSpeed ?? ("normal" as SpeakingSpeed);
-        const silence =
-          profile.silenceDuration ?? ("normal" as SilenceDuration);
-        const confirmation =
-          profile.confirmationLevel ?? ("normal" as ConfirmationLevel);
-        setSpeakingSpeed(speed);
-        setSilenceDuration(silence);
-        setConfirmationLevel(confirmation);
-
-        setSavedName(profile.name);
         setSavedCharacterId(charId);
-        setSavedSpeakingSpeed(speed);
-        setSavedSilenceDuration(silence);
-        setSavedConfirmationLevel(confirmation);
+        if (overwriteDraft) {
+          setSelectedCharacterId(charId);
+        }
+      }
+
+      if ("speakingSpeed" in profile && profile.speakingSpeed !== undefined) {
+        setSavedSpeakingSpeed(profile.speakingSpeed);
+        if (overwriteDraft) {
+          setSpeakingSpeed(profile.speakingSpeed);
+        }
+      }
+
+      if (
+        "silenceDuration" in profile &&
+        profile.silenceDuration !== undefined
+      ) {
+        setSavedSilenceDuration(profile.silenceDuration);
+        if (overwriteDraft) {
+          setSilenceDuration(profile.silenceDuration);
+        }
+      }
+
+      if (
+        "confirmationLevel" in profile &&
+        profile.confirmationLevel !== undefined
+      ) {
+        setSavedConfirmationLevel(profile.confirmationLevel);
+        if (overwriteDraft) {
+          setConfirmationLevel(profile.confirmationLevel);
+        }
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void getUserProfile().then((profile) => {
+      if (profile !== null) {
+        applyProfileUpdate(
+          {
+            ...profile,
+            speakingSpeed:
+              profile.speakingSpeed ?? ("normal" as SpeakingSpeed),
+            silenceDuration:
+              profile.silenceDuration ?? ("normal" as SilenceDuration),
+            confirmationLevel:
+              profile.confirmationLevel ??
+              ("normal" as ConfirmationLevel),
+          },
+          true,
+        );
       }
     });
-  }, []);
+  }, [applyProfileUpdate]);
+
+  useEffect(() => {
+    return subscribeToUserProfileUpdates((profile) => {
+      applyProfileUpdate(profile, !hasUnsavedChangesRef.current);
+    });
+  }, [applyProfileUpdate]);
 
   const handleSaveSettings = useCallback((): void => {
     void saveUserProfile({

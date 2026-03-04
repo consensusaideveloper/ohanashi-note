@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useReducer, useState } from "react";
 
 import {
   SESSION_CONFIG,
+  SESSION_AUDIO_INPUT_CONFIG,
   REALTIME_TOOLS,
   CROSS_CATEGORY_RECORDS_LIMIT,
   FOCUSED_SUMMARIES_LIMIT,
@@ -35,6 +36,7 @@ import {
   requestEnhancedSummarize,
   connectRealtimeSession,
   endRealtimeSession,
+  activateRealtimeSession,
 } from "../lib/api";
 import {
   searchPastConversations,
@@ -67,7 +69,7 @@ import type { SummarizeResult } from "../lib/api";
 
 // --- End-conversation flow ---
 /** Delay (ms) after farewell response.done before calling stop(), allowing audio playback to complete. */
-const END_CONVERSATION_FAREWELL_DELAY_MS = 5000;
+const END_CONVERSATION_FAREWELL_DELAY_MS = 8000;
 /** Safety timeout if farewell events are not observed as expected. */
 const END_CONVERSATION_FALLBACK_MS = 12000;
 /** MediaRecorder timeslice for chunked buffering during long sessions. */
@@ -459,6 +461,9 @@ export function useConversation(): UseConversationReturn {
 
   // Session key for server-side tracking
   const sessionKeyRef = useRef<string>("");
+  const sessionQuotaActivationStateRef = useRef<"idle" | "pending" | "done">(
+    "idle",
+  );
 
   // Local recording refs (user microphone only)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -756,6 +761,7 @@ export function useConversation(): UseConversationReturn {
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
     resetMicGuard();
+    sessionQuotaActivationStateRef.current = "idle";
     webrtc.disconnect();
 
     const key = sessionKeyRef.current;
@@ -769,9 +775,99 @@ export function useConversation(): UseConversationReturn {
     }
   }, [webrtc, clearSessionTimer, resetEndConversationFlow, resetMicGuard]);
 
+  const activateSessionQuota = useCallback((): void => {
+    const key = sessionKeyRef.current;
+    if (key === "" || sessionQuotaActivationStateRef.current !== "idle") {
+      return;
+    }
+    sessionQuotaActivationStateRef.current = "pending";
+    activateRealtimeSession(key)
+      .then(() => {
+        sessionQuotaActivationStateRef.current = "done";
+      })
+      .catch((err: unknown) => {
+        sessionQuotaActivationStateRef.current = "idle";
+        console.error("Failed to activate realtime session quota:", {
+          error: err,
+        });
+      });
+  }, []);
+
   useEffect(() => {
     cleanupRealtimeSessionRef.current = cleanupRealtimeSession;
   }, [cleanupRealtimeSession]);
+
+  const buildCurrentSessionInstructions = useCallback(
+    (preferences: SpeakingPreferences): string | null => {
+      const characterId = characterIdRef.current;
+      if (characterId === null) {
+        return null;
+      }
+
+      const familyContext = familyContextRef.current ?? undefined;
+      const userName = userNameRef.current ?? undefined;
+      const category = categoryRef.current;
+
+      if (category !== null) {
+        return buildSessionPrompt(
+          characterId,
+          category,
+          pastContextRef.current ?? undefined,
+          userName,
+          preferences,
+          familyContext,
+        );
+      }
+
+      return buildGuidedSessionPrompt(
+        characterId,
+        guidedContextRef.current ?? {
+          allCoveredQuestionIds: [],
+          recentSummaries: [],
+        },
+        userName,
+        preferences,
+        familyContext,
+      );
+    },
+    [],
+  );
+
+  const applySessionConfigUpdate = useCallback(
+    (preferences: SpeakingPreferences): void => {
+      speakingPrefsRef.current = preferences;
+
+      const updatedTurnDetection = {
+        ...turnDetectionRef.current,
+        silence_duration_ms: SILENCE_DURATION_MS_MAP[preferences.silenceDuration],
+      };
+      turnDetectionRef.current = updatedTurnDetection;
+
+      if (webrtc.status !== "connected") {
+        return;
+      }
+
+      const instructions = buildCurrentSessionInstructions(preferences);
+      if (instructions === null) {
+        return;
+      }
+
+      webrtc.send({
+        type: "session.update",
+        session: {
+          type: "realtime",
+          instructions,
+          audio: {
+            input: {
+              ...SESSION_AUDIO_INPUT_CONFIG,
+              turn_detection: updatedTurnDetection,
+            },
+          },
+        },
+      });
+    },
+    [webrtc, buildCurrentSessionInstructions],
+  );
 
   const requestEndConversation = useCallback(
     (source: "tool" | "user_intent"): void => {
@@ -894,11 +990,6 @@ export function useConversation(): UseConversationReturn {
     (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-          // Session is fully configured via the unified /v1/realtime/calls
-          // FormData, so no session.update needed here. Sending a partial
-          // session.update (e.g. turn_detection only) would overwrite the
-          // entire audio.input object and remove the transcription config.
-
           dispatch({ type: "CONNECTED" });
           startSessionTimer();
           // Keep the mic muted until the first greeting finishes.
@@ -946,6 +1037,7 @@ export function useConversation(): UseConversationReturn {
           );
           if (acceptedTranscript !== null) {
             dispatch({ type: "ADD_USER_TRANSCRIPT", text: acceptedTranscript });
+            activateSessionQuota();
             if (hasExplicitConversationEndIntent(acceptedTranscript)) {
               requestEndConversation("user_intent");
             }
@@ -1096,6 +1188,7 @@ export function useConversation(): UseConversationReturn {
   // Start conversation — load past context, get token, connect via WebRTC
   const start = useCallback(
     (characterId: CharacterId, category: QuestionCategory | null): void => {
+      sessionQuotaActivationStateRef.current = "idle";
       resetMicGuard();
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
@@ -1343,6 +1436,7 @@ export function useConversation(): UseConversationReturn {
       discardLocalRecording,
       resetMicGuard,
       clearSessionTimer,
+      activateSessionQuota,
     ],
   );
 
@@ -1357,6 +1451,7 @@ export function useConversation(): UseConversationReturn {
     // Reset end-conversation state
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
+    sessionQuotaActivationStateRef.current = "idle";
     resetMicGuard();
 
     const currentTranscript = transcriptRef.current;
@@ -1544,13 +1639,11 @@ export function useConversation(): UseConversationReturn {
     };
   }, [discardLocalRecording]);
 
-  // Mid-conversation session config update is not supported with WebRTC GA protocol
-  // (session is pre-configured via client_secrets). Changes will apply to the next session.
   const updateSessionConfig = useCallback(
     (preferences: SpeakingPreferences): void => {
-      speakingPrefsRef.current = preferences;
+      applySessionConfigUpdate(preferences);
     },
-    [],
+    [applySessionConfigUpdate],
   );
 
   // Retry after error

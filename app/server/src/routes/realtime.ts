@@ -35,6 +35,7 @@ const REALTIME_MODEL = "gpt-realtime-mini";
 const REALTIME_SESSION_RESOURCE_TYPE = "realtime_session";
 const REALTIME_SESSION_STARTED_ACTION = "realtime_session_started";
 const REALTIME_SESSION_ENDED_ACTION = "realtime_session_ended";
+const REALTIME_SESSION_ACTIVATED_ACTION = "realtime_session_activated";
 const REALTIME_ONBOARDING_SESSION_STARTED_ACTION =
   "realtime_onboarding_started";
 const REALTIME_ONBOARDING_SESSION_ENDED_ACTION = "realtime_onboarding_ended";
@@ -45,6 +46,10 @@ const MAX_SDP_LENGTH = 200_000;
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 
 interface SessionEndRequestBody {
+  sessionKey: string;
+}
+
+interface SessionActivateRequestBody {
   sessionKey: string;
 }
 
@@ -395,6 +400,83 @@ realtimeRoute.post("/api/realtime/session-end", async (c) => {
     });
     return c.json(
       { error: "セッション終了に失敗しました", code: "SESSION_END_FAILED" },
+      500,
+    );
+  }
+});
+
+realtimeRoute.post("/api/realtime/session-activate", async (c) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const body: SessionActivateRequestBody = await c.req.json();
+    const { sessionKey } = body;
+
+    if (!sessionKey || typeof sessionKey !== "string") {
+      return c.json(
+        { error: "セッションキーが不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+
+    const sessionStart = await db.query.activityLog.findFirst({
+      where: and(
+        eq(activityLog.creatorId, userId),
+        eq(activityLog.actorId, userId),
+        or(
+          eq(activityLog.action, REALTIME_SESSION_STARTED_ACTION),
+          eq(activityLog.action, REALTIME_ONBOARDING_SESSION_STARTED_ACTION),
+        ),
+        eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
+        eq(activityLog.resourceId, sessionKey),
+      ),
+      columns: { id: true, action: true },
+    });
+
+    if (!sessionStart) {
+      return c.json(
+        { error: "セッションが見つかりません", code: "SESSION_NOT_FOUND" },
+        404,
+      );
+    }
+
+    if (sessionStart.action === REALTIME_ONBOARDING_SESSION_STARTED_ACTION) {
+      return c.json({ success: true, counted: false });
+    }
+
+    const existingActivation = await db.query.activityLog.findFirst({
+      where: and(
+        eq(activityLog.creatorId, userId),
+        eq(activityLog.actorId, userId),
+        eq(activityLog.action, REALTIME_SESSION_ACTIVATED_ACTION),
+        eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
+        eq(activityLog.resourceId, sessionKey),
+      ),
+      columns: { id: true },
+    });
+
+    if (!existingActivation) {
+      await db.insert(activityLog).values({
+        creatorId: userId,
+        actorId: userId,
+        actorRole: "creator",
+        action: REALTIME_SESSION_ACTIVATED_ACTION,
+        resourceType: REALTIME_SESSION_RESOURCE_TYPE,
+        resourceId: sessionKey,
+        metadata: null,
+      });
+    }
+
+    return c.json({ success: true, counted: true });
+  } catch (err: unknown) {
+    logger.error("Failed to activate realtime session", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json(
+      {
+        error: "セッション開始の記録に失敗しました",
+        code: "SESSION_ACTIVATE_FAILED",
+      },
       500,
     );
   }

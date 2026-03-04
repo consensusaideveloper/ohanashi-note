@@ -9,6 +9,10 @@ import type {
   UserProfile,
 } from "../types/conversation";
 
+type UserProfileUpdateListener = (updates: Partial<UserProfile>) => void;
+
+const userProfileUpdateListeners = new Set<UserProfileUpdateListener>();
+
 // --- Server response types ---
 
 /** Conversation shape as returned by the server API. */
@@ -253,6 +257,9 @@ export async function saveUserProfile(
     method: "PUT",
     body: JSON.stringify(profile),
   });
+  for (const listener of userProfileUpdateListeners) {
+    listener(profile);
+  }
 }
 
 export async function getUserProfile(): Promise<UserProfile | null> {
@@ -264,6 +271,15 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     console.error("Failed to load user profile:", { error });
     return null;
   }
+}
+
+export function subscribeToUserProfileUpdates(
+  listener: UserProfileUpdateListener,
+): () => void {
+  userProfileUpdateListeners.add(listener);
+  return () => {
+    userProfileUpdateListeners.delete(listener);
+  };
 }
 
 /** Check whether conversation deletion is blocked by lifecycle status. */

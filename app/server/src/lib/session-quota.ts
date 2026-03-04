@@ -1,4 +1,4 @@
-// Counts persisted realtime session start events to determine
+// Counts persisted realtime session activation events to determine
 // a user's remaining daily session quota.
 
 import { and, count, eq, gte } from "drizzle-orm";
@@ -51,8 +51,8 @@ function getJstDayStart(): Date {
 
 /**
  * Check the session quota for a given internal user ID.
- * Counts persisted realtime session start events created when a session
- * is successfully established.
+ * Counts persisted realtime session activation events created when the user
+ * actually begins speaking in a normal conversation.
  *
  * Fails open on DB errors to avoid blocking users.
  */
@@ -67,7 +67,7 @@ export async function getSessionQuota(userId: string): Promise<SessionQuota> {
         and(
           eq(activityLog.creatorId, userId),
           eq(activityLog.actorId, userId),
-          eq(activityLog.action, "realtime_session_started"),
+          eq(activityLog.action, "realtime_session_activated"),
           eq(activityLog.resourceType, "realtime_session"),
           gte(activityLog.createdAt, dayStart),
         ),

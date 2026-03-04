@@ -161,4 +161,55 @@ describe("realtimeRoute", () => {
       }),
     );
   });
+
+  it("counts quota only after session activation", async () => {
+    vi.mocked(db.query.activityLog.findFirst)
+      .mockResolvedValueOnce({
+        id: "start-1",
+        action: "realtime_session_started",
+      } as never)
+      .mockResolvedValueOnce(undefined);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/session-activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionKey: "session-key-1" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      counted: true,
+    });
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "realtime_session_activated",
+        resourceId: "session-key-1",
+      }),
+    );
+  });
+
+  it("does not count onboarding sessions on activation", async () => {
+    vi.mocked(db.query.activityLog.findFirst).mockResolvedValue({
+      id: "start-1",
+      action: "realtime_onboarding_started",
+    } as never);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/session-activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionKey: "session-key-1" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      counted: false,
+    });
+    expect(insertValuesMock).not.toHaveBeenCalled();
+  });
 });

@@ -12,6 +12,11 @@ import {
   SILENCE_DURATION_LABELS,
   CONFIRMATION_LEVEL_LABELS,
   RETRY_DELAY_MS,
+  SESSION_AUDIO_INPUT_CONFIG,
+  DEFAULT_SPEAKING_SPEED,
+  DEFAULT_SILENCE_DURATION,
+  DEFAULT_CONFIRMATION_LEVEL,
+  SILENCE_DURATION_MS_MAP,
 } from "../lib/constants";
 import { getAcceptedUserTranscript } from "../lib/audio";
 import { getCharacterById } from "../lib/characters";
@@ -20,7 +25,7 @@ import {
   hasOnboardingCompletionSignal,
 } from "../lib/conversation-end";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
-import { saveUserProfile } from "../lib/storage";
+import { getUserProfile, saveUserProfile } from "../lib/storage";
 import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 
@@ -32,18 +37,36 @@ import type {
   ErrorType,
   FontSizeLevel,
   SilenceDuration,
+  SpeakingPreferences,
   SpeakingSpeed,
   TranscriptEntry,
   UserProfile,
 } from "../types/conversation";
 
 // --- End-conversation flow ---
-const END_CONVERSATION_FAREWELL_DELAY_MS = 3000;
+const END_CONVERSATION_FAREWELL_DELAY_MS = 6000;
 const END_CONVERSATION_FALLBACK_MS = 12000;
 const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
+
+const DEFAULT_SPEAKING_PREFERENCES: SpeakingPreferences = {
+  speakingSpeed: DEFAULT_SPEAKING_SPEED,
+  silenceDuration: DEFAULT_SILENCE_DURATION,
+  confirmationLevel: DEFAULT_CONFIRMATION_LEVEL,
+};
+
+function getProfileSpeakingPreferences(
+  profile: UserProfile | null,
+): SpeakingPreferences {
+  return {
+    speakingSpeed: profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED,
+    silenceDuration: profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION,
+    confirmationLevel:
+      profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL,
+  };
+}
 
 function normalizePreferenceToken(value: string): string {
   return value
@@ -324,6 +347,9 @@ export function useOnboardingConversation({
 
   // Session key for server-side tracking
   const sessionKeyRef = useRef<string>("");
+  const speakingPrefsRef = useRef<SpeakingPreferences>(
+    DEFAULT_SPEAKING_PREFERENCES,
+  );
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
@@ -421,6 +447,7 @@ export function useOnboardingConversation({
     resetEndConversationFlow();
     aiSpeakingRef.current = false;
     resetMicGuard();
+    speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
     webrtc.disconnect();
 
     const key = sessionKeyRef.current;
@@ -467,6 +494,30 @@ export function useOnboardingConversation({
       }),
     ]);
   }, []);
+
+  const applySpeakingPreferencesToSession = useCallback(
+    (preferences: SpeakingPreferences): void => {
+      speakingPrefsRef.current = preferences;
+      webrtc.send({
+        type: "session.update",
+        session: {
+          type: "realtime",
+          instructions: buildOnboardingPrompt(preferences),
+          audio: {
+            input: {
+              ...SESSION_AUDIO_INPUT_CONFIG,
+              turn_detection: {
+                ...SESSION_CONFIG.turn_detection,
+                silence_duration_ms:
+                  SILENCE_DURATION_MS_MAP[preferences.silenceDuration],
+              },
+            },
+          },
+        },
+      });
+    },
+    [webrtc],
+  );
 
   const requestEndConversation = useCallback(
     (source: "tool" | "user_intent" | "completion_signal"): void => {
@@ -668,8 +719,18 @@ export function useOnboardingConversation({
             return;
           }
 
+          const updatedPreferences: SpeakingPreferences = {
+            speakingSpeed:
+              speakingSpeed ?? speakingPrefsRef.current.speakingSpeed,
+            silenceDuration:
+              silenceDuration ?? speakingPrefsRef.current.silenceDuration,
+            confirmationLevel:
+              confirmationLevel ?? speakingPrefsRef.current.confirmationLevel,
+          };
+
           void enqueueProfileSave(updates)
             .then(() => {
+              applySpeakingPreferencesToSession(updatedPreferences);
               const changedParts: string[] = [];
               if (speakingSpeed !== null) {
                 changedParts.push(
@@ -705,7 +766,12 @@ export function useOnboardingConversation({
         sendResult(JSON.stringify({ error: "操作中にエラーが発生しました" }));
       }
     },
-    [webrtc, requestEndConversation, enqueueProfileSave],
+    [
+      webrtc,
+      requestEndConversation,
+      enqueueProfileSave,
+      applySpeakingPreferencesToSession,
+    ],
   );
 
   // Handle incoming data channel events
@@ -713,11 +779,6 @@ export function useOnboardingConversation({
     (event: DataChannelServerEvent): void => {
       switch (event.type) {
         case "session.created":
-          // Session is fully configured via the unified /v1/realtime/calls
-          // FormData, so no session.update needed here. Sending a partial
-          // session.update (e.g. turn_detection only) would overwrite the
-          // entire audio.input object and remove the transcription config.
-
           dispatch({ type: "CONNECTED" });
           // Keep the mic muted until the first greeting finishes.
           engageMicGuard();
@@ -919,30 +980,39 @@ export function useOnboardingConversation({
     webrtc
       .requestMicAccess()
       .then((micStream) => {
-        // Step 2: Build session config
-        const character = getCharacterById("character-a");
-        const instructions = buildOnboardingPrompt();
+        return getUserProfile().then((profile) => {
+          const preferences = getProfileSpeakingPreferences(profile);
+          speakingPrefsRef.current = preferences;
 
-        const sessionConfig = {
-          instructions,
-          voice: character.voice,
-          tools: [...ONBOARDING_TOOLS],
-          turn_detection: SESSION_CONFIG.turn_detection,
-        };
+          // Step 2: Build session config
+          const character = getCharacterById("character-a");
+          const instructions = buildOnboardingPrompt(preferences);
 
-        // Step 3: Connect WebRTC — server handles SDP exchange
-        return webrtc.connect(
-          micStream,
-          async (offerSdp: string): Promise<string> => {
-            const result = await connectRealtimeSession(
-              sessionConfig,
-              offerSdp,
-              true,
-            );
-            sessionKeyRef.current = result.sessionKey;
-            return result.answerSdp;
-          },
-        );
+          const sessionConfig = {
+            instructions,
+            voice: character.voice,
+            tools: [...ONBOARDING_TOOLS],
+            turn_detection: {
+              ...SESSION_CONFIG.turn_detection,
+              silence_duration_ms:
+                SILENCE_DURATION_MS_MAP[preferences.silenceDuration],
+            },
+          };
+
+          // Step 3: Connect WebRTC — server handles SDP exchange
+          return webrtc.connect(
+            micStream,
+            async (offerSdp: string): Promise<string> => {
+              const result = await connectRealtimeSession(
+                sessionConfig,
+                offerSdp,
+                true,
+              );
+              sessionKeyRef.current = result.sessionKey;
+              return result.answerSdp;
+            },
+          );
+        });
       })
       .catch((err: unknown) => {
         console.error("Failed to start onboarding conversation:", {
@@ -980,6 +1050,7 @@ export function useOnboardingConversation({
       });
     }
     sessionKeyRef.current = "";
+    speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
 
     // Wait briefly for any in-flight profile saves so completion screen
     // reflects the selected values reliably.
