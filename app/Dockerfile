@@ -2,13 +2,14 @@ FROM node:20-slim AS base
 
 WORKDIR /app
 
-# Copy package files (without lockfile — lockfile from macOS lacks Linux binaries)
+# Copy package files + lockfile for deterministic dependency resolution
 COPY package.json ./
+COPY package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
 
-# Install all dependencies fresh for Linux platform
-RUN npm install
+# Install all dependencies exactly as locked
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -31,8 +32,9 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files + lockfile
 COPY package.json ./
+COPY package-lock.json ./
 COPY server/package.json server/
 
 # Install production dependencies only
