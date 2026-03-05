@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
+  normalizeDiscussedCategories,
   selectTranscriptForAnalysis,
   shouldFallbackToUngroundedEntries,
 } from "./summarizer";
@@ -117,5 +118,34 @@ describe("filterMeaningfulImportantStatements", () => {
     ]);
 
     expect(result).toEqual([insight("雨の匂いが好き", "hobbies")]);
+  });
+});
+
+describe("normalizeDiscussedCategories", () => {
+  it("maps aliases to valid categories and preserves first-seen order", () => {
+    expect(
+      normalizeDiscussedCategories([
+        "relationships",
+        "money",
+        "finance",
+        "people",
+      ]),
+    ).toEqual(["people", "money"]);
+  });
+
+  it("drops unsupported categories and trims/case-normalizes values", () => {
+    expect(
+      normalizeDiscussedCategories([
+        " LEGAL ",
+        "unknown",
+        "",
+        "support",
+        "RELATIONSHIP",
+      ]),
+    ).toEqual(["legal", "support", "people"]);
+  });
+
+  it("returns empty array when all categories are invalid", () => {
+    expect(normalizeDiscussedCategories(["foo", "bar"])).toEqual([]);
   });
 });

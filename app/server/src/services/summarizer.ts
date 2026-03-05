@@ -69,6 +69,27 @@ export interface SummarizeResponse {
 const MAX_TRANSCRIPT_CHARS = 30_000;
 const MODEL = "gpt-5-nano";
 const TEMPERATURE = 1;
+const DISCUSSED_CATEGORY_ENUM = [
+  "memories",
+  "people",
+  "house",
+  "medical",
+  "funeral",
+  "money",
+  "work",
+  "digital",
+  "legal",
+  "trust",
+  "support",
+] as const;
+
+const DISCUSSED_CATEGORY_ALIAS_MAP: Readonly<Record<string, QuestionCategory>> =
+  {
+    relationship: "people",
+    relationships: "people",
+    finance: "money",
+    finances: "money",
+  };
 const NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS = [
   "こんにちは",
   "こんばんは",
@@ -139,7 +160,10 @@ const RESPONSE_JSON_SCHEMA = {
       oneLinerSummary: { type: "string" as const },
       discussedCategories: {
         type: "array" as const,
-        items: { type: "string" as const },
+        items: {
+          type: "string" as const,
+          enum: DISCUSSED_CATEGORY_ENUM,
+        },
       },
       keyPoints: {
         type: "object" as const,
@@ -556,19 +580,59 @@ export function selectTranscriptForAnalysis(
   return [{ role: "user", text: "（ユーザー発話なし）" }];
 }
 
-const VALID_CATEGORY_SET = new Set([
-  "memories",
-  "people",
-  "house",
-  "medical",
-  "funeral",
-  "money",
-  "work",
-  "digital",
-  "legal",
-  "trust",
-  "support",
-]);
+const VALID_CATEGORY_SET = new Set<string>(DISCUSSED_CATEGORY_ENUM);
+
+function questionIdToCategory(questionId: string): QuestionCategory | null {
+  const idx = questionId.lastIndexOf("-");
+  if (idx <= 0) {
+    return null;
+  }
+  const maybeCategory = questionId.slice(0, idx);
+  if (VALID_CATEGORY_SET.has(maybeCategory)) {
+    return maybeCategory as QuestionCategory;
+  }
+  return null;
+}
+
+export function normalizeDiscussedCategories(
+  categories: string[],
+): QuestionCategory[] {
+  const normalized: QuestionCategory[] = [];
+  const seen = new Set<QuestionCategory>();
+
+  for (const raw of categories) {
+    const lower = raw.trim().toLowerCase();
+    const direct = VALID_CATEGORY_SET.has(lower)
+      ? (lower as QuestionCategory)
+      : null;
+    const mapped = direct ?? DISCUSSED_CATEGORY_ALIAS_MAP[lower] ?? null;
+    if (mapped === null || seen.has(mapped)) {
+      continue;
+    }
+    seen.add(mapped);
+    normalized.push(mapped);
+  }
+
+  return normalized;
+}
+
+function inferDiscussedCategoriesFromNoteEntries(
+  noteEntries: NoteEntry[],
+): QuestionCategory[] {
+  const inferred: QuestionCategory[] = [];
+  const seen = new Set<QuestionCategory>();
+
+  for (const entry of noteEntries) {
+    const category = questionIdToCategory(entry.questionId);
+    if (category === null || seen.has(category)) {
+      continue;
+    }
+    seen.add(category);
+    inferred.push(category);
+  }
+
+  return inferred;
+}
 
 function validateStringArray(value: unknown): value is string[] {
   if (!Array.isArray(value)) return false;
@@ -630,10 +694,10 @@ function validateResponse(data: unknown): data is SummarizeResponse {
 
   if (!validateStringArray(obj["coveredQuestionIds"])) return false;
 
-  // Validate discussedCategories contains only valid category IDs
+  // Validate discussedCategories shape (normalization happens later)
   if (!Array.isArray(obj["discussedCategories"])) return false;
   for (const cat of obj["discussedCategories"]) {
-    if (typeof cat !== "string" || !VALID_CATEGORY_SET.has(cat)) return false;
+    if (typeof cat !== "string") return false;
   }
 
   if (!validateKeyPoints(obj["keyPoints"])) return false;
@@ -790,9 +854,33 @@ export async function summarizeConversation(
   const finalizedImportantStatements = filterMeaningfulImportantStatements(
     parsed.keyPoints.importantStatements,
   );
+  const normalizedDiscussedCategories = normalizeDiscussedCategories(
+    parsed.discussedCategories,
+  );
+  if (
+    parsed.discussedCategories.length > 0 &&
+    normalizedDiscussedCategories.length < parsed.discussedCategories.length
+  ) {
+    logger.warn("Dropped/normalized unsupported discussed categories", {
+      rawCategories: parsed.discussedCategories,
+      normalizedCategories: normalizedDiscussedCategories,
+    });
+  }
+  const inferredDiscussedCategories = inferDiscussedCategoriesFromNoteEntries(
+    finalizedNoteEntries,
+  );
+  const finalizedDiscussedCategories =
+    normalizedDiscussedCategories.length > 0
+      ? normalizedDiscussedCategories
+      : inferredDiscussedCategories.length > 0
+        ? inferredDiscussedCategories
+        : request.category !== null
+          ? [request.category]
+          : [];
 
   const finalized: SummarizeResponse = {
     ...parsed,
+    discussedCategories: finalizedDiscussedCategories,
     noteEntries: finalizedNoteEntries,
     coveredQuestionIds,
     keyPoints: {
