@@ -11,6 +11,7 @@ import {
   isDeletionBlocked,
 } from "../lib/lifecycle-helpers.js";
 import { deleteConversationAudioFile } from "../lib/r2-cleanup.js";
+import { hasPersistableUserUtterance } from "../lib/conversation-persistence.js";
 
 import type { Context } from "hono";
 
@@ -183,6 +184,7 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
     const body = await c.req.json<Record<string, unknown>>();
     const id = body["id"];
     const startedAt = body["startedAt"];
+    const transcript = Array.isArray(body["transcript"]) ? body["transcript"] : [];
 
     if (typeof id !== "string" || typeof startedAt !== "number") {
       return c.json(
@@ -192,6 +194,18 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
         },
         400,
       );
+    }
+
+    if (!hasPersistableUserUtterance(transcript)) {
+      logger.info("Skipped conversation persistence due to empty user utterance", {
+        conversationId: id,
+        userId,
+      });
+      return c.json({
+        success: true,
+        skipped: true,
+        reason: "NO_USER_UTTERANCE",
+      });
     }
 
     const endedAt = body["endedAt"];
@@ -204,7 +218,7 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
       characterId: toStringOrNull(body["characterId"]),
       startedAt: new Date(startedAt),
       endedAt: typeof endedAt === "number" ? new Date(endedAt) : null,
-      transcript: Array.isArray(body["transcript"]) ? body["transcript"] : [],
+      transcript,
       summary: toStringOrNull(body["summary"]),
       summaryStatus:
         typeof body["summaryStatus"] === "string"

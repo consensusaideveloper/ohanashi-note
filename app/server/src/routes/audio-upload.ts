@@ -7,6 +7,7 @@ import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { r2 } from "../lib/r2.js";
 import { logger } from "../lib/logger.js";
+import { hasPersistableUserUtterance } from "../lib/conversation-persistence.js";
 
 import type { Context } from "hono";
 
@@ -97,11 +98,21 @@ audioUploadRoute.post("/api/conversations/:id/audio", async (c: Context) => {
         eq(conversations.id, conversationId),
         eq(conversations.userId, userId),
       ),
-      columns: { id: true },
+      columns: { id: true, transcript: true },
     });
 
     if (!row) {
       return c.json({ error: "会話が見つかりません", code: "NOT_FOUND" }, 404);
+    }
+
+    if (!hasPersistableUserUtterance(row.transcript)) {
+      return c.json(
+        {
+          error: "ユーザー発話がない会話の録音データは保存されません",
+          code: "NO_USER_UTTERANCE",
+        },
+        409,
+      );
     }
 
     // Get the uploaded file

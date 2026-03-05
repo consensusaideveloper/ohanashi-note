@@ -51,6 +51,7 @@ beforeEach(async () => {
   vi.mocked(resolveUserId).mockResolvedValue("user-1");
   vi.mocked(db.query.conversations.findFirst).mockResolvedValue({
     id: "conv-1",
+    transcript: [{ role: "user", text: "こんにちは" }],
   } as never);
 });
 

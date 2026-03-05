@@ -28,6 +28,7 @@ import {
   saveAudioRecording,
 } from "../lib/storage";
 import { getAcceptedUserTranscript } from "../lib/audio";
+import { hasPersistableUserUtterance } from "../lib/conversation-persistence";
 import { computeContentHash, computeBlobHash } from "../lib/integrity";
 import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
 import {
@@ -87,6 +88,8 @@ const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
+/** Fallback timeout when remote audio end is not observable after response.done. */
+const AI_SPEAKING_END_FALLBACK_MS = 1800;
 
 // --- State machine ---
 
@@ -491,6 +494,12 @@ export function useConversation(): UseConversationReturn {
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
+  const aiResponseDoneRef = useRef(false);
+  const aiRemoteAudioEndedRef = useRef(false);
+  const aiSpeakingFallbackTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const aiAudioEndUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -757,9 +766,75 @@ export function useConversation(): UseConversationReturn {
     ignoredInputItemIdsRef.current.clear();
   }, []);
 
+  const clearAiSpeakingFallbackTimer = useCallback((): void => {
+    if (aiSpeakingFallbackTimerRef.current !== null) {
+      clearTimeout(aiSpeakingFallbackTimerRef.current);
+      aiSpeakingFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const clearAiSpeakingTracking = useCallback((): void => {
+    clearAiSpeakingFallbackTimer();
+    aiResponseDoneRef.current = false;
+    aiRemoteAudioEndedRef.current = false;
+    if (aiAudioEndUnsubscribeRef.current !== null) {
+      aiAudioEndUnsubscribeRef.current();
+      aiAudioEndUnsubscribeRef.current = null;
+    }
+  }, [clearAiSpeakingFallbackTimer]);
+
+  const finishAiSpeaking = useCallback((): void => {
+    if (!aiSpeakingRef.current) {
+      clearAiSpeakingTracking();
+      return;
+    }
+    aiSpeakingRef.current = false;
+    dispatch({ type: "AI_DONE" });
+    scheduleMicGuardRelease();
+    clearAiSpeakingTracking();
+  }, [clearAiSpeakingTracking, scheduleMicGuardRelease]);
+
+  const startAiSpeaking = useCallback((): void => {
+    if (aiSpeakingRef.current) {
+      return;
+    }
+    clearAiSpeakingTracking();
+    aiSpeakingRef.current = true;
+    aiAudioEndUnsubscribeRef.current = webrtc.onRemoteAudioEnded(() => {
+      aiRemoteAudioEndedRef.current = true;
+      if (aiResponseDoneRef.current) {
+        finishAiSpeaking();
+      }
+    });
+    dispatch({ type: "AI_SPEAKING" });
+    engageMicGuard();
+  }, [clearAiSpeakingTracking, engageMicGuard, finishAiSpeaking, webrtc]);
+
+  const handleAiResponseDone = useCallback((): void => {
+    if (!aiSpeakingRef.current) {
+      clearAiSpeakingTracking();
+      return;
+    }
+    aiResponseDoneRef.current = true;
+    if (aiRemoteAudioEndedRef.current) {
+      finishAiSpeaking();
+      return;
+    }
+    clearAiSpeakingFallbackTimer();
+    aiSpeakingFallbackTimerRef.current = setTimeout(() => {
+      aiSpeakingFallbackTimerRef.current = null;
+      finishAiSpeaking();
+    }, AI_SPEAKING_END_FALLBACK_MS);
+  }, [
+    clearAiSpeakingFallbackTimer,
+    clearAiSpeakingTracking,
+    finishAiSpeaking,
+  ]);
+
   const cleanupRealtimeSession = useCallback((): void => {
     clearSessionTimer();
     resetEndConversationFlow();
+    clearAiSpeakingTracking();
     aiSpeakingRef.current = false;
     resetMicGuard();
     sessionQuotaActivationStateRef.current = "idle";
@@ -774,7 +849,13 @@ export function useConversation(): UseConversationReturn {
         });
       });
     }
-  }, [webrtc, clearSessionTimer, resetEndConversationFlow, resetMicGuard]);
+  }, [
+    webrtc,
+    clearSessionTimer,
+    resetEndConversationFlow,
+    clearAiSpeakingTracking,
+    resetMicGuard,
+  ]);
 
   const activateSessionQuota = useCallback((): void => {
     const key = sessionKeyRef.current;
@@ -1007,12 +1088,7 @@ export function useConversation(): UseConversationReturn {
           if (endConversationRequestedRef.current) {
             endConversationFarewellDetectedRef.current = true;
           }
-          // AI is speaking — use transcript delta as a proxy for audio state
-          if (!aiSpeakingRef.current) {
-            aiSpeakingRef.current = true;
-            dispatch({ type: "AI_SPEAKING" });
-            engageMicGuard();
-          }
+          startAiSpeaking();
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
 
@@ -1048,9 +1124,7 @@ export function useConversation(): UseConversationReturn {
         }
 
         case "response.done": {
-          aiSpeakingRef.current = false;
-          dispatch({ type: "AI_DONE" });
-          scheduleMicGuardRelease();
+          handleAiResponseDone();
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -1113,7 +1187,11 @@ export function useConversation(): UseConversationReturn {
           if (endConversationRequestedRef.current && aiSpeakingRef.current) {
             resetEndConversationFlow();
           }
-          aiSpeakingRef.current = false;
+          if (aiSpeakingRef.current) {
+            aiSpeakingRef.current = false;
+            dispatch({ type: "AI_DONE" });
+          }
+          clearAiSpeakingTracking();
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -1151,11 +1229,14 @@ export function useConversation(): UseConversationReturn {
     [
       webrtc,
       handleFunctionCall,
+      handleAiResponseDone,
+      startAiSpeaking,
       engageMicGuard,
       releaseMicGuardNow,
-      scheduleMicGuardRelease,
+      clearAiSpeakingTracking,
       resetEndConversationFlow,
       requestEndConversation,
+      activateSessionQuota,
       startSessionTimer,
     ],
   );
@@ -1438,7 +1519,6 @@ export function useConversation(): UseConversationReturn {
       discardLocalRecording,
       resetMicGuard,
       clearSessionTimer,
-      activateSessionQuota,
     ],
   );
 
@@ -1452,6 +1532,7 @@ export function useConversation(): UseConversationReturn {
 
     // Reset end-conversation state
     resetEndConversationFlow();
+    clearAiSpeakingTracking();
     aiSpeakingRef.current = false;
     sessionQuotaActivationStateRef.current = "idle";
     resetMicGuard();
@@ -1461,8 +1542,10 @@ export function useConversation(): UseConversationReturn {
     const category = categoryRef.current;
     const charId = characterIdRef.current;
     const recordingPromise = stopLocalRecording();
+    const shouldPersistConversation =
+      convId !== null && hasPersistableUserUtterance(currentTranscript);
 
-    if (convId !== null && currentTranscript.length > 0) {
+    if (shouldPersistConversation && convId !== null) {
       const firstEntry = currentTranscript[0];
       const record = {
         id: convId,
@@ -1590,6 +1673,15 @@ export function useConversation(): UseConversationReturn {
         });
     }
 
+    if (!shouldPersistConversation) {
+      // Ensure recorder shutdown errors don't surface as unhandled rejections
+      // when we intentionally skip persistence.
+      void recordingPromise.catch(() => {});
+      if (convId !== null && currentTranscript.length > 0) {
+        console.info("Skipped conversation persistence: no user utterance");
+      }
+    }
+
     webrtc.disconnect();
     dispatch({ type: "DISCONNECT" });
 
@@ -1623,6 +1715,7 @@ export function useConversation(): UseConversationReturn {
     webrtc,
     stopLocalRecording,
     resetEndConversationFlow,
+    clearAiSpeakingTracking,
     resetMicGuard,
     clearSessionTimer,
   ]);

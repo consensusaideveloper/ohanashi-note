@@ -65,6 +65,8 @@ const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
+/** Fallback timeout when remote audio end is not observable after response.done. */
+const AI_SPEAKING_END_FALLBACK_MS = 1800;
 
 const DEFAULT_SPEAKING_PREFERENCES: SpeakingPreferences = {
   speakingSpeed: DEFAULT_SPEAKING_SPEED,
@@ -398,6 +400,12 @@ export function useOnboardingConversation({
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
+  const aiResponseDoneRef = useRef(false);
+  const aiRemoteAudioEndedRef = useRef(false);
+  const aiSpeakingFallbackTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const aiAudioEndUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const micReenableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -488,8 +496,74 @@ export function useOnboardingConversation({
     ignoredInputItemIdsRef.current.clear();
   }, []);
 
+  const clearAiSpeakingFallbackTimer = useCallback((): void => {
+    if (aiSpeakingFallbackTimerRef.current !== null) {
+      clearTimeout(aiSpeakingFallbackTimerRef.current);
+      aiSpeakingFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const clearAiSpeakingTracking = useCallback((): void => {
+    clearAiSpeakingFallbackTimer();
+    aiResponseDoneRef.current = false;
+    aiRemoteAudioEndedRef.current = false;
+    if (aiAudioEndUnsubscribeRef.current !== null) {
+      aiAudioEndUnsubscribeRef.current();
+      aiAudioEndUnsubscribeRef.current = null;
+    }
+  }, [clearAiSpeakingFallbackTimer]);
+
+  const finishAiSpeaking = useCallback((): void => {
+    if (!aiSpeakingRef.current) {
+      clearAiSpeakingTracking();
+      return;
+    }
+    aiSpeakingRef.current = false;
+    dispatch({ type: "AI_DONE" });
+    scheduleMicGuardRelease();
+    clearAiSpeakingTracking();
+  }, [clearAiSpeakingTracking, scheduleMicGuardRelease]);
+
+  const startAiSpeaking = useCallback((): void => {
+    if (aiSpeakingRef.current) {
+      return;
+    }
+    clearAiSpeakingTracking();
+    aiSpeakingRef.current = true;
+    aiAudioEndUnsubscribeRef.current = webrtc.onRemoteAudioEnded(() => {
+      aiRemoteAudioEndedRef.current = true;
+      if (aiResponseDoneRef.current) {
+        finishAiSpeaking();
+      }
+    });
+    dispatch({ type: "AI_SPEAKING" });
+    engageMicGuard();
+  }, [clearAiSpeakingTracking, engageMicGuard, finishAiSpeaking, webrtc]);
+
+  const handleAiResponseDone = useCallback((): void => {
+    if (!aiSpeakingRef.current) {
+      clearAiSpeakingTracking();
+      return;
+    }
+    aiResponseDoneRef.current = true;
+    if (aiRemoteAudioEndedRef.current) {
+      finishAiSpeaking();
+      return;
+    }
+    clearAiSpeakingFallbackTimer();
+    aiSpeakingFallbackTimerRef.current = setTimeout(() => {
+      aiSpeakingFallbackTimerRef.current = null;
+      finishAiSpeaking();
+    }, AI_SPEAKING_END_FALLBACK_MS);
+  }, [
+    clearAiSpeakingFallbackTimer,
+    clearAiSpeakingTracking,
+    finishAiSpeaking,
+  ]);
+
   const cleanupRealtimeSession = useCallback((): void => {
     resetEndConversationFlow();
+    clearAiSpeakingTracking();
     aiSpeakingRef.current = false;
     resetMicGuard();
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
@@ -507,7 +581,7 @@ export function useOnboardingConversation({
         );
       });
     }
-  }, [webrtc, resetEndConversationFlow, resetMicGuard]);
+  }, [webrtc, resetEndConversationFlow, clearAiSpeakingTracking, resetMicGuard]);
 
   useEffect(() => {
     cleanupRealtimeSessionRef.current = cleanupRealtimeSession;
@@ -918,12 +992,7 @@ export function useOnboardingConversation({
           if (endConversationRequestedRef.current) {
             endConversationFarewellDetectedRef.current = true;
           }
-          // AI is speaking — use transcript delta as a proxy for audio state
-          if (!aiSpeakingRef.current) {
-            aiSpeakingRef.current = true;
-            dispatch({ type: "AI_SPEAKING" });
-            engageMicGuard();
-          }
+          startAiSpeaking();
           dispatch({ type: "APPEND_ASSISTANT_DELTA", delta: event.delta });
           break;
 
@@ -961,9 +1030,7 @@ export function useOnboardingConversation({
         }
 
         case "response.done": {
-          aiSpeakingRef.current = false;
-          dispatch({ type: "AI_DONE" });
-          scheduleMicGuardRelease();
+          handleAiResponseDone();
 
           // End-conversation flow: stop only after farewell response is observed.
           if (
@@ -1024,7 +1091,11 @@ export function useOnboardingConversation({
           if (endConversationRequestedRef.current && aiSpeakingRef.current) {
             resetEndConversationFlow();
           }
-          aiSpeakingRef.current = false;
+          if (aiSpeakingRef.current) {
+            aiSpeakingRef.current = false;
+            dispatch({ type: "AI_DONE" });
+          }
+          clearAiSpeakingTracking();
           break;
 
         case "input_audio_buffer.speech_stopped":
@@ -1061,9 +1132,11 @@ export function useOnboardingConversation({
     [
       webrtc,
       handleFunctionCall,
+      handleAiResponseDone,
+      startAiSpeaking,
       engageMicGuard,
       releaseMicGuardNow,
-      scheduleMicGuardRelease,
+      clearAiSpeakingTracking,
       resetEndConversationFlow,
       requestEndConversation,
     ],
@@ -1159,6 +1232,7 @@ export function useOnboardingConversation({
   // Stop the conversation and clean up
   const stop = useCallback((): void => {
     resetEndConversationFlow();
+    clearAiSpeakingTracking();
     aiSpeakingRef.current = false;
     resetMicGuard();
     const currentTranscript = state.transcript;
@@ -1192,6 +1266,7 @@ export function useOnboardingConversation({
     persistOnboardingConversation,
     webrtc,
     resetEndConversationFlow,
+    clearAiSpeakingTracking,
     waitForPendingProfileSaves,
     resetMicGuard,
   ]);

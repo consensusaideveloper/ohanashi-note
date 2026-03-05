@@ -7,6 +7,12 @@ import type { CharacterId, ConversationState } from "../types/conversation";
 const SPRING_STIFFNESS = 0.15;
 const SPRING_DAMPING = 0.75;
 const AUDIO_SMOOTHING = 0.3;
+const REMOTE_AUDIO_GATE = 0.006;
+const REMOTE_AUDIO_NORMALIZE_RANGE = 0.03;
+const MOUTH_ACTIVE_HOLD_MS = 220;
+const MOUTH_IDLE_OPENNESS = 0.15;
+const MOUTH_IDLE_PULSE_STRENGTH = 0.06;
+const MOUTH_IDLE_PULSE_SPEED = 0.006;
 
 /** SVG face layout constants (viewBox 0 0 100 100). */
 const EYE_LEFT_CX = 38;
@@ -44,6 +50,12 @@ interface AiFaceProps {
 
 function buildMouthPath(controlY: number): string {
   return `M ${MOUTH_X_START} ${MOUTH_Y_BASE} Q ${MOUTH_CONTROL_X} ${controlY}, ${MOUTH_X_END} ${MOUTH_Y_BASE}`;
+}
+
+function normalizeRemoteAudioLevel(level: number): number {
+  const normalized = (level - REMOTE_AUDIO_GATE) / REMOTE_AUDIO_NORMALIZE_RANGE;
+  const clamped = Math.max(0, Math.min(1, normalized));
+  return Math.pow(clamped, 0.7);
 }
 
 function MicrophoneIcon(): ReactNode {
@@ -246,39 +258,60 @@ export function AiFace({
   });
   const audioLevelRef = useRef(audioLevel);
   audioLevelRef.current = audioLevel;
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const remoteAudioLevelRef = useRef(remoteAudioLevel);
   remoteAudioLevelRef.current = remoteAudioLevel;
+  const speakingHoldUntilRef = useRef(0);
 
-  // Animate mouth during ai-speaking; set static position for other states
+  // Keep one animation loop and drive mouth movement from state + remote audio level.
   useEffect(() => {
-    if (state !== "ai-speaking") {
-      cancelAnimationFrame(animationRef.current);
-      const targetY = state === "error" ? MOUTH_FROWN_CY : MOUTH_SMILE_CY;
-      if (mouthRef.current !== null) {
-        mouthRef.current.setAttribute("d", buildMouthPath(targetY));
-      }
-      springRef.current = { current: targetY, velocity: 0, smoothedLevel: 0 };
-      return;
-    }
-
     const prefersReduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
-    const animate = (): void => {
+    const animate = (now: number): void => {
       const spring = springRef.current;
-      const level = remoteAudioLevelRef.current;
+      const currentState = stateRef.current;
+      const normalizedLevel = normalizeRemoteAudioLevel(
+        remoteAudioLevelRef.current,
+      );
+      if (normalizedLevel > 0) {
+        speakingHoldUntilRef.current = now + MOUTH_ACTIVE_HOLD_MS;
+      }
+      const shouldAnimateSpeaking =
+        currentState === "ai-speaking" || now < speakingHoldUntilRef.current;
 
-      spring.smoothedLevel += (level - spring.smoothedLevel) * AUDIO_SMOOTHING;
-
-      const target =
-        MOUTH_SMILE_CY +
-        spring.smoothedLevel * (MOUTH_OPEN_CY - MOUTH_SMILE_CY);
+      let targetY: number;
+      if (currentState === "error") {
+        targetY = MOUTH_FROWN_CY;
+        spring.smoothedLevel = 0;
+      } else if (shouldAnimateSpeaking) {
+        const pulse = prefersReduced
+          ? 0
+          : ((Math.sin(now * MOUTH_IDLE_PULSE_SPEED) + 1) / 2) *
+            MOUTH_IDLE_PULSE_STRENGTH;
+        const expressiveLevel = Math.max(
+          normalizedLevel,
+          MOUTH_IDLE_OPENNESS + pulse,
+        );
+        spring.smoothedLevel +=
+          (expressiveLevel - spring.smoothedLevel) * AUDIO_SMOOTHING;
+        targetY =
+          MOUTH_SMILE_CY +
+          spring.smoothedLevel * (MOUTH_OPEN_CY - MOUTH_SMILE_CY);
+      } else {
+        spring.smoothedLevel += (0 - spring.smoothedLevel) * AUDIO_SMOOTHING;
+        targetY =
+          MOUTH_SMILE_CY +
+          spring.smoothedLevel * (MOUTH_OPEN_CY - MOUTH_SMILE_CY);
+      }
 
       if (prefersReduced) {
-        spring.current = target;
+        spring.current = targetY;
+        spring.velocity = 0;
       } else {
-        const force = (target - spring.current) * SPRING_STIFFNESS;
+        const force = (targetY - spring.current) * SPRING_STIFFNESS;
         spring.velocity = (spring.velocity + force) * SPRING_DAMPING;
         spring.current += spring.velocity;
       }
@@ -295,7 +328,7 @@ export function AiFace({
     return () => {
       cancelAnimationFrame(animationRef.current);
     };
-  }, [state]);
+  }, []);
 
   const glowClasses = getGlowClasses(state, characterId);
   const faceGradient = getFaceGradient(state);
