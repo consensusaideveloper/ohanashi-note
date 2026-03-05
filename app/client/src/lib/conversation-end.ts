@@ -40,6 +40,7 @@ const END_INTENT_PATTERNS = [
   // Standalone end-verb conjugations
   /終わろう/,
   /終わります/,
+  /終わりますね/,
   // Farewell phrases
   /さようなら/,
   /バイバイ/,
@@ -53,6 +54,38 @@ const END_INTENT_PATTERNS = [
   /やめ(る|ます|よう|たい|ましょう|とく)/,
   // Standalone 終了 or 終了+する/します/しよう (e.g. "終了", "もう終了")
   /終了(する|します|しよう|しましょう)?$/,
+] as const;
+
+const ASSISTANT_CONTINUE_PATTERNS = [
+  /続けましょう/,
+  /続けます/,
+  /続き/,
+  /まだ/,
+  /もう少し/,
+  /次は/,
+  /ほかに/,
+  /他に/,
+  /話しましょうか/,
+  /どうしましょう/,
+  /聞かせてください/,
+  /教えてください/,
+] as const;
+
+const ASSISTANT_QUESTION_PATTERNS = [
+  /[?？]/,
+  /ますか/,
+  /でしょうか/,
+  /ませんか/,
+  /いかがですか/,
+  /どうしますか/,
+] as const;
+
+const ASSISTANT_CLOSING_PATTERNS = [
+  /今日は(ここまで|このへんで|この辺で|終わり)/,
+  /(それでは|では)(また|おやすみ|失礼|さようなら|バイバイ)/,
+  /また(今度|お話ししましょう|話しましょう|お会いしましょう|ね)/,
+  /(おやすみなさい|さようなら|バイバイ|失礼します|お疲れさまでした)$/,
+  /会話(を)?(終了|終わり)(します|しました|にします|にしましょう)/,
 ] as const;
 
 const ONBOARDING_COMPLETION_PATTERNS = [
@@ -79,6 +112,26 @@ export function hasExplicitConversationEndIntent(text: string): boolean {
   }
 
   return END_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Detects assistant farewell/closing phrases that indicate the session
+ * should be ended locally even if end_conversation was not called.
+ */
+export function hasAssistantConversationClosingSignal(text: string): boolean {
+  const normalized = normalizeTranscriptText(text);
+  if (normalized === "") {
+    return false;
+  }
+
+  if (
+    ASSISTANT_CONTINUE_PATTERNS.some((pattern) => pattern.test(normalized)) ||
+    ASSISTANT_QUESTION_PATTERNS.some((pattern) => pattern.test(text))
+  ) {
+    return false;
+  }
+
+  return ASSISTANT_CLOSING_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**

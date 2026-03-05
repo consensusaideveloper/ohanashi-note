@@ -43,7 +43,10 @@ import {
   searchPastConversations,
   getNoteEntriesForAI,
 } from "../lib/conversation-search";
-import { hasExplicitConversationEndIntent } from "../lib/conversation-end";
+import {
+  hasAssistantConversationClosingSignal,
+  hasExplicitConversationEndIntent,
+} from "../lib/conversation-end";
 import { useVoiceActionRef } from "../contexts/VoiceActionContext";
 
 import type { VoiceActionCallbacks } from "../contexts/VoiceActionContext";
@@ -962,18 +965,18 @@ export function useConversation(): UseConversationReturn {
   );
 
   const requestEndConversation = useCallback(
-    (source: "tool" | "user_intent"): void => {
+    (source: "tool" | "user_intent" | "assistant_signal"): void => {
       if (endConversationRequestedRef.current) {
         // User explicit end intent should force-stop even if the model
         // forgot to call end_conversation.
-        if (source === "user_intent") {
+        if (source !== "tool") {
           endConversationFarewellDetectedRef.current = true;
         }
         return;
       }
 
       endConversationRequestedRef.current = true;
-      endConversationFarewellDetectedRef.current = source === "user_intent";
+      endConversationFarewellDetectedRef.current = source !== "tool";
       clearEndConversationTimers();
       endConversationFallbackTimeoutRef.current = setTimeout(() => {
         autoEndStopTriggerRef.current = true;
@@ -1106,6 +1109,12 @@ export function useConversation(): UseConversationReturn {
             type: "FINALIZE_ASSISTANT_TRANSCRIPT",
             text: event.transcript,
           });
+          if (
+            !endConversationRequestedRef.current &&
+            hasAssistantConversationClosingSignal(event.transcript)
+          ) {
+            requestEndConversation("assistant_signal");
+          }
           break;
 
         case "conversation.item.input_audio_transcription.completed": {

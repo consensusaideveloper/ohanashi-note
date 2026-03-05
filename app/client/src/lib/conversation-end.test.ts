@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  hasAssistantConversationClosingSignal,
   hasExplicitConversationEndIntent,
   hasOnboardingCompletionSignal,
 } from "./conversation-end";
@@ -31,6 +32,7 @@ describe("hasExplicitConversationEndIntent", () => {
     expect(hasExplicitConversationEndIntent("今日はもう終わり")).toBe(true);
     expect(hasExplicitConversationEndIntent("もう終わろう")).toBe(true);
     expect(hasExplicitConversationEndIntent("もう終わります")).toBe(true);
+    expect(hasExplicitConversationEndIntent("今日は終わりますね")).toBe(true);
     expect(hasExplicitConversationEndIntent("終わろう")).toBe(true);
     expect(hasExplicitConversationEndIntent("終わります")).toBe(true);
   });
@@ -93,6 +95,36 @@ describe("hasExplicitConversationEndIntent", () => {
       ),
     ).toBe(false);
     expect(hasExplicitConversationEndIntent("まだ話したいです")).toBe(false);
+  });
+});
+
+describe("hasAssistantConversationClosingSignal", () => {
+  it("detects clear assistant closing phrases", () => {
+    expect(
+      hasAssistantConversationClosingSignal(
+        "今日はこのへんで終わりにしましょう。またお話ししましょうね。",
+      ),
+    ).toBe(true);
+    expect(
+      hasAssistantConversationClosingSignal("それでは、また今度お話ししましょう。"),
+    ).toBe(true);
+    expect(hasAssistantConversationClosingSignal("おやすみなさい")).toBe(
+      true,
+    );
+  });
+
+  it("does not trigger for continuation prompts or questions", () => {
+    expect(
+      hasAssistantConversationClosingSignal("今日はここまでにしますか？"),
+    ).toBe(false);
+    expect(
+      hasAssistantConversationClosingSignal(
+        "まだ続けましょう。次はどのお話にしますか？",
+      ),
+    ).toBe(false);
+    expect(
+      hasAssistantConversationClosingSignal("ほかにも聞かせてください。"),
+    ).toBe(false);
   });
 });
 
