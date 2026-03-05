@@ -23,7 +23,7 @@ interface CanonicalContent {
     | undefined;
   keyPoints:
     | {
-        importantStatements: string[];
+        importantStatements: Array<unknown>;
         decisions: string[];
         undecidedItems: string[];
       }
@@ -84,7 +84,9 @@ export function buildCanonicalContent(record: ConversationRecord): string {
     keyPoints:
       record.keyPoints !== undefined
         ? {
-            importantStatements: [...record.keyPoints.importantStatements],
+            importantStatements: record.keyPoints.importantStatements.map(
+              (item) => (typeof item === "string" ? item : { ...item }),
+            ),
             decisions: [...record.keyPoints.decisions],
             undecidedItems: [...record.keyPoints.undecidedItems],
           }

@@ -296,7 +296,7 @@ export interface FamilyConversationDetail {
   oneLinerSummary: string | null;
   discussedCategories: string[] | null;
   keyPoints: {
-    importantStatements: string[];
+    importantStatements: Array<string | { text: string; category: string; importance: string }>;
     decisions: string[];
     undecidedItems: string[];
   } | null;

@@ -10,7 +10,7 @@ interface PrintableConversationData {
   startedAt: number;
   discussedCategories: string[] | null;
   keyPoints: {
-    importantStatements: string[];
+    importantStatements: Array<string | { text: string }>;
     decisions: string[];
     undecidedItems: string[];
   } | null;
@@ -138,7 +138,7 @@ export function PrintableConversationDetail({
                       className="text-lg text-text-primary leading-relaxed flex gap-2"
                     >
                       <span className="text-accent-primary flex-none">●</span>
-                      <span>{item}</span>
+                      <span>{typeof item === "string" ? item : item.text}</span>
                     </li>
                   ))}
                 </ul>

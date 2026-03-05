@@ -5,12 +5,17 @@ import {
   getAccessibleCategories,
   getFamilyConversations,
 } from "../lib/family-api";
-import { QUESTION_CATEGORIES, getQuestionsByCategory } from "../lib/questions";
+import {
+  QUESTION_CATEGORIES,
+  getQuestionsByCategory,
+  getQuestionType,
+} from "../lib/questions";
 
 import type { FamilyConversation } from "../lib/family-api";
 import type { NoteEntry } from "../types/conversation";
 import type { FlexibleNoteItem } from "../lib/flexible-notes";
 import type {
+  AccumulativeEntry,
   CategoryNoteData,
   NoteEntryVersion,
   NoteEntryWithSource,
@@ -38,7 +43,34 @@ function isNoteEntry(value: unknown): value is NoteEntry {
   );
 }
 
-function getImportantStatements(value: unknown): string[] {
+import type { InsightStatement } from "../types/conversation";
+
+const VALID_INSIGHT_CATEGORIES = new Set([
+  "hobbies",
+  "values",
+  "relationships",
+  "memories",
+  "concerns",
+  "other",
+]);
+
+const VALID_INSIGHT_IMPORTANCES = new Set(["high", "medium", "low"]);
+
+function isInsightStatement(item: unknown): item is InsightStatement {
+  if (typeof item !== "object" || item === null) return false;
+  const obj = item as Record<string, unknown>;
+  return (
+    typeof obj["text"] === "string" &&
+    typeof obj["category"] === "string" &&
+    VALID_INSIGHT_CATEGORIES.has(obj["category"]) &&
+    typeof obj["importance"] === "string" &&
+    VALID_INSIGHT_IMPORTANCES.has(obj["importance"])
+  );
+}
+
+function getImportantStatements(
+  value: unknown,
+): Array<string | InsightStatement> {
   if (typeof value !== "object" || value === null) {
     return [];
   }
@@ -46,7 +78,10 @@ function getImportantStatements(value: unknown): string[] {
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw.filter((item): item is string => typeof item === "string");
+  return raw.filter(
+    (item): item is string | InsightStatement =>
+      typeof item === "string" || isInsightStatement(item),
+  );
 }
 
 /**
@@ -115,20 +150,47 @@ export function buildFamilyCategoryData(
     const noteEntries: NoteEntryWithSource[] = [];
     for (const [qId, latest] of latestMetaMap.entries()) {
       const allVersions = allVersionsMap.get(qId) ?? [];
-      const previousVersions = allVersions.slice(0, -1);
       // Always use client-side question title to ensure consistency
       // between answered and unanswered display states.
       const clientQuestion = questions.find((q) => q.id === qId);
       const questionTitle = clientQuestion?.title ?? latest.entry.questionTitle;
-      noteEntries.push({
-        questionId: latest.entry.questionId,
-        questionTitle,
-        answer: latest.entry.answer,
-        conversationId: latest.convId,
-        audioAvailable: false,
-        previousVersions,
-        hasHistory: previousVersions.length > 0,
-      });
+      const qType = getQuestionType(qId);
+
+      if (qType === "accumulative") {
+        const allEntries: AccumulativeEntry[] = [...allVersions]
+          .reverse()
+          .map((v) => ({
+            answer: v.answer,
+            conversationId: v.conversationId,
+            audioAvailable: false,
+            recordedAt: v.recordedAt,
+            sourceEvidence: undefined,
+          }));
+        noteEntries.push({
+          questionId: latest.entry.questionId,
+          questionTitle,
+          answer: latest.entry.answer,
+          conversationId: latest.convId,
+          audioAvailable: false,
+          questionType: qType,
+          previousVersions: [],
+          hasHistory: false,
+          allEntries,
+        });
+      } else {
+        const previousVersions = allVersions.slice(0, -1);
+        noteEntries.push({
+          questionId: latest.entry.questionId,
+          questionTitle,
+          answer: latest.entry.answer,
+          conversationId: latest.convId,
+          audioAvailable: false,
+          questionType: qType,
+          previousVersions,
+          hasHistory: previousVersions.length > 0,
+          allEntries: [],
+        });
+      }
     }
 
     // Compute answered/unanswered from coveredQuestionIds across ALL conversations

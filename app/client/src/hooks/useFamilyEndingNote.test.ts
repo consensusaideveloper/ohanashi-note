@@ -56,46 +56,46 @@ describe("buildFamilyCategoryData", () => {
     expect(entry?.audioAvailable).toBe(false);
   });
 
-  it("builds version history from multiple conversations", () => {
+  it("builds version history from multiple conversations (single-type)", () => {
     const conversations = [
       makeConversation({
         id: "conv-2",
-        category: "memories",
+        category: "funeral",
         startedAt: 2000,
         noteEntries: [
           {
-            questionId: "memories-01",
-            questionTitle: "大切な思い出",
-            answer: "北海道旅行",
+            questionId: "funeral-01",
+            questionTitle: "葬儀の希望",
+            answer: "一般葬",
           },
         ],
-        coveredQuestionIds: ["memories-01"],
+        coveredQuestionIds: ["funeral-01"],
       }),
       makeConversation({
         id: "conv-1",
-        category: "memories",
+        category: "funeral",
         startedAt: 1000,
         noteEntries: [
           {
-            questionId: "memories-01",
-            questionTitle: "大切な思い出",
-            answer: "家族旅行",
+            questionId: "funeral-01",
+            questionTitle: "葬儀の希望",
+            answer: "家族葬",
           },
         ],
-        coveredQuestionIds: ["memories-01"],
+        coveredQuestionIds: ["funeral-01"],
       }),
     ];
 
-    const result = buildFamilyCategoryData(["memories"], conversations);
+    const result = buildFamilyCategoryData(["funeral"], conversations);
     const entry = result[0]?.noteEntries.find(
-      (e) => e.questionId === "memories-01",
+      (e) => e.questionId === "funeral-01",
     );
 
-    expect(entry?.answer).toBe("北海道旅行");
+    expect(entry?.answer).toBe("一般葬");
     expect(entry?.conversationId).toBe("conv-2");
     expect(entry?.hasHistory).toBe(true);
     expect(entry?.previousVersions).toHaveLength(1);
-    expect(entry?.previousVersions[0]?.answer).toBe("家族旅行");
+    expect(entry?.previousVersions[0]?.answer).toBe("家族葬");
     expect(entry?.previousVersions[0]?.conversationId).toBe("conv-1");
     expect(entry?.previousVersions[0]?.recordedAt).toBe(1000);
   });
@@ -304,35 +304,35 @@ describe("buildFamilyCategoryData", () => {
     const conversations = [
       makeConversation({
         id: "conv-2",
-        category: "memories",
+        category: "funeral",
         startedAt: 2000,
         noteEntries: [
           {
-            questionId: "memories-01",
-            questionTitle: "大切な思い出",
+            questionId: "funeral-01",
+            questionTitle: "葬儀の希望",
             answer: "最新",
           },
         ],
-        coveredQuestionIds: ["memories-01"],
+        coveredQuestionIds: ["funeral-01"],
       }),
       makeConversation({
         id: "conv-1",
-        category: "memories",
+        category: "funeral",
         startedAt: 1000,
         noteEntries: [
           {
-            questionId: "memories-01",
-            questionTitle: "大切な思い出",
+            questionId: "funeral-01",
+            questionTitle: "葬儀の希望",
             answer: "古い",
           },
         ],
-        coveredQuestionIds: ["memories-01"],
+        coveredQuestionIds: ["funeral-01"],
       }),
     ];
 
-    const result = buildFamilyCategoryData(["memories"], conversations);
+    const result = buildFamilyCategoryData(["funeral"], conversations);
     const entry = result[0]?.noteEntries.find(
-      (e) => e.questionId === "memories-01",
+      (e) => e.questionId === "funeral-01",
     );
 
     expect(entry?.audioAvailable).toBe(false);

@@ -5,13 +5,19 @@ import {
   listConversations,
   subscribeToConversationUpdates,
 } from "../lib/storage";
-import { getQuestionsByCategory, QUESTION_CATEGORIES } from "../lib/questions";
+import {
+  getQuestionsByCategory,
+  getQuestionType,
+  QUESTION_CATEGORIES,
+} from "../lib/questions";
 
 import type {
   QuestionCategory,
   NoteEntry,
   ConversationRecord,
+  InsightStatement,
 } from "../types/conversation";
+import type { QuestionType } from "../lib/questions";
 import type { FlexibleNoteItem } from "../lib/flexible-notes";
 
 /** A single historical version of a note entry from a past conversation. */
@@ -23,13 +29,25 @@ export interface NoteEntryVersion {
   recordedAt: number;
 }
 
+/** A single entry for an accumulative question, treated as a peer among equals. */
+export interface AccumulativeEntry {
+  answer: string;
+  conversationId: string;
+  audioAvailable: boolean;
+  recordedAt: number;
+  sourceEvidence?: string;
+}
+
 export interface NoteEntryWithSource extends NoteEntry {
   conversationId: string;
   audioAvailable: boolean;
-  /** Past versions in chronological order (oldest first); excludes the current answer. */
+  questionType: QuestionType;
+  /** Past versions in chronological order (oldest first); excludes the current answer. Single type only. */
   previousVersions: NoteEntryVersion[];
-  /** True when the answer has been updated at least once. */
+  /** True when the answer has been updated at least once. Single type only. */
   hasHistory: boolean;
+  /** All entries as equal peers (newest first). Accumulative type only. */
+  allEntries: AccumulativeEntry[];
 }
 
 export interface UnansweredQuestion {
@@ -54,6 +72,43 @@ interface UseEndingNoteReturn {
   isLoading: boolean;
   error: boolean;
   refresh: () => void;
+}
+
+const VALID_INSIGHT_CATEGORIES = new Set([
+  "hobbies",
+  "values",
+  "relationships",
+  "memories",
+  "concerns",
+  "other",
+]);
+
+const VALID_INSIGHT_IMPORTANCES = new Set(["high", "medium", "low"]);
+
+function isInsightStatement(value: unknown): value is InsightStatement {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj["text"] === "string" &&
+    typeof obj["category"] === "string" &&
+    VALID_INSIGHT_CATEGORIES.has(obj["category"]) &&
+    typeof obj["importance"] === "string" &&
+    VALID_INSIGHT_IMPORTANCES.has(obj["importance"])
+  );
+}
+
+function sanitizeImportantStatements(
+  value: unknown,
+): Array<string | InsightStatement> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (item): item is string | InsightStatement =>
+      typeof item === "string" || isInsightStatement(item),
+  );
 }
 
 export function buildCategoryData(
@@ -101,19 +156,46 @@ export function buildCategoryData(
     const entryMap = new Map<string, NoteEntryWithSource>();
     for (const [qId, latest] of latestMetaMap.entries()) {
       const allVersions = allVersionsMap.get(qId) ?? [];
-      const previousVersions = allVersions.slice(0, -1);
       // Always use client-side question title to ensure consistency
       // between answered and unanswered display states.
       const clientQuestion = questions.find((q) => q.id === qId);
       const questionTitle = clientQuestion?.title ?? latest.entry.questionTitle;
-      entryMap.set(qId, {
-        ...latest.entry,
-        questionTitle,
-        conversationId: latest.convId,
-        audioAvailable: latest.audio,
-        previousVersions,
-        hasHistory: previousVersions.length > 0,
-      });
+      const qType = getQuestionType(qId);
+
+      if (qType === "accumulative") {
+        // All entries are equal peers — show newest first
+        const allEntries: AccumulativeEntry[] = [...allVersions]
+          .reverse()
+          .map((v) => ({
+            answer: v.answer,
+            conversationId: v.conversationId,
+            audioAvailable: v.audioAvailable,
+            recordedAt: v.recordedAt,
+            sourceEvidence: undefined,
+          }));
+        entryMap.set(qId, {
+          ...latest.entry,
+          questionTitle,
+          conversationId: latest.convId,
+          audioAvailable: latest.audio,
+          questionType: qType,
+          previousVersions: [],
+          hasHistory: false,
+          allEntries,
+        });
+      } else {
+        const previousVersions = allVersions.slice(0, -1);
+        entryMap.set(qId, {
+          ...latest.entry,
+          questionTitle,
+          conversationId: latest.convId,
+          audioAvailable: latest.audio,
+          questionType: qType,
+          previousVersions,
+          hasHistory: previousVersions.length > 0,
+          allEntries: [],
+        });
+      }
     }
 
     // Collect all covered question IDs for this category from ALL records
@@ -168,7 +250,9 @@ export function useEndingNote(): UseEndingNoteReturn {
             records.map((record) => ({
               conversationId: record.id,
               startedAt: record.startedAt,
-              importantStatements: record.keyPoints?.importantStatements ?? [],
+              importantStatements: sanitizeImportantStatements(
+                record.keyPoints?.importantStatements,
+              ),
               noteEntries: record.noteEntries ?? [],
             })),
           ),

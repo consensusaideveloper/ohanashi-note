@@ -40,28 +40,61 @@ export function PrintableCategory({
           <div key={entry.questionId} className="print-no-break">
             <p className="text-lg font-medium text-text-secondary">
               {entry.questionTitle}
-            </p>
-            <p className="text-lg text-text-primary leading-relaxed mt-1 pl-4 border-l-2 border-accent-primary/30">
-              {entry.answer}
+              {entry.questionType === "accumulative" &&
+                entry.allEntries.length > 0 && (
+                  <span className="ml-2 text-base font-normal">
+                    （{entry.allEntries.length}件）
+                  </span>
+                )}
             </p>
 
-            {/* Version history */}
-            {entry.hasHistory && entry.previousVersions.length > 0 && (
-              <div className="mt-2 ml-4 pl-3 border-l-2 border-warning-light space-y-2">
-                <p className="text-base font-medium text-text-secondary">
-                  更新履歴（{entry.previousVersions.length}回）
-                </p>
-                {[...entry.previousVersions].reverse().map((version) => (
-                  <div key={version.conversationId} className="print-no-break">
-                    <p className="text-base text-text-secondary">
-                      {formatVersionDate(version.recordedAt)}
+            {entry.questionType === "accumulative" &&
+            entry.allEntries.length > 0 ? (
+              <div className="mt-1 pl-4 space-y-2">
+                {entry.allEntries.map((item, index) => (
+                  <div
+                    key={`${item.conversationId}-${item.recordedAt}-${index}`}
+                    className="print-no-break border-l-2 border-accent-secondary/30 pl-3"
+                  >
+                    <p className="text-lg text-text-primary leading-relaxed">
+                      {item.answer}
                     </p>
-                    <p className="text-base text-text-primary/70 leading-relaxed">
-                      {version.answer}
+                    <p className="text-base text-text-secondary">
+                      {formatVersionDate(item.recordedAt)}
                     </p>
                   </div>
                 ))}
               </div>
+            ) : (
+              <>
+                <p className="text-lg text-text-primary leading-relaxed mt-1 pl-4 border-l-2 border-accent-primary/30">
+                  {entry.answer}
+                </p>
+
+                {/* Version history */}
+                {entry.hasHistory && entry.previousVersions.length > 0 && (
+                  <div className="mt-2 ml-4 pl-3 border-l-2 border-warning-light space-y-2">
+                    <p className="text-base font-medium text-text-secondary">
+                      更新履歴（{entry.previousVersions.length}回）
+                    </p>
+                    {[...entry.previousVersions]
+                      .reverse()
+                      .map((version, index) => (
+                        <div
+                          key={`${version.conversationId}-${version.recordedAt}-${index}`}
+                          className="print-no-break"
+                        >
+                          <p className="text-base text-text-secondary">
+                            {formatVersionDate(version.recordedAt)}
+                          </p>
+                          <p className="text-base text-text-primary/70 leading-relaxed">
+                            {version.answer}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}

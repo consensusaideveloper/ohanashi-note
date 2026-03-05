@@ -374,15 +374,15 @@ export function AiFace({
       }
 
       // Eye animation: gentle squint during speaking, subtle life during idle
-      const eyeBaseRy =
-        currentState === "error" ? EYE_RY_ERROR : EYE_RY_NORMAL;
+      const eyeBaseRy = currentState === "error" ? EYE_RY_ERROR : EYE_RY_NORMAL;
       let eyeRyAnimated = eyeBaseRy;
       if (currentState === "ai-speaking" && !prefersReduced) {
         const squintOscillation =
           Math.sin(now * EYE_SPEAKING_OSCILLATION_SPEED) * 0.5 + 0.5;
         const squintFactor =
           EYE_SPEAKING_SQUINT_MIN +
-          squintOscillation * (EYE_SPEAKING_SQUINT_MAX - EYE_SPEAKING_SQUINT_MIN);
+          squintOscillation *
+            (EYE_SPEAKING_SQUINT_MAX - EYE_SPEAKING_SQUINT_MIN);
         eyeRyAnimated = eyeBaseRy * squintFactor;
       } else if (currentState === "listening" && !prefersReduced) {
         eyeRyAnimated = eyeBaseRy * EYE_LISTENING_WIDEN;

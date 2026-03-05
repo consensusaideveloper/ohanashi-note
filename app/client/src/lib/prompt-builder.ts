@@ -538,7 +538,9 @@ export function buildSessionPrompt(
   }
 
   prompt += buildAssistantIdentityPrompt(assistantName);
-  prompt += buildOpeningBridgePrompt(pickLatestSummary(pastContext?.summaries ?? []));
+  prompt += buildOpeningBridgePrompt(
+    pickLatestSummary(pastContext?.summaries ?? []),
+  );
 
   // User name handling
   if (userName !== undefined && userName !== "") {

@@ -4,6 +4,8 @@
 
 import { QUESTION_CATEGORIES } from "./questions";
 
+import { getInsightText } from "../types/conversation";
+
 import type {
   ConversationRecord,
   NoteEntry,
@@ -121,7 +123,7 @@ function collectScoredFields(record: ConversationRecord): ScoredField[] {
   }
   if (record.keyPoints !== undefined) {
     for (const s of record.keyPoints.importantStatements) {
-      fields.push({ text: s, weight: 2 });
+      fields.push({ text: getInsightText(s), weight: 2 });
     }
     for (const s of record.keyPoints.decisions) {
       fields.push({ text: s, weight: 2 });

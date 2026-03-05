@@ -1,12 +1,21 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  extractFallbackImportantStatements,
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
   selectTranscriptForAnalysis,
   shouldFallbackToUngroundedEntries,
 } from "./summarizer";
+
+import type { InsightStatement } from "./summarizer";
+
+function insight(
+  text: string,
+  category: InsightStatement["category"] = "other",
+  importance: InsightStatement["importance"] = "medium",
+): InsightStatement {
+  return { text, category, importance };
+}
 
 describe("selectTranscriptForAnalysis", () => {
   it("keeps assistant turns when user utterances exist", () => {
@@ -90,57 +99,23 @@ describe("filterSubstantiveDecisions", () => {
 
 describe("filterMeaningfulImportantStatements", () => {
   it("removes filler and operation-like statements", () => {
-    expect(
-      filterMeaningfulImportantStatements([
-        "ありがとうございます",
-        "今日はここまでにする",
-        "甘いものよりせんべいが好き",
-      ]),
-    ).toEqual(["甘いものよりせんべいが好き"]);
+    const result = filterMeaningfulImportantStatements([
+      insight("ありがとうございます"),
+      insight("今日はここまでにする"),
+      insight("甘いものよりせんべいが好き", "hobbies"),
+    ]);
+
+    expect(result).toEqual([
+      insight("甘いものよりせんべいが好き", "hobbies"),
+    ]);
   });
 
   it("deduplicates surviving statements", () => {
-    expect(
-      filterMeaningfulImportantStatements([
-        "雨の匂いが好き",
-        "雨の匂いが好き ",
-      ]),
-    ).toEqual(["雨の匂いが好き"]);
-  });
-});
+    const result = filterMeaningfulImportantStatements([
+      insight("雨の匂いが好き", "hobbies"),
+      insight("雨の匂いが好き ", "hobbies"),
+    ]);
 
-describe("extractFallbackImportantStatements", () => {
-  it("extracts preference-like statements from user transcript when model output is empty", () => {
-    expect(
-      extractFallbackImportantStatements(
-        [
-          { role: "assistant", text: "好きな食べ物はありますか" },
-          { role: "user", text: "そばが好きです。飲み物はお茶が好きです。" },
-        ],
-        [],
-      ),
-    ).toEqual(["そばが好きです。", "飲み物はお茶が好きです。"]);
-  });
-
-  it("does not duplicate information already captured as note entries", () => {
-    expect(
-      extractFallbackImportantStatements(
-        [
-          { role: "assistant", text: "好きなものを教えてください" },
-          {
-            role: "user",
-            text: "好きな食べ物はそばです。写真を撮るのが好きです。",
-          },
-        ],
-        [
-          {
-            questionId: "memories-08",
-            questionTitle: "自分史・趣味・好きなもの",
-            answer: "好きな食べ物はそば",
-            sourceEvidence: "好きな食べ物はそばです",
-          },
-        ],
-      ),
-    ).toEqual(["写真を撮るのが好きです。"]);
+    expect(result).toEqual([insight("雨の匂いが好き", "hobbies")]);
   });
 });

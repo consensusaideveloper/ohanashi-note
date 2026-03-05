@@ -4,12 +4,19 @@
 
 import type { QuestionCategory } from "../types/conversation";
 
+/**
+ * "single" — one correct/current answer (e.g. blood type, address).
+ * "accumulative" — multiple valid answers coexist (e.g. memories, contacts).
+ */
+export type QuestionType = "single" | "accumulative";
+
 export interface EndingNoteQuestion {
   id: string;
   category: QuestionCategory;
   title: string;
   question: string;
   sensitive: boolean;
+  questionType: QuestionType;
 }
 
 export interface CategoryInfo {
@@ -108,6 +115,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "学歴・職歴、好きな食べ物・音楽・旅行先など、あなたの人となりを教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-02",
@@ -115,6 +123,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "一番楽しかった家族旅行",
     question: "今までで一番楽しかった家族旅行は、どこへの旅行ですか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-01",
@@ -122,6 +131,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "子が生まれた日",
     question: "お子さんが生まれた日のこと、覚えていることを教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-07",
@@ -130,6 +140,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "まだやっていないけど、やりたいことはありますか？（旅行、会いたい人など）",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-09",
@@ -138,6 +149,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "10代から30代の頃に、一番印象に残っている出来事やエピソードを教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-10",
@@ -146,6 +158,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "40代から60代の頃に、一番がんばったことや忘れられない出来事はありますか？",
     sensitive: false,
+    questionType: "accumulative",
   },
 
   // --- People (10 questions) ---
@@ -156,6 +169,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "あなたにとって特に大事な人を教えてください。家族でも友人でも、お世話になった方でも大丈夫です。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "memories-04",
@@ -163,6 +177,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "家族へのメッセージ",
     question: "家族へ伝えたいことがあれば、教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "people-02",
@@ -170,6 +185,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "一人ひとりへのメッセージ",
     question: "大事な方それぞれに、伝えたいメッセージはありますか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "people-05",
@@ -177,6 +193,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "もしもの時に頼りたい人",
     question: "いざという時に、身の回りのことをお願いしたい人はいますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "medical-09",
@@ -185,6 +202,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "緊急時に連絡してほしい人（親族以外も含む）は誰ですか？連絡先を教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "medical-10",
@@ -193,6 +211,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "親族や親しい友人の連絡先リストはありますか？訃報連絡や形見分けの際に参考にしたいです。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "house-05",
@@ -201,6 +220,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ペットを飼っていますか？かかりつけの動物病院や好きな餌などを教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "house-06",
@@ -208,6 +228,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "ペットの引き取り",
     question: "万が一の時、ペットは誰に引き取ってほしいですか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "people-03",
@@ -216,6 +237,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ペットの持病やアレルギー、かかった病気の記録があれば教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "people-04",
@@ -224,6 +246,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ペットの特徴や見分けるポイント（模様、性格など）を教えてください。迷子になった時にも役立ちます。",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- House (5 questions) ---
@@ -233,6 +256,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "家の管理",
     question: "この家に、何か特別な管理方法や注意点はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "house-02",
@@ -240,6 +264,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "貴重品・コレクション",
     question: "貴金属や時計、大切にしているコレクションなどはありますか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "house-03",
@@ -248,6 +273,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "衣類や思い出の品で、特定の人に譲りたいものはありますか？誰にどの品を渡したいか教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "house-07",
@@ -256,6 +282,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "携帯電話やインターネット回線の契約会社と、解約時の注意点を教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "house-04",
@@ -264,6 +291,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "家族に見せずに処分してほしいものや、特別にしまってあるものはありますか？",
     sensitive: true,
+    questionType: "single",
   },
 
   // --- Medical (13 questions) ---
@@ -273,6 +301,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "常用の薬",
     question: "普段飲んでいる薬（常備薬）の名前を教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "medical-02",
@@ -280,6 +309,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "かかりつけの病院",
     question: "かかりつけの病院をすべて教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "medical-11",
@@ -288,6 +318,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "食べ物や薬のアレルギーはありますか？何に気をつけるべきか教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "medical-12",
@@ -295,6 +326,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "病歴",
     question: "これまでにかかった大きな病気や手術の経験はありますか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "medical-03",
@@ -302,6 +334,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "保険証・マイナンバー",
     question: "健康保険証やマイナンバーカードはどこに保管していますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "medical-04",
@@ -310,6 +343,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "介護が必要になったとき、どこで過ごしたいですか？費用や世話をお願いしたい人について希望はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "medical-13",
@@ -318,6 +352,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "万が一、ご自身で判断が難しくなったときに備えて、財産の管理やいろいろな手続きを誰にお願いしたいですか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "medical-05",
@@ -326,6 +361,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "意識がなくなった時や回復が見込めない時、延命治療（人工呼吸器や点滴など）を希望しますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "medical-07",
@@ -333,6 +369,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "臓器提供の意思",
     question: "臓器提供について、どう考えていますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "medical-08",
@@ -341,6 +378,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "生年月日、本籍、運転免許証などの基本情報はどこで確認できますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "medical-14",
@@ -349,6 +387,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "延命治療を望まない場合の「尊厳死宣言書（リヴィング・ウイル）」を作成されていますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "medical-15",
@@ -357,6 +396,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "最期の時間をどこで、どのように過ごしたいですか？（自宅、病院、ホスピスなど）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "medical-16",
@@ -365,6 +405,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "終末期の医療について、かかりつけのお医者さんと話し合ったことはありますか？",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Funeral (11 questions) ---
@@ -375,6 +416,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "葬儀について希望はありますか？規模（家族葬、一般葬、一日葬、直葬）や、葬儀を依頼したい会社がもしあれば教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-02",
@@ -383,6 +425,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お世話になっているお寺（菩提寺）や、信仰している宗教はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-03",
@@ -391,6 +434,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お墓はすでに準備されていますか？場所や管理している方を教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-08",
@@ -399,6 +443,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "埋葬の方法に希望はありますか？（一般的なお墓、納骨堂、樹木葬など）",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-04",
@@ -406,6 +451,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "遺影の写真",
     question: "遺影に使ってほしい、お気に入りの写真はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-05",
@@ -413,6 +459,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "訃報を伝える人",
     question: "亡くなったことを、できるだけ早く伝えてほしい人は誰ですか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "funeral-06",
@@ -420,6 +467,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "葬儀に呼ぶ人・呼ばない人",
     question: "葬儀に呼びたい人、連絡を控えたい人はいますか？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "funeral-07",
@@ -427,6 +475,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "仏壇・神棚の管理",
     question: "仏壇や神棚、ご先祖様のお守りは今後どうしてほしいですか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-09",
@@ -435,6 +484,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お墓の管理が難しくなった場合、墓じまい（墓所の返還）を検討されていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-10",
@@ -443,6 +493,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お墓参りをしてくれる方がいない場合に備えて、永代供養を検討されていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "funeral-11",
@@ -450,6 +501,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "散骨の希望",
     question: "海や山への散骨に興味はありますか？",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Money (18 questions) ---
@@ -460,6 +512,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "メインで使っている銀行はどこですか？（銀行名・支店名など。暗証番号やパスワードは入力しないでください）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-02",
@@ -468,6 +521,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "他に口座を持っている銀行をすべて教えてください。（銀行名・支店名のみ）",
     sensitive: true,
+    questionType: "accumulative",
   },
   {
     id: "money-03",
@@ -476,6 +530,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "通帳と届出印は、どこに保管していますか？金庫や引き出しなど、ご家族がわかる場所にありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-16",
@@ -484,6 +539,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "株式や投資信託、債券など、証券会社で運用している資産はありますか？（証券会社名のみ教えてください）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-04",
@@ -492,6 +548,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "生命保険に入っていますか？保険会社名と、証券の保管場所を教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "money-06",
@@ -499,6 +556,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "ローンの有無",
     question: "住宅ローンや、その他のローンは残っていますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-07",
@@ -506,6 +564,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "不動産の権利証",
     question: "不動産の権利証（登記識別情報）はどこにありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-08",
@@ -513,6 +572,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "年金と受給状況",
     question: "年金はどこから受け取っていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "money-09",
@@ -521,6 +581,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "クレジットカードは何枚持っていますか？カード会社名を教えてください。（カード番号やセキュリティコードは入力しないでください）",
     sensitive: true,
+    questionType: "accumulative",
   },
   {
     id: "money-10",
@@ -528,6 +589,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "個人間の貸し借り",
     question: "人とお金の貸し借りはありますか？（貸している・借りている両方）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-11",
@@ -536,6 +598,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "貯めているポイントやマイル、電子マネーの残高などはありますか？（サービス名のみ）",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "money-17",
@@ -544,6 +607,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "金庫の中身や、家族が把握していない貴重な資産（美術品、骨董品、貴金属など）はありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-13",
@@ -552,6 +616,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "有料で利用しているサービス（サブスク、習い事など）を教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "money-14",
@@ -560,6 +625,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "電気・ガス・新聞など、定期的に支払っている契約で解約が必要なものは？",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "money-15",
@@ -568,6 +634,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "特定の財産を誰に譲りたいなど、相続について希望はありますか？（法的効力はありませんが参考として）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-18",
@@ -576,6 +643,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "実印（市区町村に届け出た印鑑）はお持ちですか？どこの役所に届け出ていて、印鑑はどこに保管していますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-19",
@@ -584,6 +652,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "銀行届出印は、すべての銀行で同じ印鑑を使っていますか？それとも銀行ごとに違う印鑑ですか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "money-20",
@@ -592,6 +661,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "印鑑登録証（カード）はどこに保管していますか？マイナンバーカードでコンビニ取得できる設定にしていますか？",
     sensitive: true,
+    questionType: "single",
   },
 
   // --- Work (9 questions) ---
@@ -602,6 +672,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "今もお仕事をされていますか？会社員、自営業、パートなど、働き方を教えてください。以前のお仕事についても教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "work-02",
@@ -610,6 +681,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "勤務先やご自身の事業の名称、連絡先を教えてください。退職された方は、最後に勤めた会社の情報をお願いします。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "work-03",
@@ -618,6 +690,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "退職金や企業年金はありますか？受け取り済みか、これから受け取るものがあるか教えてください。",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "work-04",
@@ -626,6 +699,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お仕事でお付き合いのある取引先やお客様はいますか？主な連絡先を教えてください。",
     sensitive: false,
+    questionType: "accumulative",
   },
   {
     id: "work-05",
@@ -634,6 +708,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご自身の事業やお店をお持ちの方へ。万が一の時、事業はどうしてほしいですか？後を継いでほしい人はいますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "work-06",
@@ -642,6 +717,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お仕事に必要な免許や許可証、業務上の契約書などはありますか？保管場所を教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "work-07",
@@ -650,6 +726,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "事業に関する借入金や、誰かの連帯保証人になっていることはありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "work-08",
@@ -658,6 +735,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お仕事やお金のことで相談している専門家（税理士、弁護士、社労士など）はいますか？連絡先を教えてください。",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "work-09",
@@ -666,6 +744,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご自身が書いた本や作品、特許、商標など、知的財産に当たるものはありますか？どう引き継いでほしいですか？",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Digital (7 questions) ---
@@ -676,6 +755,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ビットコインなどの仮想通貨（インターネット上のお金）を持っていますか？どのサービスを使っていますか？（取引所やアプリの名前だけ教えてください。パスワードや秘密鍵は入力しないでください）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "digital-02",
@@ -684,6 +764,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "楽天証券やSBI証券などのネット証券の口座や、つみたてNISA（少額から始められる非課税の投資制度）の口座はありますか？（証券会社名だけ教えてください。口座番号やパスワードは入力しないでください）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "digital-03",
@@ -692,6 +773,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "パスワードを書いたメモや、信頼できる人に託しているものはありますか？どこにありますか？（パスワード自体は書かないでください。場所だけ教えてください）",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "digital-04",
@@ -700,6 +782,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "InstagramやX（Twitter）、LINEなどのアカウントを持っていますか？亡くなった後どうしたいですか？（削除・追悼アカウント化など）",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "digital-05",
@@ -708,6 +791,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "GoogleフォトやiCloudに写真を保存していますか？亡くなった後どうしたいですか？（家族に残す・削除など）",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "digital-06",
@@ -716,6 +800,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "AppleやGoogleの「亡くなった後のアカウント管理」機能を設定していますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "digital-08",
@@ -724,6 +809,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "将来、AIなどの技術であなたの声や姿を再現して、ご家族に届けることについてどう思いますか？（OK・NGなど、希望を教えてください）",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Legal (12 questions) ---
@@ -734,6 +820,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご家族の構成を教えてください。配偶者、お子さん、ご両親、ご兄弟はいらっしゃいますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "legal-02",
@@ -742,6 +829,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "相続の対象になる財産を整理しましょう。預貯金、不動産、有価証券のほかに、借入金や連帯保証もありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-03",
@@ -750,6 +838,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "遺言書は作成されていますか？自筆証書・公正証書のどちらですか？保管場所を教えてください。",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-04",
@@ -757,6 +846,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "遺言を届ける人",
     question: "遺言書の内容を実行してくれる人（遺言執行者）は決めていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "legal-05",
@@ -765,6 +855,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご存命のうちに財産を贈与したいとお考えですか？贈与契約書は作成していますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-06",
@@ -773,6 +864,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "生命保険の受取人はどなたですか？また、余命宣告を受けた時に保険金を先に受け取れる仕組み（リビングニーズ特約）がついているか、確認されていますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-07",
@@ -781,6 +873,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "毎年110万円まで税金がかからずにお金を渡せる仕組みがあります。この仕組みや、お孫さんの教育資金を非課税で渡せる制度を利用されていますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-08",
@@ -789,6 +882,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "土地や家をお持ちの場合、相続が起きたら3年以内に名義変更（相続登記）をしなければならない決まりになっています。名義変更の手続きについて、準備や相談はされていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "legal-09",
@@ -796,6 +890,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "財産の分け方の希望（遺産分割）",
     question: "財産の分け方について、ご家族と話し合われたことはありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-10",
@@ -803,6 +898,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "寄付のご希望",
     question: "財産の一部を団体や施設に寄付したいお気持ちはありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "legal-11",
@@ -811,6 +907,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "もしお借り入れがある場合、ご家族がそれを引き継がなくて済む方法（相続放棄）について考えたことはありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "legal-12",
@@ -818,6 +915,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "養子縁組の意向",
     question: "養子縁組をされている、または検討されていることはありますか？",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Trust (11 questions) ---
@@ -828,6 +926,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "認知症などで判断が難しくなった時に備えて、信頼できるご家族に財産の管理を任せる「家族信託」という仕組みがあります。検討されたことはありますか？すでに契約されていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-02",
@@ -836,6 +935,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "家族信託を検討される場合、財産を預ける人・預かる人・利益を受ける人は誰を想定しますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-03",
@@ -844,6 +944,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご自宅が将来空き家になる心配はありますか？売却・賃貸・解体など、どうしたいですか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-04",
@@ -852,6 +953,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ペットの飼育ができなくなった時に備えて、飼育費と世話を託す「ペット信託」に興味はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-05",
@@ -860,6 +962,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "亡くなった後の手続き（届出、公共料金の解約、役所手続きなど）を誰にお願いしたいですか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-06",
@@ -868,6 +971,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "判断が難しくなった時に備えて、元気なうちに信頼できる方に財産管理や契約をお願いしておく仕組みがあります。検討されたことはありますか？すでに契約されていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-07",
@@ -875,6 +979,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "後見人になってほしい人（任意後見受任者）",
     question: "任意後見人になってほしい人は決まっていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-08",
@@ -882,6 +987,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "身元保証人",
     question: "入院や施設入居時の身元保証人は確保できていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-09",
@@ -889,6 +995,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     title: "見守り契約",
     question: "定期的に安否を確認してくれる「見守り契約」に興味はありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-10",
@@ -897,6 +1004,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご家族の中に、将来的に生活支援が必要な方（障がい、持病など）はいらっしゃいますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "trust-11",
@@ -905,6 +1013,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "終活に関して相談できる専門家（行政書士、司法書士、税理士など）はいますか？",
     sensitive: false,
+    questionType: "single",
   },
 
   // --- Support (8 questions) ---
@@ -915,6 +1024,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "判断が難しくなった時に、裁判所が選んだ方にお金の管理や手続きを代わってもらえる仕組みがあります。こうした制度の利用を検討されたことはありますか？すでに申し立てをされていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-02",
@@ -923,6 +1033,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "生活費にお困りの場合、生活保護制度について相談されたことはありますか？",
     sensitive: true,
+    questionType: "single",
   },
   {
     id: "support-03",
@@ -931,6 +1042,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "亡くなった後、健康保険から葬儀費用の補助金を受け取ることができます。この手続きについて、ご家族に伝えてありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-04",
@@ -939,6 +1051,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "自宅に住み続けながら、家を担保にして毎月生活費を受け取れる仕組みがあります。利用されていますか？または検討されたことはありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-05",
@@ -947,6 +1060,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "自宅を売った後も、家賃を払ってそのまま住み続けられる仕組みがあります。利用されていますか？または検討されたことはありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-06",
@@ -955,6 +1069,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "ご自身が亡くなった後、ご家族が受け取れる遺族年金について確認されていますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-07",
@@ -963,6 +1078,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "お金の管理や福祉サービスの手続きを手伝ってもらえる公的なサービスがあります。利用されていますか？または利用を考えたことはありますか？",
     sensitive: false,
+    questionType: "single",
   },
   {
     id: "support-08",
@@ -971,6 +1087,7 @@ const QUESTIONS: readonly EndingNoteQuestion[] = [
     question:
       "介護保険サービスは利用されていますか？要介護認定は受けていますか？",
     sensitive: false,
+    questionType: "single",
   },
 ] as const;
 
@@ -981,6 +1098,15 @@ export function getQuestionsByCategory(
   category: QuestionCategory,
 ): readonly EndingNoteQuestion[] {
   return QUESTIONS.filter((q) => q.category === category);
+}
+
+/**
+ * Get the question type for a given question ID.
+ * Falls back to "single" if the question is not found.
+ */
+export function getQuestionType(questionId: string): QuestionType {
+  const question = QUESTIONS.find((q) => q.id === questionId);
+  return question?.questionType ?? "single";
 }
 
 /**

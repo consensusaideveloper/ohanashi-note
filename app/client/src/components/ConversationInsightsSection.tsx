@@ -1,7 +1,25 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { ReactNode } from "react";
-import type { FlexibleNoteItem } from "../lib/flexible-notes";
+import type { FlexibleNoteItem, InsightCategory } from "../lib/flexible-notes";
+
+const INSIGHT_CATEGORY_LABELS: Record<InsightCategory, string> = {
+  hobbies: "趣味・好み",
+  values: "価値観",
+  relationships: "人間関係",
+  memories: "思い出",
+  concerns: "気がかり",
+  other: "その他",
+};
+
+const CATEGORY_DISPLAY_ORDER: readonly InsightCategory[] = [
+  "hobbies",
+  "values",
+  "relationships",
+  "memories",
+  "concerns",
+  "other",
+];
 
 interface ConversationInsightsSectionProps {
   items: FlexibleNoteItem[];
@@ -13,11 +31,47 @@ function formatRecordedAt(timestamp: number): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+function groupByCategory(
+  items: FlexibleNoteItem[],
+): Array<{ category: InsightCategory; label: string; items: FlexibleNoteItem[] }> {
+  const map = new Map<InsightCategory, FlexibleNoteItem[]>();
+
+  for (const item of items) {
+    const existing = map.get(item.category);
+    if (existing !== undefined) {
+      existing.push(item);
+    } else {
+      map.set(item.category, [item]);
+    }
+  }
+
+  const groups: Array<{
+    category: InsightCategory;
+    label: string;
+    items: FlexibleNoteItem[];
+  }> = [];
+
+  for (const category of CATEGORY_DISPLAY_ORDER) {
+    const categoryItems = map.get(category);
+    if (categoryItems !== undefined && categoryItems.length > 0) {
+      groups.push({
+        category,
+        label: INSIGHT_CATEGORY_LABELS[category],
+        items: categoryItems,
+      });
+    }
+  }
+
+  return groups;
+}
+
 export function ConversationInsightsSection({
   items,
   onViewConversation,
 }: ConversationInsightsSectionProps): ReactNode {
   const [isExpanded, setIsExpanded] = useState(items.length > 0);
+
+  const groups = useMemo(() => groupByCategory(items), [items]);
 
   const handleToggle = useCallback((): void => {
     setIsExpanded((prev) => !prev);
@@ -69,49 +123,58 @@ export function ConversationInsightsSection({
       </button>
 
       {isExpanded && (
-        <div className="px-4 pb-4 space-y-3">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="border-l-2 border-accent-secondary/40 pl-3"
-            >
-              <p className="text-base text-text-primary leading-relaxed">
-                {item.text}
-              </p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <span className="text-sm text-text-secondary">
-                  {formatRecordedAt(item.recordedAt)}の会話
-                </span>
-                {item.mentionCount > 1 && (
-                  <span className="inline-flex items-center rounded-full bg-accent-secondary/10 px-2.5 py-1 text-sm text-text-secondary">
-                    {item.mentionCount}回出てきた話題
-                  </span>
-                )}
-                {onViewConversation !== undefined && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 min-h-11 px-3 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-lg font-medium hover:bg-accent-primary/20 active:bg-accent-primary/30 transition-colors"
-                    data-conversation-id={item.conversationId}
-                    onClick={handleViewConversationClick}
-                    aria-label="会話を見る"
+        <div className="px-4 pb-4 space-y-5">
+          {groups.map((group) => (
+            <div key={group.category}>
+              <h4 className="text-base font-semibold text-text-secondary mb-2">
+                {group.label}
+              </h4>
+              <div className="space-y-3">
+                {group.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`pl-3 ${item.importance === "high" ? "border-l-3 border-accent-primary/60" : "border-l-2 border-accent-secondary/40"}`}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
-                      />
-                    </svg>
-                    会話を見る
-                  </button>
-                )}
+                    <p className="text-base text-text-primary leading-relaxed">
+                      {item.text}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-text-secondary">
+                        {formatRecordedAt(item.recordedAt)}の会話
+                      </span>
+                      {item.mentionCount > 1 && (
+                        <span className="inline-flex items-center rounded-full bg-accent-secondary/10 px-2.5 py-1 text-sm text-text-secondary">
+                          {item.mentionCount}回出てきた話題
+                        </span>
+                      )}
+                      {onViewConversation !== undefined && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 min-h-11 px-3 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-lg font-medium hover:bg-accent-primary/20 active:bg-accent-primary/30 transition-colors"
+                          data-conversation-id={item.conversationId}
+                          onClick={handleViewConversationClick}
+                          aria-label="会話を見る"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+                            />
+                          </svg>
+                          会話を見る
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}

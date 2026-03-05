@@ -10,6 +10,22 @@ import type { QuestionCategory } from "../types/conversation.js";
 
 // --- Types ---
 
+export type InsightCategory =
+  | "hobbies"
+  | "values"
+  | "relationships"
+  | "memories"
+  | "concerns"
+  | "other";
+
+export type InsightImportance = "high" | "medium" | "low";
+
+export interface InsightStatement {
+  text: string;
+  category: InsightCategory;
+  importance: InsightImportance;
+}
+
 export interface PreviousNoteEntry {
   questionId: string;
   questionTitle: string;
@@ -31,7 +47,7 @@ export interface NoteEntry {
 }
 
 export interface KeyPoints {
-  importantStatements: string[];
+  importantStatements: InsightStatement[];
   decisions: string[];
   undecidedItems: string[];
 }
@@ -87,17 +103,6 @@ const NON_SUBSTANTIVE_IMPORTANT_STATEMENT_PATTERNS = [
   "話し相手",
   "キャラクター",
 ] as const;
-const IMPORTANT_STATEMENT_HINT_PATTERNS = [
-  /好き|好きな|好み|お気に入り/u,
-  /嫌い|苦手|嫌だった/u,
-  /よく|いつも|たいてい|習慣/u,
-  /昔|若い頃|子どもの頃|思い出|忘れられない/u,
-  /大切|大事|こだわり|価値観/u,
-  /食べ|飲み|料理|お菓子|果物|お茶|コーヒー/u,
-  /趣味|旅行|音楽|映画|本|写真/u,
-  /家族|友達|友人|人づきあい/u,
-  /心配|気になる|気がかり/u,
-] as const;
 const NON_SUBSTANTIVE_DECISION_PATTERNS = [
   "今日はここまで",
   "今日は会話を終",
@@ -141,7 +146,29 @@ const RESPONSE_JSON_SCHEMA = {
         properties: {
           importantStatements: {
             type: "array" as const,
-            items: { type: "string" as const },
+            items: {
+              type: "object" as const,
+              properties: {
+                text: { type: "string" as const },
+                category: {
+                  type: "string" as const,
+                  enum: [
+                    "hobbies",
+                    "values",
+                    "relationships",
+                    "memories",
+                    "concerns",
+                    "other",
+                  ],
+                },
+                importance: {
+                  type: "string" as const,
+                  enum: ["high", "medium", "low"],
+                },
+              },
+              required: ["text", "category", "importance"] as const,
+              additionalProperties: false,
+            },
           },
           decisions: {
             type: "array" as const,
@@ -243,7 +270,13 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
   "oneLinerSummary": "会話内容を一言で表す短い要約（20〜40文字）",
   "discussedCategories": ["この会話で実際に話題にしたカテゴリIDの配列"],
   "keyPoints": {
-    "importantStatements": ["ユーザーが語った重要な発言（0〜5個）"],
+    "importantStatements": [
+      {
+        "text": "ユーザーが語った、人物像の理解に役立つ発言",
+        "category": "hobbies | values | relationships | memories | concerns | other",
+        "importance": "high | medium | low"
+      }
+    ],
     "decisions": ["ユーザーが明確に決めたこと（0〜5個）"],
     "undecidedItems": ["まだ迷っている・決まっていないこと（0〜5個）"]
   },
@@ -270,9 +303,21 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 6. 必ず有効なJSONのみを返してください。説明文は不要です。
 7. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
 8. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
-9. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
-9.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。例: 好き嫌い、習慣、価値観、印象的な思い出、人間関係、気がかりだったこと。
-9.3. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
+9. keyPointsのdecisions, undecidedItemsは最大5個まで。importantStatementsは最大7個まで。該当がなければ空配列にしてください。
+9.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。「この人はどんな人だったのか」を家族が知る手がかりになるかを判断基準にしてください。
+9.3. 各importantStatementにはcategoryとimportanceを付与してください。
+  categoryの選び方：
+    - hobbies: 趣味・好み・好き嫌い・お気に入り・食の好み
+    - values: 価値観・大切にしていること・こだわり・信条・人生観
+    - relationships: 家族・友人・ペット・人間関係にまつわる話
+    - memories: 印象的な体験・若い頃の話・忘れられない思い出
+    - concerns: 心配事・気になっていること・不安
+    - other: 上記に当てはまらないが人物像の理解に役立つもの
+  importanceの判断基準：
+    - high: その人の人格や人生の核心に関わる内容（深い価値観、人生を変えた出来事、強い想い）
+    - medium: 顕著な特徴や好み（日常の習慣、はっきりした好き嫌い、大切にしている関係）
+    - low: 状況的・一時的な内容（その日の出来事、軽い感想、文脈なしでは意味が薄い発言）
+9.4. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
 9.5. keyPoints.decisions には、エンディングノートの内容として意味のある決定事項だけを入れてください。会話終了、また今度にする、次の画面へ進む、アプリ設定を変える、といった会話操作・画面操作・設定操作は含めないでください。
 10. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
@@ -283,6 +328,7 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 13. noteEntries.sourceEvidenceには、ユーザー発話から3〜40文字程度を原文のまま引用してください（要約・改変しない）。短い返答（「はい」「あります」など）の場合は1〜2文字でも可。
 14. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
 15. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+16. 質問リストの各項目には type が含まれます。type: "accumulative" の質問（思い出、大事な人、連絡先リストなど）は複数の回答が並立できます。この種の質問では、ユーザーが以前の回答と明らかに同一の項目について話していない限り、常に新しいnoteEntryとして追加してください。以前の回答を上書き・統合しないでください。
 
 【カテゴリ別の分析ガイド】
 - legal（相続・遺言）: 相続の希望、遺言書の有無や内容、遺産分割の意向、生前贈与の計画など、相続・遺言に関する具体的な希望や状況を重点的に抽出してください。
@@ -314,7 +360,13 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
   "oneLinerSummary": "会話内容を一言で表す短い要約（20〜40文字）",
   "discussedCategories": ["この会話で実際に話題にしたカテゴリIDの配列"],
   "keyPoints": {
-    "importantStatements": ["ユーザーが語った重要な発言（0〜5個）"],
+    "importantStatements": [
+      {
+        "text": "ユーザーが語った、人物像の理解に役立つ発言",
+        "category": "hobbies | values | relationships | memories | concerns | other",
+        "importance": "high | medium | low"
+      }
+    ],
     "decisions": ["ユーザーが明確に決めたこと（0〜5個）"],
     "undecidedItems": ["まだ迷っている・決まっていないこと（0〜5個）"]
   },
@@ -342,9 +394,21 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 7. 必ず有効なJSONのみを返してください。説明文は不要です。
 8. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
 9. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
-10. keyPointsの各配列は最大5個まで。該当がなければ空配列にしてください。
-10.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。例: 好き嫌い、習慣、価値観、印象的な思い出、人間関係、気がかりだったこと。
-10.3. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
+10. keyPointsのdecisions, undecidedItemsは最大5個まで。importantStatementsは最大7個まで。該当がなければ空配列にしてください。
+10.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。「この人はどんな人だったのか」を家族が知る手がかりになるかを判断基準にしてください。
+10.3. 各importantStatementにはcategoryとimportanceを付与してください。
+  categoryの選び方：
+    - hobbies: 趣味・好み・好き嫌い・お気に入り・食の好み
+    - values: 価値観・大切にしていること・こだわり・信条・人生観
+    - relationships: 家族・友人・ペット・人間関係にまつわる話
+    - memories: 印象的な体験・若い頃の話・忘れられない思い出
+    - concerns: 心配事・気になっていること・不安
+    - other: 上記に当てはまらないが人物像の理解に役立つもの
+  importanceの判断基準：
+    - high: その人の人格や人生の核心に関わる内容（深い価値観、人生を変えた出来事、強い想い）
+    - medium: 顕著な特徴や好み（日常の習慣、はっきりした好き嫌い、大切にしている関係）
+    - low: 状況的・一時的な内容（その日の出来事、軽い感想、文脈なしでは意味が薄い発言）
+10.4. keyPoints.importantStatements には、あいさつ、相づち、会話の進行、画面操作、アプリ設定、単なる短い返事を含めないでください。
 10.5. keyPoints.decisions には、エンディングノートの内容として意味のある決定事項だけを入れてください。会話終了、また今度にする、次の画面へ進む、アプリ設定を変える、といった会話操作・画面操作・設定操作は含めないでください。
 11. topicAdherenceの判断基準：
     - high: 会話のほぼ全体がエンディングノートに関連していた（自然な脱線含む）
@@ -355,6 +419,7 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 14. noteEntries.sourceEvidenceには、ユーザー発話から3〜40文字程度を原文のまま引用してください（要約・改変しない）。短い返答（「はい」「あります」など）の場合は1〜2文字でも可。
 15. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
 16. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+17. 質問リストの各項目には type が含まれます。type: "accumulative" の質問（思い出、大事な人、連絡先リストなど）は複数の回答が並立できます。この種の質問では、ユーザーが以前の回答と明らかに同一の項目について話していない限り、常に新しいnoteEntryとして追加してください。以前の回答を上書き・統合しないでください。
 
 【追加タスク - ユーザー名の検出】
 会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
@@ -410,13 +475,13 @@ export function filterSubstantiveDecisions(decisions: string[]): string[] {
 }
 
 export function filterMeaningfulImportantStatements(
-  statements: string[],
-): string[] {
-  const filtered: string[] = [];
+  statements: InsightStatement[],
+): InsightStatement[] {
+  const filtered: InsightStatement[] = [];
   const seen = new Set<string>();
 
   for (const statement of statements) {
-    const trimmed = statement.trim();
+    const trimmed = statement.text.trim();
     const normalized = normalizeForGrounding(trimmed);
     if (normalized.length < 3) continue;
 
@@ -426,142 +491,10 @@ export function filterMeaningfulImportantStatements(
     if (isNonSubstantive) continue;
     if (seen.has(normalized)) continue;
     seen.add(normalized);
-    filtered.push(trimmed);
+    filtered.push({ ...statement, text: trimmed });
   }
 
   return filtered;
-}
-
-function splitUserStatementCandidates(
-  transcript: Array<{ role: "user" | "assistant"; text: string }>,
-): string[] {
-  const candidates: string[] = [];
-
-  for (const entry of transcript) {
-    if (entry.role !== "user") {
-      continue;
-    }
-
-    const parts =
-      entry.text
-        .split(/\r?\n/)
-        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]);
-
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (trimmed !== "") {
-        candidates.push(trimmed);
-      }
-    }
-  }
-
-  return candidates;
-}
-
-function scoreImportantStatementCandidate(text: string): number {
-  let score = 0;
-
-  for (const pattern of IMPORTANT_STATEMENT_HINT_PATTERNS) {
-    if (pattern.test(text)) {
-      score += 2;
-    }
-  }
-
-  if (text.length >= 8) {
-    score += 1;
-  }
-  if (text.length >= 16) {
-    score += 1;
-  }
-  if (text.length > 80) {
-    score -= 1;
-  }
-
-  return score;
-}
-
-function overlapsGroundedNoteEntry(
-  statement: string,
-  noteEntries: NoteEntry[],
-): boolean {
-  const normalizedStatement = normalizeForGrounding(statement);
-  if (normalizedStatement.length === 0) {
-    return false;
-  }
-
-  for (const entry of noteEntries) {
-    const answer = normalizeForGrounding(entry.answer);
-    const evidence = normalizeForGrounding(entry.sourceEvidence);
-    const candidates = [answer, evidence];
-
-    for (const candidate of candidates) {
-      if (candidate.length < 3) {
-        continue;
-      }
-      if (candidate === normalizedStatement) {
-        return true;
-      }
-      if (
-        Math.min(candidate.length, normalizedStatement.length) >= 8 &&
-        (candidate.includes(normalizedStatement) ||
-          normalizedStatement.includes(candidate))
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-export function extractFallbackImportantStatements(
-  transcript: Array<{ role: "user" | "assistant"; text: string }>,
-  noteEntries: NoteEntry[],
-): string[] {
-  const candidates = splitUserStatementCandidates(transcript)
-    .map((text, index) => ({
-      text,
-      index,
-      score: scoreImportantStatementCandidate(text),
-    }))
-    .filter(({ text, score }) => {
-      const filtered = filterMeaningfulImportantStatements([text]);
-      if (filtered.length === 0) {
-        return false;
-      }
-      if (overlapsGroundedNoteEntry(text, noteEntries)) {
-        return false;
-      }
-      return score >= 2;
-    })
-    .sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-      return a.index - b.index;
-    })
-    .slice(0, 5)
-    .sort((a, b) => a.index - b.index)
-    .map(({ text }) => text);
-
-  if (candidates.length > 0) {
-    return candidates;
-  }
-
-  const longestUserTurn = transcript
-    .filter((entry) => entry.role === "user")
-    .map((entry) => entry.text.trim())
-    .filter((text) => filterMeaningfulImportantStatements([text]).length > 0)
-    .sort((a, b) => b.length - a.length)[0];
-
-  if (
-    longestUserTurn !== undefined &&
-    !overlapsGroundedNoteEntry(longestUserTurn, noteEntries)
-  ) {
-    return [longestUserTurn];
-  }
-
-  return [];
 }
 
 function filterGroundedNoteEntries(
@@ -645,10 +578,43 @@ function validateStringArray(value: unknown): value is string[] {
   return true;
 }
 
+const VALID_INSIGHT_CATEGORIES = new Set<string>([
+  "hobbies",
+  "values",
+  "relationships",
+  "memories",
+  "concerns",
+  "other",
+]);
+
+const VALID_INSIGHT_IMPORTANCES = new Set<string>(["high", "medium", "low"]);
+
+function validateInsightStatementArray(
+  value: unknown,
+): value is InsightStatement[] {
+  if (!Array.isArray(value)) return false;
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) return false;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj["text"] !== "string") return false;
+    if (
+      typeof obj["category"] !== "string" ||
+      !VALID_INSIGHT_CATEGORIES.has(obj["category"])
+    )
+      return false;
+    if (
+      typeof obj["importance"] !== "string" ||
+      !VALID_INSIGHT_IMPORTANCES.has(obj["importance"])
+    )
+      return false;
+  }
+  return true;
+}
+
 function validateKeyPoints(value: unknown): value is KeyPoints {
   if (typeof value !== "object" || value === null) return false;
   const kp = value as Record<string, unknown>;
-  if (!validateStringArray(kp["importantStatements"])) return false;
+  if (!validateInsightStatementArray(kp["importantStatements"])) return false;
   if (!validateStringArray(kp["decisions"])) return false;
   if (!validateStringArray(kp["undecidedItems"])) return false;
   return true;
@@ -821,16 +787,9 @@ export async function summarizeConversation(
   const coveredQuestionIds = parsed.coveredQuestionIds.filter((questionId) =>
     groundedQuestionIdSet.has(questionId),
   );
-  const filteredImportantStatements = filterMeaningfulImportantStatements(
+  const finalizedImportantStatements = filterMeaningfulImportantStatements(
     parsed.keyPoints.importantStatements,
   );
-  const finalizedImportantStatements =
-    filteredImportantStatements.length > 0
-      ? filteredImportantStatements
-      : extractFallbackImportantStatements(
-          userOnlyTranscript,
-          finalizedNoteEntries,
-        );
 
   const finalized: SummarizeResponse = {
     ...parsed,

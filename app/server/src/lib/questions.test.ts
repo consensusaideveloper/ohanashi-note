@@ -29,11 +29,12 @@ describe("getQuestionListForCategory", () => {
     }
   });
 
-  it("includes only id and title fields", () => {
+  it("includes id, title, and type fields", () => {
     const result = getQuestionListForCategory("house");
     const parsed = JSON.parse(result) as Array<Record<string, unknown>>;
     for (const item of parsed) {
-      expect(Object.keys(item)).toEqual(["id", "title"]);
+      expect(Object.keys(item)).toEqual(["id", "title", "type"]);
+      expect(["single", "accumulative"]).toContain(item.type);
     }
   });
 });

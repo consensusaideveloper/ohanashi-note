@@ -1,6 +1,8 @@
 // Pure formatting functions for data export (no DB/R2 dependencies).
 // Extracted so they can be unit-tested without DATABASE_URL.
 
+import { QUESTIONS } from "./questions.js";
+
 // --- Types ---
 
 interface TranscriptEntry {
@@ -15,8 +17,12 @@ interface NoteEntry {
   answer: string;
 }
 
+interface ImportantStatementItem {
+  text: string;
+}
+
 interface KeyPoints {
-  importantStatements: string[];
+  importantStatements: Array<string | ImportantStatementItem>;
   decisions: string[];
   undecidedItems: string[];
 }
@@ -114,12 +120,19 @@ export function parseNoteEntries(raw: unknown): NoteEntry[] {
   );
 }
 
+function getImportantStatementText(
+  item: string | ImportantStatementItem,
+): string {
+  if (typeof item === "string") return item;
+  return item.text;
+}
+
 function parseKeyPoints(raw: unknown): KeyPoints | null {
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
   return {
     importantStatements: Array.isArray(obj.importantStatements)
-      ? (obj.importantStatements as string[])
+      ? (obj.importantStatements as Array<string | ImportantStatementItem>)
       : [],
     decisions: Array.isArray(obj.decisions) ? (obj.decisions as string[]) : [],
     undecidedItems: Array.isArray(obj.undecidedItems)
@@ -160,7 +173,7 @@ export function buildConversationSummaryText(conv: ConversationRow): string {
     if (keyPoints.importantStatements.length > 0) {
       lines.push("■ 重要な発言");
       for (const s of keyPoints.importantStatements) {
-        lines.push(`  - ${s}`);
+        lines.push(`  - ${getImportantStatementText(s)}`);
       }
       lines.push("");
     }
@@ -196,11 +209,18 @@ export function buildConversationSummaryText(conv: ConversationRow): string {
   return lines.join("\n");
 }
 
+function isAccumulativeQuestion(questionId: string): boolean {
+  const q = QUESTIONS.find((item) => item.id === questionId);
+  return q?.questionType === "accumulative";
+}
+
 export function buildEndingNoteText(
   rows: ConversationRow[],
   userName: string,
 ): string {
-  const noteMap = new Map<string, Map<string, NoteEntry>>();
+  // For single questions: keep only the latest entry per questionId.
+  // For accumulative questions: collect all entries.
+  const noteMap = new Map<string, Map<string, NoteEntry[]>>();
 
   for (const row of rows) {
     const entries = parseNoteEntries(row.noteEntries);
@@ -214,8 +234,18 @@ export function buildEndingNoteText(
     }
 
     for (const entry of entries) {
-      if (!catMap.has(entry.questionId)) {
-        catMap.set(entry.questionId, entry);
+      const existing = catMap.get(entry.questionId);
+      if (isAccumulativeQuestion(entry.questionId)) {
+        if (existing !== undefined) {
+          existing.push(entry);
+        } else {
+          catMap.set(entry.questionId, [entry]);
+        }
+      } else {
+        // Rows are newest-first, so keep the first seen single entry.
+        if (existing === undefined) {
+          catMap.set(entry.questionId, [entry]);
+        }
       }
     }
   }
@@ -243,10 +273,20 @@ export function buildEndingNoteText(
     lines.push("-".repeat(40));
     lines.push("");
 
-    for (const entry of catEntries.values()) {
-      lines.push(`Q: ${entry.questionTitle}`);
-      lines.push(`A: ${entry.answer}`);
-      lines.push("");
+    for (const entryList of catEntries.values()) {
+      const firstEntry = entryList[0];
+      if (firstEntry === undefined) continue;
+      if (entryList.length === 1) {
+        lines.push(`Q: ${firstEntry.questionTitle}`);
+        lines.push(`A: ${firstEntry.answer}`);
+        lines.push("");
+      } else {
+        lines.push(`Q: ${firstEntry.questionTitle}（${entryList.length}件）`);
+        for (const entry of entryList) {
+          lines.push(`  - ${entry.answer}`);
+        }
+        lines.push("");
+      }
     }
   }
 

@@ -14,7 +14,9 @@ describe("buildSpeakingStylePrompt", () => {
     expect(prompt).toContain("固有名詞・日付・数字が出たら");
     expect(prompt).toContain("聞き取れないときは推測せず");
     expect(prompt).toContain("語尾は常に「です・ます」調");
-    expect(prompt).toContain("明るすぎるテンションや、説教・命令の言い方は避けてください");
+    expect(prompt).toContain(
+      "明るすぎるテンションや、説教・命令の言い方は避けてください",
+    );
   });
 
   it("reflects slow + long + frequent preferences", () => {
@@ -56,10 +58,16 @@ describe("buildSessionPrompt", () => {
     );
 
     expect(prompt).toContain("【会話の冒頭ルール】");
-    expect(prompt).toContain("最初の返答の1文目は、次の定型文から1つをそのまま使ってください");
-    expect(prompt).toContain("前回のお話の続きを、今日もゆっくり進めましょうね。");
+    expect(prompt).toContain(
+      "最初の返答の1文目は、次の定型文から1つをそのまま使ってください",
+    );
+    expect(prompt).toContain(
+      "前回のお話の続きを、今日もゆっくり進めましょうね。",
+    );
     expect(prompt).toContain("言い換え不可");
-    expect(prompt).toContain("前回の要点メモ: 前回は家族旅行の思い出を話した。");
+    expect(prompt).toContain(
+      "前回の要点メモ: 前回は家族旅行の思い出を話した。",
+    );
   });
 
   it("does not force opening bridge when no past summary exists", () => {

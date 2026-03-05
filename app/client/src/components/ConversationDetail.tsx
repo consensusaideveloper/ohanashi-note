@@ -326,7 +326,7 @@ export function ConversationDetail({
                       className="text-lg text-text-primary leading-relaxed flex gap-2"
                     >
                       <span className="text-accent-primary flex-none">●</span>
-                      <span>{item}</span>
+                      <span>{typeof item === "string" ? item : item.text}</span>
                     </li>
                   ))}
                 </ul>

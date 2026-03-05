@@ -106,11 +106,11 @@ describe("hasAssistantConversationClosingSignal", () => {
       ),
     ).toBe(true);
     expect(
-      hasAssistantConversationClosingSignal("それでは、また今度お話ししましょう。"),
+      hasAssistantConversationClosingSignal(
+        "それでは、また今度お話ししましょう。",
+      ),
     ).toBe(true);
-    expect(hasAssistantConversationClosingSignal("おやすみなさい")).toBe(
-      true,
-    );
+    expect(hasAssistantConversationClosingSignal("おやすみなさい")).toBe(true);
   });
 
   it("does not trigger for continuation prompts or questions", () => {
