@@ -184,7 +184,9 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
     const body = await c.req.json<Record<string, unknown>>();
     const id = body["id"];
     const startedAt = body["startedAt"];
-    const transcript = Array.isArray(body["transcript"]) ? body["transcript"] : [];
+    const transcript = Array.isArray(body["transcript"])
+      ? body["transcript"]
+      : [];
 
     if (typeof id !== "string" || typeof startedAt !== "number") {
       return c.json(
@@ -197,10 +199,13 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
     }
 
     if (!hasPersistableUserUtterance(transcript)) {
-      logger.info("Skipped conversation persistence due to empty user utterance", {
-        conversationId: id,
-        userId,
-      });
+      logger.info(
+        "Skipped conversation persistence due to empty user utterance",
+        {
+          conversationId: id,
+          userId,
+        },
+      );
       return c.json({
         success: true,
         skipped: true,

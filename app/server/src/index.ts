@@ -21,6 +21,7 @@ import { termsConsentRoute } from "./routes/terms-consent.js";
 import { todoRoute } from "./routes/todos.js";
 import { activityRoute } from "./routes/activity.js";
 import { realtimeRoute } from "./routes/realtime.js";
+import { dataExportRoute } from "./routes/data-export.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
 
@@ -56,6 +57,7 @@ app.use("/api/activity/*", authMiddleware);
 app.use("/api/terms-consent/*", authMiddleware);
 app.use("/api/terms-consent", authMiddleware);
 app.use("/api/realtime/*", authMiddleware);
+app.use("/api/data-export", authMiddleware);
 
 // --- Routes ---
 
@@ -76,6 +78,7 @@ app.route("/", todoRoute);
 app.route("/", activityRoute);
 app.route("/", termsConsentRoute);
 app.route("/", realtimeRoute);
+app.route("/", dataExportRoute);
 
 // In production, serve the client static files
 // Use absolute path to avoid CWD dependency on deployment platforms

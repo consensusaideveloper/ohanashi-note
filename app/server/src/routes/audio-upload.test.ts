@@ -45,7 +45,11 @@ beforeEach(async () => {
   db = (await import("../db/connection.js")).db;
   getFirebaseUid = (await import("../middleware/auth.js")).getFirebaseUid;
   resolveUserId = (await import("../lib/users.js")).resolveUserId;
-  r2 = (await import("../lib/r2.js")).r2!;
+  const importedR2 = (await import("../lib/r2.js")).r2;
+  if (importedR2 === null) {
+    throw new Error("R2 client mock is not available");
+  }
+  r2 = importedR2;
 
   vi.mocked(getFirebaseUid).mockReturnValue("firebase-uid");
   vi.mocked(resolveUserId).mockResolvedValue("user-1");

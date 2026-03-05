@@ -23,6 +23,7 @@ describe("validateRealtimeSessionConfig", () => {
       "change_font_size",
       "change_character",
       "update_user_name",
+      "update_assistant_name",
       "update_speaking_preferences",
       "start_focused_conversation",
       "create_family_invitation",
@@ -37,6 +38,7 @@ describe("validateRealtimeSessionConfig", () => {
       "change_font_size",
       "change_character",
       "update_user_name",
+      "update_assistant_name",
       "update_speaking_preferences",
       "end_conversation",
     ]);

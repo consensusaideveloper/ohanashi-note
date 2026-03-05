@@ -56,6 +56,7 @@ describe("profileRoute", () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValue({
       id: "user-1",
       name: "   ",
+      assistantName: "  ",
       characterId: "invalid-character",
       fontSize: "huge",
       speakingSpeed: "warp",
@@ -72,6 +73,7 @@ describe("profileRoute", () => {
     await expect(response.json()).resolves.toMatchObject({
       id: "user-1",
       name: "",
+      assistantName: null,
       characterId: null,
       fontSize: "standard",
       speakingSpeed: "normal",
@@ -94,5 +96,35 @@ describe("profileRoute", () => {
       code: "INVALID_NAME",
     });
     expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts assistantName updates on PUT", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      id: "user-1",
+      name: "太郎",
+      assistantName: "にこ",
+      characterId: "character-a",
+      fontSize: "standard",
+      speakingSpeed: "normal",
+      silenceDuration: "normal",
+      confirmationLevel: "normal",
+      updatedAt: new Date("2026-03-04T00:00:00.000Z"),
+    } as never);
+
+    const response = await profileRoute.fetch(
+      new Request("http://localhost/api/profile", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assistantName: " にこ " }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({ assistantName: "にこ" }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      assistantName: "にこ",
+    });
   });
 });

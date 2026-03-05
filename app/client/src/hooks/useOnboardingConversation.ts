@@ -62,6 +62,7 @@ import type {
 const END_CONVERSATION_FAREWELL_DELAY_MS = 6000;
 const END_CONVERSATION_FALLBACK_MS = 12000;
 const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
+const MAX_ASSISTANT_NAME_LENGTH = 40;
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
@@ -120,6 +121,10 @@ function normalizePreferenceToken(value: string): string {
     .toLowerCase()
     .replace(/[\s\u3000]+/g, "")
     .replace(/[「」『』"'`]/g, "");
+}
+
+function normalizeDisplayName(value: string): string {
+  return value.trim().replace(/[\s\u3000]+/g, " ");
 }
 
 function normalizeCharacterId(value: string): CharacterId | null {
@@ -397,6 +402,7 @@ export function useOnboardingConversation({
   const speakingPrefsRef = useRef<SpeakingPreferences>(
     DEFAULT_SPEAKING_PREFERENCES,
   );
+  const assistantNameRef = useRef<string | null>(null);
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
@@ -555,11 +561,7 @@ export function useOnboardingConversation({
       aiSpeakingFallbackTimerRef.current = null;
       finishAiSpeaking();
     }, AI_SPEAKING_END_FALLBACK_MS);
-  }, [
-    clearAiSpeakingFallbackTimer,
-    clearAiSpeakingTracking,
-    finishAiSpeaking,
-  ]);
+  }, [clearAiSpeakingFallbackTimer, clearAiSpeakingTracking, finishAiSpeaking]);
 
   const cleanupRealtimeSession = useCallback((): void => {
     resetEndConversationFlow();
@@ -567,6 +569,7 @@ export function useOnboardingConversation({
     aiSpeakingRef.current = false;
     resetMicGuard();
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
+    assistantNameRef.current = null;
     webrtc.disconnect();
 
     const key = sessionKeyRef.current;
@@ -581,7 +584,12 @@ export function useOnboardingConversation({
         );
       });
     }
-  }, [webrtc, resetEndConversationFlow, clearAiSpeakingTracking, resetMicGuard]);
+  }, [
+    webrtc,
+    resetEndConversationFlow,
+    clearAiSpeakingTracking,
+    resetMicGuard,
+  ]);
 
   useEffect(() => {
     cleanupRealtimeSessionRef.current = cleanupRealtimeSession;
@@ -701,7 +709,10 @@ export function useOnboardingConversation({
         type: "session.update",
         session: {
           type: "realtime",
-          instructions: buildOnboardingPrompt(preferences),
+          instructions: buildOnboardingPrompt(
+            preferences,
+            assistantNameRef.current,
+          ),
           audio: {
             input: {
               ...SESSION_AUDIO_INPUT_CONFIG,
@@ -785,6 +796,54 @@ export function useOnboardingConversation({
                 JSON.stringify({
                   success: true,
                   message: `お名前を「${trimmedName}」さんに設定しました`,
+                }),
+              );
+            })
+            .catch(() => {
+              sendResult(
+                JSON.stringify({ error: "操作中にエラーが発生しました" }),
+              );
+            });
+          return;
+        }
+
+        if (functionName === "update_assistant_name") {
+          const args = JSON.parse(argsJson) as {
+            name?: string;
+            assistant_name?: string;
+            assistantName?: string;
+          };
+          const rawName =
+            args.name ?? args.assistant_name ?? args.assistantName ?? "";
+          const normalizedName = normalizeDisplayName(rawName);
+          if (normalizedName === "") {
+            sendResult(
+              JSON.stringify({
+                error:
+                  "話し相手の名前が空欄です。もう一度ゆっくり教えてください。",
+              }),
+            );
+            return;
+          }
+          if (normalizedName.length > MAX_ASSISTANT_NAME_LENGTH) {
+            sendResult(
+              JSON.stringify({
+                error:
+                  "話し相手の名前は40文字以内でお願いします。短めの呼び名を教えてください。",
+              }),
+            );
+            return;
+          }
+          void enqueueProfileSave({
+            assistantName: normalizedName,
+          })
+            .then(() => {
+              assistantNameRef.current = normalizedName;
+              applySpeakingPreferencesToSession(speakingPrefsRef.current);
+              sendResult(
+                JSON.stringify({
+                  success: true,
+                  message: `話し相手の名前を「${normalizedName}」に設定しました`,
                 }),
               );
             })
@@ -1181,10 +1240,14 @@ export function useOnboardingConversation({
         return getUserProfile().then((profile) => {
           const preferences = getProfileSpeakingPreferences(profile);
           speakingPrefsRef.current = preferences;
+          assistantNameRef.current = profile?.assistantName ?? null;
 
           // Step 2: Build session config
           const character = getCharacterById("character-a");
-          const instructions = buildOnboardingPrompt(preferences);
+          const instructions = buildOnboardingPrompt(
+            preferences,
+            assistantNameRef.current,
+          );
 
           const sessionConfig = {
             instructions,
@@ -1254,6 +1317,7 @@ export function useOnboardingConversation({
     }
     sessionKeyRef.current = "";
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
+    assistantNameRef.current = null;
 
     // Wait briefly for any in-flight profile saves so completion screen
     // reflects the selected values reliably.

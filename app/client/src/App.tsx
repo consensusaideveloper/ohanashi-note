@@ -648,6 +648,7 @@ function AppContent(): ReactNode {
   setFontSizeRef.current = setFontSize;
   const updateSessionConfigRef = useRef(conversation.updateSessionConfig);
   updateSessionConfigRef.current = conversation.updateSessionConfig;
+  const MAX_ASSISTANT_NAME_LENGTH = 40;
 
   useEffect(() => {
     voiceActionRef.current = {
@@ -738,6 +739,36 @@ function AppContent(): ReactNode {
           return {
             success: false,
             message: "名前の変更に失敗しました",
+          };
+        }
+      },
+      updateAssistantName: async (name: string) => {
+        const normalized = name.trim().replace(/[\s\u3000]+/g, " ");
+        if (normalized === "") {
+          return {
+            success: false,
+            message: "話し相手の名前をもう一度教えてください",
+          };
+        }
+        if (normalized.length > MAX_ASSISTANT_NAME_LENGTH) {
+          return {
+            success: false,
+            message: "話し相手の名前は40文字以内でお願いします",
+          };
+        }
+        try {
+          await saveUserProfile({
+            assistantName: normalized,
+            updatedAt: Date.now(),
+          });
+          return {
+            success: true,
+            message: `話し相手の名前を「${normalized}」に変更しました`,
+          };
+        } catch {
+          return {
+            success: false,
+            message: "話し相手の名前の変更に失敗しました",
           };
         }
       },

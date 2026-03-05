@@ -17,6 +17,7 @@ export interface VoiceActionCallbacks {
   changeFontSize: (level: string) => VoiceActionResult;
   changeCharacter: (characterId: string) => Promise<VoiceActionResult>;
   updateUserName: (name: string) => Promise<VoiceActionResult>;
+  updateAssistantName: (name: string) => Promise<VoiceActionResult>;
   updateSpeakingPreferences: (params: {
     speakingSpeed?: string;
     silenceDuration?: string;

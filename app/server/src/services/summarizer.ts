@@ -445,8 +445,7 @@ function splitUserStatementCandidates(
     const parts =
       entry.text
         .split(/\r?\n/)
-        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]) ??
-      [];
+        .flatMap((line) => line.match(/[^。！？!?]+[。！？!?]?/gu) ?? [line]);
 
     for (const part of parts) {
       const trimmed = part.trim();

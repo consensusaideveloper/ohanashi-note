@@ -23,6 +23,7 @@ const VALID_TOOL_NAMES = new Set([
   "change_font_size",
   "change_character",
   "update_user_name",
+  "update_assistant_name",
   "update_speaking_preferences",
   "start_focused_conversation",
   "create_family_invitation",
@@ -31,6 +32,7 @@ const VALID_TOOL_NAMES = new Set([
 ]);
 const ONBOARDING_TOOL_NAMES = new Set([
   "update_user_name",
+  "update_assistant_name",
   "change_character",
   "change_font_size",
   "update_speaking_preferences",
@@ -156,6 +158,18 @@ const ALL_REALTIME_TOOLS: readonly ToolDefinition[] = [
     type: "function",
     name: "update_user_name",
     description: "ユーザーの表示名を変更します。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: "function",
+    name: "update_assistant_name",
+    description: "話し相手の呼び名を変更します。",
     parameters: {
       type: "object",
       properties: {

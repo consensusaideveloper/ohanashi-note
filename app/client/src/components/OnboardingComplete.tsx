@@ -56,6 +56,7 @@ export function OnboardingComplete({
   const [userName, setUserName] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterDescription, setCharacterDescription] = useState("");
+  const [assistantName, setAssistantName] = useState("");
   const [fontSizeLabel, setFontSizeLabel] = useState("");
   const [speakingSpeedLabel, setSpeakingSpeedLabel] = useState("");
   const [silenceDurationLabel, setSilenceDurationLabel] = useState("");
@@ -78,6 +79,7 @@ export function OnboardingComplete({
         const character = getCharacterById(charId);
         setCharacterName(character.name);
         setCharacterDescription(character.description);
+        setAssistantName(profile?.assistantName ?? character.name);
 
         const label =
           FONT_SIZE_LABELS[fontSize] ??
@@ -97,6 +99,7 @@ export function OnboardingComplete({
         const character = getCharacterById(DEFAULT_CHARACTER_ID);
         setCharacterName(character.name);
         setCharacterDescription(character.description);
+        setAssistantName(character.name);
         setFontSizeLabel(FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "");
         setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED]);
         setSilenceDurationLabel(
@@ -174,6 +177,16 @@ export function OnboardingComplete({
                 {characterDescription}
               </span>
             </div>
+          </div>
+
+          {/* Assistant display name */}
+          <div className="flex items-center gap-3">
+            <span className="text-base text-text-secondary flex-shrink-0">
+              {ONBOARDING_COMPLETE_MESSAGES.assistantNameLabel}
+            </span>
+            <span className="text-lg text-text-primary font-medium">
+              {assistantName}
+            </span>
           </div>
 
           {/* Font size */}

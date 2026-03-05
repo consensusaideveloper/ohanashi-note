@@ -148,6 +148,7 @@ export interface SpeakingPreferences {
 export interface UserProfile {
   id?: string;
   name: string;
+  assistantName?: string | null;
   characterId?: CharacterId | null;
   fontSize?: FontSizeLevel;
   speakingSpeed?: SpeakingSpeed;

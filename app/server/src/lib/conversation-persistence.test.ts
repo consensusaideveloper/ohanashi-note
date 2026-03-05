@@ -15,9 +15,9 @@ describe("hasPersistableUserUtterance", () => {
   });
 
   it("returns false when user text is blank", () => {
-    expect(
-      hasPersistableUserUtterance([{ role: "user", text: "   " }]),
-    ).toBe(false);
+    expect(hasPersistableUserUtterance([{ role: "user", text: "   " }])).toBe(
+      false,
+    );
   });
 
   it("returns true when at least one non-empty user utterance exists", () => {

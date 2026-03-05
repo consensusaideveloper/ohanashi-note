@@ -126,6 +126,7 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
           where: eq(users.id, userId),
           columns: {
             name: true,
+            assistantName: true,
             characterId: true,
             fontSize: true,
             speakingSpeed: true,

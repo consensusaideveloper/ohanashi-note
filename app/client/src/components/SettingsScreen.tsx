@@ -7,6 +7,7 @@ import {
   clearAllData,
   deleteAccount,
 } from "../lib/storage";
+import { downloadDataExport } from "../lib/api";
 import { CHARACTERS } from "../lib/characters";
 import {
   FONT_SIZE_OPTIONS,
@@ -43,6 +44,42 @@ interface SettingsScreenProps {
   lifecycleStatus: string;
 }
 
+function normalizeDisplayNameInput(value: string): string {
+  return value.trim().replace(/[\s\u3000]+/g, " ");
+}
+
+function CharacterMiniAvatar({
+  accentClass,
+}: {
+  accentClass: string;
+}): ReactNode {
+  const bgClass =
+    accentClass === "accent-secondary"
+      ? "from-accent-secondary-light to-accent-secondary/70"
+      : accentClass === "accent-tertiary"
+        ? "from-accent-tertiary-light to-accent-tertiary/70"
+        : "from-accent-primary-light to-accent-primary/70";
+
+  return (
+    <div
+      className={`relative w-10 h-10 rounded-full bg-gradient-to-br ${bgClass} shrink-0`}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <ellipse cx="38" cy="42" rx="6" ry="6.5" fill="white" />
+        <ellipse cx="62" cy="42" rx="6" ry="6.5" fill="white" />
+        <path
+          d="M 35 65 Q 50 71, 65 65"
+          fill="none"
+          stroke="white"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export function SettingsScreen({
   lifecycleStatus,
 }: SettingsScreenProps): ReactNode {
@@ -50,6 +87,7 @@ export function SettingsScreen({
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
     useToast();
   const [name, setName] = useState("");
+  const [assistantName, setAssistantName] = useState("");
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("character-a");
   const [speakingSpeed, setSpeakingSpeed] = useState<SpeakingSpeed>("normal");
@@ -59,9 +97,11 @@ export function SettingsScreen({
     useState<ConfirmationLevel>("normal");
   const [deleteMessage, setDeleteMessage] = useState("");
   const [showPrintView, setShowPrintView] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Track saved values for dirty-state detection
   const [savedName, setSavedName] = useState("");
+  const [savedAssistantName, setSavedAssistantName] = useState("");
   const [savedCharacterId, setSavedCharacterId] =
     useState<CharacterId>("character-a");
   const [savedSpeakingSpeed, setSavedSpeakingSpeed] =
@@ -74,6 +114,7 @@ export function SettingsScreen({
   const hasUnsavedChanges = useMemo(
     (): boolean =>
       name !== savedName ||
+      assistantName !== savedAssistantName ||
       selectedCharacterId !== savedCharacterId ||
       speakingSpeed !== savedSpeakingSpeed ||
       silenceDuration !== savedSilenceDuration ||
@@ -81,6 +122,8 @@ export function SettingsScreen({
     [
       name,
       savedName,
+      assistantName,
+      savedAssistantName,
       selectedCharacterId,
       savedCharacterId,
       speakingSpeed,
@@ -95,6 +138,17 @@ export function SettingsScreen({
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [hasUnsavedChanges]);
+
+  const selectedSpeakingSpeedDescription =
+    SPEAKING_SPEED_OPTIONS.find((option) => option.value === speakingSpeed)
+      ?.description ?? "";
+  const selectedSilenceDurationDescription =
+    SILENCE_DURATION_OPTIONS.find((option) => option.value === silenceDuration)
+      ?.description ?? "";
+  const selectedConfirmationLevelDescription =
+    CONFIRMATION_LEVEL_OPTIONS.find(
+      (option) => option.value === confirmationLevel,
+    )?.description ?? "";
 
   // Dialog state
   const { fontSize, setFontSize } = useFontSize();
@@ -111,6 +165,14 @@ export function SettingsScreen({
         setSavedName(profile.name);
         if (overwriteDraft) {
           setName(profile.name);
+        }
+      }
+
+      if ("assistantName" in profile) {
+        const normalizedAssistantName = profile.assistantName ?? "";
+        setSavedAssistantName(normalizedAssistantName);
+        if (overwriteDraft) {
+          setAssistantName(normalizedAssistantName);
         }
       }
 
@@ -180,8 +242,10 @@ export function SettingsScreen({
   }, [applyProfileUpdate]);
 
   const handleSaveSettings = useCallback((): void => {
+    const normalizedAssistantName = normalizeDisplayNameInput(assistantName);
     void saveUserProfile({
       name,
+      assistantName: normalizedAssistantName,
       characterId: selectedCharacterId,
       speakingSpeed,
       silenceDuration,
@@ -190,6 +254,8 @@ export function SettingsScreen({
     })
       .then(() => {
         setSavedName(name);
+        setSavedAssistantName(normalizedAssistantName);
+        setAssistantName(normalizedAssistantName);
         setSavedCharacterId(selectedCharacterId);
         setSavedSpeakingSpeed(speakingSpeed);
         setSavedSilenceDuration(silenceDuration);
@@ -200,6 +266,7 @@ export function SettingsScreen({
         console.error("Failed to save settings:", {
           error,
           name,
+          assistantName: normalizedAssistantName,
           characterId: selectedCharacterId,
           speakingSpeed,
           silenceDuration,
@@ -209,6 +276,7 @@ export function SettingsScreen({
       });
   }, [
     name,
+    assistantName,
     selectedCharacterId,
     speakingSpeed,
     silenceDuration,
@@ -240,6 +308,31 @@ export function SettingsScreen({
     setShowPrintView(false);
   }, []);
 
+  const handleExportData = useCallback((): void => {
+    setIsExporting(true);
+    void downloadDataExport()
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const date = new Date().toISOString().slice(0, 10);
+        const filename = `エンディングノート_${date}.zip`;
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+        showToast(SETTINGS_MESSAGES.dataExport.exportSuccess, "success");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to export data:", { error });
+        showToast(SETTINGS_MESSAGES.dataExport.exportFailed, "error");
+      })
+      .finally(() => {
+        setIsExporting(false);
+      });
+  }, [showToast]);
+
   const handleClearAll = useCallback((): void => {
     setShowDeleteConfirm(true);
   }, []);
@@ -250,6 +343,7 @@ export function SettingsScreen({
       .then(() => {
         setDeleteMessage("すべての記録を消しました");
         setName("");
+        setAssistantName("");
       })
       .catch((error: unknown) => {
         console.error("Failed to clear all data:", { error });
@@ -306,6 +400,13 @@ export function SettingsScreen({
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>): void => {
       setName(e.target.value);
+    },
+    [],
+  );
+
+  const handleAssistantNameChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>): void => {
+      setAssistantName(e.target.value);
     },
     [],
   );
@@ -453,6 +554,9 @@ export function SettingsScreen({
               );
             })}
           </div>
+          <p className="text-base text-text-secondary px-1">
+            {selectedSpeakingSpeedDescription}
+          </p>
 
           {/* Silence duration */}
           <p className="text-lg text-text-primary mt-4">
@@ -484,6 +588,9 @@ export function SettingsScreen({
               );
             })}
           </div>
+          <p className="text-base text-text-secondary px-1">
+            {selectedSilenceDurationDescription}
+          </p>
 
           {/* Confirmation level */}
           <p className="text-lg text-text-primary mt-4">
@@ -515,6 +622,9 @@ export function SettingsScreen({
               );
             })}
           </div>
+          <p className="text-base text-text-secondary px-1">
+            {selectedConfirmationLevelDescription}
+          </p>
         </section>
 
         {/* Section 3: Profile */}
@@ -536,6 +646,23 @@ export function SettingsScreen({
             value={name}
             onChange={handleNameChange}
           />
+          <label
+            className="block text-lg text-text-primary mt-4"
+            htmlFor="assistantName"
+          >
+            話し相手の名前（呼び名）
+          </label>
+          <input
+            id="assistantName"
+            type="text"
+            className="w-full rounded-card border border-border-light bg-bg-surface px-4 py-3 text-lg text-text-primary focus:outline-none focus:border-accent-primary"
+            placeholder="例：さくら"
+            value={assistantName}
+            onChange={handleAssistantNameChange}
+          />
+          <p className="text-base text-text-secondary">
+            会話の最初に話し相手が一度だけ名乗る名前です
+          </p>
           <p className="text-lg text-text-primary mt-4">話し相手</p>
           <div className="space-y-2">
             {CHARACTERS.map((char) => (
@@ -550,12 +677,17 @@ export function SettingsScreen({
                 }`}
                 onClick={handleCharacterClick}
               >
-                <p className="text-lg font-medium text-text-primary">
-                  {char.name}
-                </p>
-                <p className="text-lg text-text-secondary">
-                  {char.description}
-                </p>
+                <div className="flex items-center gap-3">
+                  <CharacterMiniAvatar accentClass={char.accentColorClass} />
+                  <div>
+                    <p className="text-lg font-medium text-text-primary">
+                      {char.name}
+                    </p>
+                    <p className="text-lg text-text-secondary">
+                      {char.description}
+                    </p>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
@@ -679,7 +811,67 @@ export function SettingsScreen({
           </button>
         </section>
 
-        {/* Section 6: Data Deletion (critical, irreversible — collapsed) */}
+        {/* Section 6: Data Export */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-text-secondary">
+            {SETTINGS_MESSAGES.dataExport.sectionTitle}
+          </h2>
+          <p className="text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.dataExport.sectionDescription}
+          </p>
+          <button
+            type="button"
+            className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg w-full flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={handleExportData}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <>
+                <svg
+                  className="h-5 w-5 animate-spin"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                {SETTINGS_MESSAGES.dataExport.exporting}
+              </>
+            ) : (
+              <>
+                <svg
+                  className="h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+                  />
+                </svg>
+                {SETTINGS_MESSAGES.dataExport.buttonLabel}
+              </>
+            )}
+          </button>
+        </section>
+
+        {/* Section 7: Data Deletion (critical, irreversible — collapsed) */}
         <details className="group">
           <summary className="text-lg font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-2 min-h-11">
             {/* Warning triangle icon */}

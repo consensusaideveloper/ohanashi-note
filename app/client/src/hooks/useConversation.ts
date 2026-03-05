@@ -306,6 +306,15 @@ function dispatchVoiceAction(
       const args = JSON.parse(argsJson) as { name: string };
       return callbacks.updateUserName(args.name);
     }
+    case "update_assistant_name": {
+      const args = JSON.parse(argsJson) as {
+        name?: string;
+        assistant_name?: string;
+      };
+      return callbacks.updateAssistantName(
+        args.name ?? args.assistant_name ?? "",
+      );
+    }
     case "update_speaking_preferences": {
       const args = JSON.parse(argsJson) as {
         speaking_speed?: string;
@@ -439,6 +448,7 @@ export function useConversation(): UseConversationReturn {
 
   // User name (loaded on start, used in session config)
   const userNameRef = useRef<string | null>(null);
+  const assistantNameRef = useRef<string | null>(null);
 
   // All conversation records (loaded on start, used for function call search)
   const allRecordsRef = useRef<ConversationRecord[]>([]);
@@ -825,11 +835,7 @@ export function useConversation(): UseConversationReturn {
       aiSpeakingFallbackTimerRef.current = null;
       finishAiSpeaking();
     }, AI_SPEAKING_END_FALLBACK_MS);
-  }, [
-    clearAiSpeakingFallbackTimer,
-    clearAiSpeakingTracking,
-    finishAiSpeaking,
-  ]);
+  }, [clearAiSpeakingFallbackTimer, clearAiSpeakingTracking, finishAiSpeaking]);
 
   const cleanupRealtimeSession = useCallback((): void => {
     clearSessionTimer();
@@ -888,6 +894,7 @@ export function useConversation(): UseConversationReturn {
 
       const familyContext = familyContextRef.current ?? undefined;
       const userName = userNameRef.current ?? undefined;
+      const assistantName = assistantNameRef.current ?? undefined;
       const category = categoryRef.current;
 
       if (category !== null) {
@@ -896,6 +903,7 @@ export function useConversation(): UseConversationReturn {
           category,
           pastContextRef.current ?? undefined,
           userName,
+          assistantName,
           preferences,
           familyContext,
         );
@@ -908,6 +916,7 @@ export function useConversation(): UseConversationReturn {
           recentSummaries: [],
         },
         userName,
+        assistantName,
         preferences,
         familyContext,
       );
@@ -1387,6 +1396,7 @@ export function useConversation(): UseConversationReturn {
               }
 
               userNameRef.current = profile?.name ?? null;
+              assistantNameRef.current = profile?.assistantName ?? null;
 
               // Load speaking preferences from profile
               const profileSpeed = profile?.speakingSpeed;
@@ -1449,6 +1459,7 @@ export function useConversation(): UseConversationReturn {
                   category,
                   pastContextRef.current ?? undefined,
                   userNameRef.current ?? undefined,
+                  assistantNameRef.current ?? undefined,
                   prefs,
                   familyCtx,
                 );
@@ -1460,6 +1471,7 @@ export function useConversation(): UseConversationReturn {
                     recentSummaries: [],
                   },
                   userNameRef.current ?? undefined,
+                  assistantNameRef.current ?? undefined,
                   prefs,
                   familyCtx,
                 );
@@ -1545,7 +1557,7 @@ export function useConversation(): UseConversationReturn {
     const shouldPersistConversation =
       convId !== null && hasPersistableUserUtterance(currentTranscript);
 
-    if (shouldPersistConversation && convId !== null) {
+    if (shouldPersistConversation) {
       const firstEntry = currentTranscript[0];
       const record = {
         id: convId,
@@ -1699,6 +1711,7 @@ export function useConversation(): UseConversationReturn {
     pastContextRef.current = null;
     guidedContextRef.current = null;
     userNameRef.current = null;
+    assistantNameRef.current = null;
     allRecordsRef.current = [];
     familyContextRef.current = null;
     sessionKeyRef.current = "";

@@ -78,6 +78,13 @@
       "when": 1772372679239,
       "tag": "0010_big_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772690429000,
+      "tag": "0011_quick_karma",
+      "breakpoints": true
     }
   ]
 }

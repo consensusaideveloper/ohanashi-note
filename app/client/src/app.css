@@ -64,6 +64,7 @@
   --animate-breathe: breathe 4s ease-in-out infinite;
   --animate-ripple: ripple 2s ease-out infinite;
   --animate-flow: flow 3s ease-in-out infinite;
+  --animate-nod: nod 2.8s ease-in-out infinite;
   --animate-fade-in: fadeIn 300ms ease-in-out;
   --animate-slide-up: slideUp 300ms ease-out;
   --animate-blink: blink 5s ease-in-out infinite;
@@ -130,13 +131,32 @@
 @keyframes flow {
   0%,
   100% {
-    transform: scale(1) rotate(0deg);
+    transform: scale(1);
   }
   33% {
-    transform: scale(1.05) rotate(2deg);
+    transform: scale(1.02);
   }
   66% {
-    transform: scale(0.97) rotate(-2deg);
+    transform: scale(0.99);
+  }
+}
+
+@keyframes nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  28% {
+    transform: translateY(0.6px) rotate(0.3deg);
+  }
+  40% {
+    transform: translateY(1.4px) rotate(0.8deg);
+  }
+  56% {
+    transform: translateY(0.4px) rotate(0.2deg);
+  }
+  70% {
+    transform: translateY(0.9px) rotate(0.5deg);
   }
 }
 

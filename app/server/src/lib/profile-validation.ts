@@ -13,9 +13,11 @@ const DEFAULT_SPEAKING_SPEED = "normal";
 const DEFAULT_SILENCE_DURATION = "normal";
 const DEFAULT_CONFIRMATION_LEVEL = "normal";
 const MAX_NAME_LENGTH = 80;
+const MAX_ASSISTANT_NAME_LENGTH = 40;
 
 export interface ProfileRecordLike {
   name: string;
+  assistantName: string | null | undefined;
   characterId: string | null;
   fontSize: string;
   speakingSpeed: string;
@@ -25,6 +27,7 @@ export interface ProfileRecordLike {
 
 export interface NormalizedProfile {
   name: string;
+  assistantName: string | null;
   characterId: string | null;
   fontSize: string;
   speakingSpeed: string;
@@ -42,6 +45,7 @@ export function normalizeStoredProfile(
 ): NormalizedProfile {
   return {
     name: normalizeStoredName(profile.name),
+    assistantName: normalizeStoredAssistantName(profile.assistantName),
     characterId: normalizeCharacterId(profile.characterId),
     fontSize: normalizeFontSize(profile.fontSize),
     speakingSpeed: normalizeSpeakingSpeed(profile.speakingSpeed),
@@ -65,6 +69,19 @@ export function validateProfileUpdateValue(
         };
       }
       return validateName(value);
+    case "assistantName":
+      if (value === null) {
+        return { normalized: null };
+      }
+      if (typeof value !== "string") {
+        return {
+          error: {
+            code: "INVALID_ASSISTANT_NAME",
+            message: "assistantName は文字列で指定してください",
+          },
+        };
+      }
+      return validateAssistantName(value);
     case "characterId":
       if (value === null) {
         return { normalized: null };
@@ -155,8 +172,39 @@ function normalizeStoredName(value: string): string {
   return normalizeWhitespace(value).slice(0, MAX_NAME_LENGTH);
 }
 
+function validateAssistantName(
+  value: string,
+): { normalized: string | null } | { error: ProfileValidationError } {
+  const normalized = normalizeWhitespace(value);
+  if (normalized.length === 0) {
+    return { normalized: null };
+  }
+  if (normalized.length > MAX_ASSISTANT_NAME_LENGTH) {
+    return {
+      error: {
+        code: "INVALID_ASSISTANT_NAME",
+        message: `assistantName は${String(MAX_ASSISTANT_NAME_LENGTH)}文字以内で指定してください`,
+      },
+    };
+  }
+  return { normalized };
+}
+
+function normalizeStoredAssistantName(
+  value: string | null | undefined,
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = normalizeWhitespace(value).slice(
+    0,
+    MAX_ASSISTANT_NAME_LENGTH,
+  );
+  return normalized === "" ? null : normalized;
+}
+
 function normalizeWhitespace(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return value.trim().replace(/[\s\u3000]+/g, " ");
 }
 
 function normalizeCharacterId(value: string | null): string | null {

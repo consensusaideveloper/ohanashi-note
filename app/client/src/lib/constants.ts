@@ -241,6 +241,22 @@ export const REALTIME_TOOLS = [
   },
   {
     type: "function" as const,
+    name: "update_assistant_name",
+    description:
+      "話し相手（AI）の呼び名を変更します。ユーザーが「あなたの名前を〇〇にして」「〇〇さんと呼ばれてほしい」と言った場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "話し相手の新しい呼び名",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: "function" as const,
     name: "update_speaking_preferences",
     description:
       "話し相手の話し方の設定を変更します。ユーザーが「もっとゆっくり話して」「もう少し速く」「ちゃんと確認して」「待ち時間を長くして」などと言った場合に使用してください。",
@@ -409,9 +425,17 @@ export const SPEAKING_SPEED_OPTIONS: readonly {
   readonly label: string;
   readonly description: string;
 }[] = [
-  { value: "slow", label: "ゆっくり", description: "短い文で、一つずつ丁寧に" },
-  { value: "normal", label: "ふつう", description: "自然な速さで" },
-  { value: "fast", label: "すこし速め", description: "テキパキと" },
+  {
+    value: "slow",
+    label: "ゆっくり",
+    description: "短い文で、一つずつゆっくり確認しながら",
+  },
+  {
+    value: "normal",
+    label: "ふつう",
+    description: "聞き取りやすい自然な速さで",
+  },
+  { value: "fast", label: "すこし速め", description: "テンポよく、要点を短く" },
 ] as const;
 
 /** Silence duration options for settings UI. */
@@ -420,9 +444,9 @@ export const SILENCE_DURATION_OPTIONS: readonly {
   readonly label: string;
   readonly description: string;
 }[] = [
-  { value: "short", label: "短め", description: "すぐに次を話す" },
-  { value: "normal", label: "ふつう", description: "少し待ってから" },
-  { value: "long", label: "長め", description: "ゆっくり考えてから話せる" },
+  { value: "short", label: "短め", description: "間を短くして会話を進める" },
+  { value: "normal", label: "ふつう", description: "自然な間で会話する" },
+  { value: "long", label: "長め", description: "思い出す時間を長めにとる" },
 ] as const;
 
 /** Confirmation level options for settings UI. */
@@ -434,13 +458,13 @@ export const CONFIRMATION_LEVEL_OPTIONS: readonly {
   {
     value: "frequent",
     label: "こまめに確認",
-    description: "大事なことを繰り返す",
+    description: "要点を復唱して、安心しながら進める",
   },
-  { value: "normal", label: "ふつう", description: "ときどき確認する" },
+  { value: "normal", label: "ふつう", description: "必要なところで確認する" },
   {
     value: "minimal",
     label: "あまり確認しない",
-    description: "どんどん進める",
+    description: "確認は少なめ（大事な点は復唱）",
   },
 ] as const;
 
@@ -895,6 +919,7 @@ export const ONBOARDING_MESSAGES = {
 /** Tool names used during the onboarding conversation. */
 const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
   "update_user_name",
+  "update_assistant_name",
   "change_character",
   "change_font_size",
   "update_speaking_preferences",
@@ -917,6 +942,7 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   title: "準備ができました！",
   nameLabel: "お名前",
   characterLabel: "話し相手",
+  assistantNameLabel: "話し相手の名前",
   fontSizeLabel: "文字の大きさ",
   speakingSpeedLabel: "話す速さ",
   silenceDurationLabel: "待ち時間",
@@ -931,11 +957,12 @@ export const SETTINGS_MESSAGES = {
   saved: "設定を保存しました",
   unsavedChanges: "変更がまだ保存されていません",
   profile: {
-    description: "お名前と話し相手を設定します。",
+    description: "お名前・話し相手・呼び名を設定します。",
   },
   speakingPreferences: {
     title: "話し相手の話し方",
-    description: "話し相手の話し方を調整できます",
+    description:
+      "話す速さ・待ち時間・確認のしかたを、聞きやすい形に調整できます",
     speedLabel: "話す速さ",
     silenceLabel: "待ち時間",
     confirmationLabel: "確認の頻度",
@@ -961,6 +988,15 @@ export const SETTINGS_MESSAGES = {
   },
   conversationPrint: {
     title: "会話の記録",
+  },
+  dataExport: {
+    sectionTitle: "データの一括ダウンロード",
+    sectionDescription:
+      "会話の記録、ノート、録音をまとめてダウンロードします。パソコンやUSBメモリに保存しておくと安心です。",
+    buttonLabel: "すべてのデータをダウンロード",
+    exporting: "データを準備しています...",
+    exportSuccess: "ダウンロードが始まりました",
+    exportFailed: "ダウンロードに失敗しました。もう一度お試しください。",
   },
   deletion: {
     description:

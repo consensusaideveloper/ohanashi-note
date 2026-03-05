@@ -8,11 +8,22 @@ const SPRING_STIFFNESS = 0.15;
 const SPRING_DAMPING = 0.75;
 const AUDIO_SMOOTHING = 0.3;
 const REMOTE_AUDIO_GATE = 0.006;
-const REMOTE_AUDIO_NORMALIZE_RANGE = 0.03;
+const REMOTE_AUDIO_NORMALIZE_RANGE = 0.04;
 const MOUTH_ACTIVE_HOLD_MS = 220;
-const MOUTH_IDLE_OPENNESS = 0.15;
-const MOUTH_IDLE_PULSE_STRENGTH = 0.06;
+const MOUTH_REST_OPENNESS = 0.04;
+const MOUTH_SPEAKING_FLOOR_OPENNESS = 0.38;
+const MOUTH_IDLE_PULSE_STRENGTH = 0.025;
 const MOUTH_IDLE_PULSE_SPEED = 0.006;
+const MOUTH_IDLE_CORNER_LIFT = -0.2;
+const MOUTH_SPEAKING_CORNER_LIFT = -0.05;
+const MOUTH_CENTER_X = 50;
+const MOUTH_CENTER_Y = 65;
+const MOUTH_BASE_HALF_WIDTH = 10.8;
+const MOUTH_WIDTH_RANGE = 2.8;
+const MOUTH_UPPER_CURVE_BASE = 1.15;
+const MOUTH_UPPER_CURVE_RANGE = 0.7;
+const MOUTH_LOWER_CURVE_BASE = 0.7;
+const MOUTH_LOWER_CURVE_RANGE = 6.5;
 
 /** SVG face layout constants (viewBox 0 0 100 100). */
 const EYE_LEFT_CX = 38;
@@ -21,14 +32,22 @@ const EYE_CY = 42;
 const EYE_RX = 6;
 const EYE_RY_NORMAL = 7;
 const EYE_RY_ERROR = 8;
+const CHEEK_LEFT_CX = 32;
+const CHEEK_RIGHT_CX = 68;
+const CHEEK_CY = 55;
+const CHEEK_RX = 7;
+const CHEEK_RY = 4.6;
+const NOSE_CX = 50;
+const NOSE_CY = 52;
+const NOSE_R = 1.4;
 
-const MOUTH_X_START = 35;
-const MOUTH_X_END = 65;
-const MOUTH_Y_BASE = 65;
-const MOUTH_CONTROL_X = 50;
-const MOUTH_SMILE_CY = 70;
-const MOUTH_OPEN_CY = 80;
 const MOUTH_FROWN_CY = 60;
+
+/** Eye animation constants for natural expressions. */
+const EYE_SPEAKING_SQUINT_MIN = 0.82;
+const EYE_SPEAKING_SQUINT_MAX = 0.94;
+const EYE_SPEAKING_OSCILLATION_SPEED = 0.002;
+const EYE_LISTENING_WIDEN = 1.05;
 
 interface SpringState {
   current: number;
@@ -48,14 +67,38 @@ interface AiFaceProps {
   characterId?: CharacterId | null;
 }
 
-function buildMouthPath(controlY: number): string {
-  return `M ${MOUTH_X_START} ${MOUTH_Y_BASE} Q ${MOUTH_CONTROL_X} ${controlY}, ${MOUTH_X_END} ${MOUTH_Y_BASE}`;
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getMouthHalfWidth(openness: number): number {
+  return MOUTH_BASE_HALF_WIDTH + clamp01(openness) * MOUTH_WIDTH_RANGE;
+}
+
+function buildClosedMouthPath(openness: number, cornerLift: number): string {
+  const halfWidth = getMouthHalfWidth(openness);
+  const leftX = MOUTH_CENTER_X - halfWidth;
+  const rightX = MOUTH_CENTER_X + halfWidth;
+  const cornerY = MOUTH_CENTER_Y + cornerLift;
+  const open = clamp01(openness);
+  const upperControlY =
+    cornerY - (MOUTH_UPPER_CURVE_BASE + open * MOUTH_UPPER_CURVE_RANGE);
+  const lowerControlY =
+    cornerY + (MOUTH_LOWER_CURVE_BASE + open * MOUTH_LOWER_CURVE_RANGE);
+  return `M ${leftX} ${cornerY} Q ${MOUTH_CENTER_X} ${upperControlY}, ${rightX} ${cornerY} Q ${MOUTH_CENTER_X} ${lowerControlY}, ${leftX} ${cornerY} Z`;
+}
+
+function buildFrownClosedPath(): string {
+  const leftX = MOUTH_CENTER_X - MOUTH_BASE_HALF_WIDTH;
+  const rightX = MOUTH_CENTER_X + MOUTH_BASE_HALF_WIDTH;
+  const upperControlY = MOUTH_CENTER_Y - 0.5;
+  return `M ${leftX} ${MOUTH_CENTER_Y} Q ${MOUTH_CENTER_X} ${upperControlY}, ${rightX} ${MOUTH_CENTER_Y} Q ${MOUTH_CENTER_X} ${MOUTH_FROWN_CY}, ${leftX} ${MOUTH_CENTER_Y} Z`;
 }
 
 function normalizeRemoteAudioLevel(level: number): number {
   const normalized = (level - REMOTE_AUDIO_GATE) / REMOTE_AUDIO_NORMALIZE_RANGE;
   const clamped = Math.max(0, Math.min(1, normalized));
-  return Math.pow(clamped, 0.7);
+  return Math.pow(clamped, 0.82);
 }
 
 function MicrophoneIcon(): ReactNode {
@@ -181,7 +224,7 @@ function getFaceExtraClasses(state: ConversationState): string {
     case "connecting":
       return "opacity-70";
     case "ai-speaking":
-      return "animate-flow";
+      return "animate-nod";
     default:
       return "";
   }
@@ -250,14 +293,14 @@ export function AiFace({
   characterId,
 }: AiFaceProps): ReactNode {
   const mouthRef = useRef<SVGPathElement>(null);
+  const leftEyeRef = useRef<SVGEllipseElement>(null);
+  const rightEyeRef = useRef<SVGEllipseElement>(null);
   const animationRef = useRef<number>(0);
   const springRef = useRef<SpringState>({
-    current: MOUTH_SMILE_CY,
+    current: MOUTH_REST_OPENNESS,
     velocity: 0,
-    smoothedLevel: 0,
+    smoothedLevel: MOUTH_REST_OPENNESS,
   });
-  const audioLevelRef = useRef(audioLevel);
-  audioLevelRef.current = audioLevel;
   const stateRef = useRef(state);
   stateRef.current = state;
   const remoteAudioLevelRef = useRef(remoteAudioLevel);
@@ -282,9 +325,10 @@ export function AiFace({
       const shouldAnimateSpeaking =
         currentState === "ai-speaking" || now < speakingHoldUntilRef.current;
 
-      let targetY: number;
+      let targetOpenness: number;
+      let cornerLift = MOUTH_IDLE_CORNER_LIFT;
       if (currentState === "error") {
-        targetY = MOUTH_FROWN_CY;
+        targetOpenness = 0;
         spring.smoothedLevel = 0;
       } else if (shouldAnimateSpeaking) {
         const pulse = prefersReduced
@@ -293,31 +337,61 @@ export function AiFace({
             MOUTH_IDLE_PULSE_STRENGTH;
         const expressiveLevel = Math.max(
           normalizedLevel,
-          MOUTH_IDLE_OPENNESS + pulse,
+          MOUTH_SPEAKING_FLOOR_OPENNESS + pulse,
         );
         spring.smoothedLevel +=
           (expressiveLevel - spring.smoothedLevel) * AUDIO_SMOOTHING;
-        targetY =
-          MOUTH_SMILE_CY +
-          spring.smoothedLevel * (MOUTH_OPEN_CY - MOUTH_SMILE_CY);
+        targetOpenness = spring.smoothedLevel;
+        cornerLift = MOUTH_SPEAKING_CORNER_LIFT;
       } else {
-        spring.smoothedLevel += (0 - spring.smoothedLevel) * AUDIO_SMOOTHING;
-        targetY =
-          MOUTH_SMILE_CY +
-          spring.smoothedLevel * (MOUTH_OPEN_CY - MOUTH_SMILE_CY);
+        spring.smoothedLevel +=
+          (MOUTH_REST_OPENNESS - spring.smoothedLevel) * AUDIO_SMOOTHING;
+        targetOpenness = spring.smoothedLevel;
       }
 
       if (prefersReduced) {
-        spring.current = targetY;
+        spring.current = targetOpenness;
         spring.velocity = 0;
       } else {
-        const force = (targetY - spring.current) * SPRING_STIFFNESS;
+        const force = (targetOpenness - spring.current) * SPRING_STIFFNESS;
         spring.velocity = (spring.velocity + force) * SPRING_DAMPING;
         spring.current += spring.velocity;
       }
 
       if (mouthRef.current !== null) {
-        mouthRef.current.setAttribute("d", buildMouthPath(spring.current));
+        if (currentState === "error") {
+          mouthRef.current.setAttribute("d", buildFrownClosedPath());
+          mouthRef.current.setAttribute("fill", "none");
+          mouthRef.current.setAttribute("stroke-width", "2.5");
+        } else {
+          mouthRef.current.setAttribute(
+            "d",
+            buildClosedMouthPath(spring.current, cornerLift),
+          );
+          mouthRef.current.setAttribute("fill", "rgba(88, 36, 42, 0.28)");
+          mouthRef.current.setAttribute("stroke-width", "1.6");
+        }
+      }
+
+      // Eye animation: gentle squint during speaking, subtle life during idle
+      const eyeBaseRy =
+        currentState === "error" ? EYE_RY_ERROR : EYE_RY_NORMAL;
+      let eyeRyAnimated = eyeBaseRy;
+      if (currentState === "ai-speaking" && !prefersReduced) {
+        const squintOscillation =
+          Math.sin(now * EYE_SPEAKING_OSCILLATION_SPEED) * 0.5 + 0.5;
+        const squintFactor =
+          EYE_SPEAKING_SQUINT_MIN +
+          squintOscillation * (EYE_SPEAKING_SQUINT_MAX - EYE_SPEAKING_SQUINT_MIN);
+        eyeRyAnimated = eyeBaseRy * squintFactor;
+      } else if (currentState === "listening" && !prefersReduced) {
+        eyeRyAnimated = eyeBaseRy * EYE_LISTENING_WIDEN;
+      }
+      if (leftEyeRef.current !== null) {
+        leftEyeRef.current.setAttribute("ry", String(eyeRyAnimated));
+      }
+      if (rightEyeRef.current !== null) {
+        rightEyeRef.current.setAttribute("ry", String(eyeRyAnimated));
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -345,6 +419,12 @@ export function AiFace({
 
   const eyeRy = state === "error" ? EYE_RY_ERROR : EYE_RY_NORMAL;
   const showBlink = state !== "connecting";
+  const cheekOpacity =
+    state === "ai-speaking" ? 0.45 : state === "listening" ? 0.34 : 0.28;
+  const initialMouthPath =
+    state === "error"
+      ? buildFrownClosedPath()
+      : buildClosedMouthPath(MOUTH_REST_OPENNESS, MOUTH_IDLE_CORNER_LIFT);
   const eyeStyle: React.CSSProperties = {
     transformBox: "fill-box",
     transformOrigin: "center",
@@ -398,6 +478,7 @@ export function AiFace({
           >
             {/* Left eye */}
             <ellipse
+              ref={leftEyeRef}
               cx={EYE_LEFT_CX}
               cy={EYE_CY}
               rx={EYE_RX}
@@ -408,6 +489,7 @@ export function AiFace({
             />
             {/* Right eye */}
             <ellipse
+              ref={rightEyeRef}
               cx={EYE_RIGHT_CX}
               cy={EYE_CY}
               rx={EYE_RX}
@@ -416,14 +498,37 @@ export function AiFace({
               className={showBlink ? "animate-blink" : ""}
               style={eyeStyle}
             />
+            {/* Cheeks */}
+            <ellipse
+              cx={CHEEK_LEFT_CX}
+              cy={CHEEK_CY}
+              rx={CHEEK_RX}
+              ry={CHEEK_RY}
+              fill={`rgba(255, 214, 189, ${String(cheekOpacity)})`}
+            />
+            <ellipse
+              cx={CHEEK_RIGHT_CX}
+              cy={CHEEK_CY}
+              rx={CHEEK_RX}
+              ry={CHEEK_RY}
+              fill={`rgba(255, 214, 189, ${String(cheekOpacity)})`}
+            />
+            {/* Nose */}
+            <circle
+              cx={NOSE_CX}
+              cy={NOSE_CY}
+              r={NOSE_R}
+              fill="rgba(255, 255, 255, 0.72)"
+            />
             {/* Mouth */}
             <path
               ref={mouthRef}
-              d={buildMouthPath(MOUTH_SMILE_CY)}
-              fill="none"
+              d={initialMouthPath}
+              fill={state === "error" ? "none" : "rgba(88, 36, 42, 0.28)"}
               stroke="white"
-              strokeWidth="2.5"
+              strokeWidth={state === "error" ? 2.5 : 1.6}
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
           </svg>
         </div>

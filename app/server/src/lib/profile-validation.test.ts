@@ -10,6 +10,7 @@ describe("normalizeStoredProfile", () => {
     expect(
       normalizeStoredProfile({
         name: "  ",
+        assistantName: "  ",
         characterId: "unknown",
         fontSize: "huge",
         speakingSpeed: "warp",
@@ -18,6 +19,7 @@ describe("normalizeStoredProfile", () => {
       }),
     ).toEqual({
       name: "",
+      assistantName: null,
       characterId: null,
       fontSize: "standard",
       speakingSpeed: "normal",
@@ -43,6 +45,12 @@ describe("validateProfileUpdateValue", () => {
   it("accepts valid character changes", () => {
     expect(validateProfileUpdateValue("characterId", "character-b")).toEqual({
       normalized: "character-b",
+    });
+  });
+
+  it("accepts clearing assistantName with blank string", () => {
+    expect(validateProfileUpdateValue("assistantName", "   ")).toEqual({
+      normalized: null,
     });
   });
 });

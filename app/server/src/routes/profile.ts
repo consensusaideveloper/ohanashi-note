@@ -17,6 +17,7 @@ import type { Context } from "hono";
 interface ClientProfile {
   id: string;
   name: string;
+  assistantName: string | null;
   characterId: string | null;
   fontSize: string;
   speakingSpeed: string;
@@ -49,6 +50,7 @@ profileRoute.get("/api/profile", async (c: Context) => {
     const profile: ClientProfile = {
       id: userId,
       name: normalized.name,
+      assistantName: normalized.assistantName,
       characterId: normalized.characterId,
       fontSize: normalized.fontSize,
       speakingSpeed: normalized.speakingSpeed,
@@ -81,6 +83,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
 
     for (const field of [
       "name",
+      "assistantName",
       "characterId",
       "fontSize",
       "speakingSpeed",
@@ -117,6 +120,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
     const profile: ClientProfile = {
       id: userId,
       name: normalized.name,
+      assistantName: normalized.assistantName,
       characterId: normalized.characterId,
       fontSize: normalized.fontSize,
       speakingSpeed: normalized.speakingSpeed,

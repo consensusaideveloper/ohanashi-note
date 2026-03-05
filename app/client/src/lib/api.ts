@@ -158,6 +158,27 @@ export async function activateRealtimeSession(
   return response.json() as Promise<{ success: true; counted: boolean }>;
 }
 
+// --- Data Export ---
+
+export async function downloadDataExport(): Promise<Blob> {
+  const token = await getIdToken();
+
+  if (token === null) {
+    throw new Error("認証されていません。ログインしてください。");
+  }
+
+  const response = await fetch("/api/data-export", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new ApiError(response.status, text);
+  }
+
+  return response.blob();
+}
+
 // --- Enhanced Summarize (with re-transcription) ---
 
 export async function requestEnhancedSummarize(

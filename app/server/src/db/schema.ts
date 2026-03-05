@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   firebaseUid: text("firebase_uid").unique().notNull(),
   name: text("name").notNull().default(""),
+  assistantName: text("assistant_name"),
   characterId: text("character_id"),
   fontSize: text("font_size").notNull().default("standard"),
   speakingSpeed: text("speaking_speed").notNull().default("normal"),

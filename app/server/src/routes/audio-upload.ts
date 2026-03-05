@@ -46,18 +46,16 @@ async function readRequestBodyWithLimit(
     return Buffer.alloc(0);
   }
 
-  const reader = request.body.getReader();
+  const reader: ReadableStreamDefaultReader<Uint8Array> =
+    request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
 
   try {
-    while (true) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) {
         break;
-      }
-      if (value === undefined) {
-        continue;
       }
 
       total += value.byteLength;
