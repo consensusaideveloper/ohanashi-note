@@ -996,11 +996,28 @@ export const SETTINGS_MESSAGES = {
   dataExport: {
     sectionTitle: "データの一括ダウンロード",
     sectionDescription:
-      "会話の記録PDF、ノートPDF、録音をまとめてダウンロードします。パソコンやUSBメモリに保存しておくと安心です。",
+      "会話の記録PDFとノートPDFをまとめてダウンロードします。容量が大きくなりにくく、保存に失敗しづらい形式です。",
+    rangeLabel: "対象期間",
+    rangeAll: "全期間",
+    rangeLast90Days: "直近90日",
+    rangeLast365Days: "直近1年",
+    includeAudioLabel: "録音ファイルも含める（容量が大きくなります）",
+    includeAudioHint:
+      "録音を含めると処理時間・通信量が大きくなります。必要な録音だけ個別にダウンロードする方法がおすすめです。",
     buttonLabel: "すべてのデータをダウンロード",
     exporting: "データを準備しています...",
     exportSuccess: "ダウンロードが始まりました",
     exportFailed: "ダウンロードに失敗しました。もう一度お試しください。",
+    exportBusy:
+      "現在ダウンロード処理が混み合っています。しばらく待ってからお試しください。",
+    exportTooLarge:
+      "データ件数が多いため一括ダウンロードできません。期間を分けて実行してください。",
+    exportAudioTooLarge:
+      "録音付きでは件数が多すぎます。録音を外してダウンロードしてください。",
+    exportCooldown:
+      "連続でダウンロードを実行できません。少し待ってから再度お試しください。",
+    exportInvalidRange:
+      "対象期間の指定が正しくありません。期間を選び直してお試しください。",
   },
   deletion: {
     description:

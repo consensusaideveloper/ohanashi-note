@@ -5,6 +5,7 @@ import {
   buildConversationSummaryText,
   buildEndingNoteText,
   buildConversationFolderName,
+  buildReadmeText,
   getCategoryLabel,
   formatDate,
 } from "./data-export-formatters.js";
@@ -236,5 +237,18 @@ describe("buildConversationFolderName", () => {
       coveredQuestionIds: null,
     };
     expect(buildConversationFolderName(3, conv)).toBe("03_その他_2026-03-01");
+  });
+});
+
+describe("buildReadmeText", () => {
+  it("mentions audio is excluded when includeAudio is false", () => {
+    const result = buildReadmeText([], {
+      includesPdf: true,
+      includesAudioLinkage: false,
+      includesAudio: false,
+    });
+    expect(result).toContain("このZIPには含めていません（容量対策）");
+    expect(result).toContain("履歴画面から個別にダウンロード");
+    expect(result).not.toContain("音源対応表.csv");
   });
 });

@@ -376,7 +376,11 @@ export function buildAudioLinkageCsv(rows: readonly AudioLinkageRow[]): string {
 
 export function buildReadmeText(
   audioFailures: string[],
-  options?: { includesPdf?: boolean; includesAudioLinkage?: boolean },
+  options?: {
+    includesPdf?: boolean;
+    includesAudioLinkage?: boolean;
+    includesAudio?: boolean;
+  },
 ): string {
   const lines: string[] = [];
   lines.push(
@@ -399,7 +403,12 @@ export function buildReadmeText(
   }
   lines.push("  - 会話内容.txt … 会話の書き起こし");
   lines.push("  - 要約.txt … 会話の要約と記録内容");
-  lines.push("  - 録音（ある場合） … 会話の録音");
+  if (options?.includesAudio !== false) {
+    lines.push("  - 録音（ある場合） … 会話の録音");
+  } else {
+    lines.push("  - 録音 … このZIPには含めていません（容量対策）");
+    lines.push("    必要な録音は履歴画面から個別にダウンロードできます");
+  }
   lines.push("");
   if (options?.includesAudioLinkage === true) {
     lines.push("■ 音源対応表.csv");

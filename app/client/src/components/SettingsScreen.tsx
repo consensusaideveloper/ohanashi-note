@@ -7,7 +7,7 @@ import {
   clearAllData,
   deleteAccount,
 } from "../lib/storage";
-import { downloadDataExport } from "../lib/api";
+import { ApiError, downloadDataExport } from "../lib/api";
 import { CHARACTERS } from "../lib/characters";
 import {
   FONT_SIZE_OPTIONS,
@@ -42,6 +42,60 @@ import type { ReactNode } from "react";
 
 interface SettingsScreenProps {
   lifecycleStatus: string;
+}
+
+type DataExportRange = "all" | "last90d" | "last365d";
+
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function resolveDataExportRange(range: DataExportRange): {
+  fromDate?: string;
+  toDate?: string;
+} {
+  if (range === "all") return {};
+
+  const now = new Date();
+  const from = new Date(now);
+  const dayOffset = range === "last90d" ? 89 : 364;
+  from.setDate(from.getDate() - dayOffset);
+
+  return {
+    fromDate: formatLocalDate(from),
+    toDate: formatLocalDate(now),
+  };
+}
+
+function getDataExportErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    try {
+      const body = JSON.parse(error.responseBody) as Record<string, unknown>;
+      const code = typeof body["code"] === "string" ? body["code"] : "";
+      switch (code) {
+        case "EXPORT_SERVER_BUSY":
+        case "EXPORT_ALREADY_RUNNING":
+          return SETTINGS_MESSAGES.dataExport.exportBusy;
+        case "EXPORT_SCOPE_TOO_LARGE":
+          return SETTINGS_MESSAGES.dataExport.exportTooLarge;
+        case "EXPORT_AUDIO_TOO_LARGE":
+          return SETTINGS_MESSAGES.dataExport.exportAudioTooLarge;
+        case "EXPORT_COOLDOWN":
+          return SETTINGS_MESSAGES.dataExport.exportCooldown;
+        case "EXPORT_INVALID_DATE_RANGE":
+          return SETTINGS_MESSAGES.dataExport.exportInvalidRange;
+        default:
+          return SETTINGS_MESSAGES.dataExport.exportFailed;
+      }
+    } catch {
+      return SETTINGS_MESSAGES.dataExport.exportFailed;
+    }
+  }
+
+  return SETTINGS_MESSAGES.dataExport.exportFailed;
 }
 
 function normalizeDisplayNameInput(value: string): string {
@@ -98,6 +152,9 @@ export function SettingsScreen({
   const [deleteMessage, setDeleteMessage] = useState("");
   const [showPrintView, setShowPrintView] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [dataExportRange, setDataExportRange] =
+    useState<DataExportRange>("all");
+  const [includeAudioInExport, setIncludeAudioInExport] = useState(false);
 
   // Track saved values for dirty-state detection
   const [savedName, setSavedName] = useState("");
@@ -310,7 +367,11 @@ export function SettingsScreen({
 
   const handleExportData = useCallback((): void => {
     setIsExporting(true);
-    void downloadDataExport()
+    const dateRange = resolveDataExportRange(dataExportRange);
+    void downloadDataExport({
+      includeAudio: includeAudioInExport,
+      ...dateRange,
+    })
       .then((blob) => {
         const url = URL.createObjectURL(blob);
         const date = new Date().toISOString().slice(0, 10);
@@ -326,12 +387,12 @@ export function SettingsScreen({
       })
       .catch((error: unknown) => {
         console.error("Failed to export data:", { error });
-        showToast(SETTINGS_MESSAGES.dataExport.exportFailed, "error");
+        showToast(getDataExportErrorMessage(error), "error");
       })
       .finally(() => {
         setIsExporting(false);
       });
-  }, [showToast]);
+  }, [dataExportRange, includeAudioInExport, showToast]);
 
   const handleClearAll = useCallback((): void => {
     setShowDeleteConfirm(true);
@@ -819,6 +880,44 @@ export function SettingsScreen({
           <p className="text-lg text-text-secondary">
             {SETTINGS_MESSAGES.dataExport.sectionDescription}
           </p>
+          <label className="block text-lg text-text-secondary">
+            {SETTINGS_MESSAGES.dataExport.rangeLabel}
+          </label>
+          <select
+            value={dataExportRange}
+            onChange={(e) => {
+              setDataExportRange(e.target.value as DataExportRange);
+            }}
+            className="w-full min-h-11 rounded-card border border-border-light bg-bg-surface px-4 py-2 text-lg text-text-primary"
+            disabled={isExporting}
+          >
+            <option value="all">{SETTINGS_MESSAGES.dataExport.rangeAll}</option>
+            <option value="last90d">
+              {SETTINGS_MESSAGES.dataExport.rangeLast90Days}
+            </option>
+            <option value="last365d">
+              {SETTINGS_MESSAGES.dataExport.rangeLast365Days}
+            </option>
+          </select>
+          <label className="flex items-start gap-3 cursor-pointer min-h-11">
+            <input
+              type="checkbox"
+              checked={includeAudioInExport}
+              onChange={(e) => {
+                setIncludeAudioInExport(e.target.checked);
+              }}
+              className="mt-1 w-5 h-5 accent-accent-primary flex-none"
+              disabled={isExporting}
+            />
+            <span className="text-lg text-text-primary leading-relaxed">
+              {SETTINGS_MESSAGES.dataExport.includeAudioLabel}
+            </span>
+          </label>
+          {includeAudioInExport && (
+            <p className="text-base text-warning">
+              {SETTINGS_MESSAGES.dataExport.includeAudioHint}
+            </p>
+          )}
           <button
             type="button"
             className="bg-accent-primary text-text-on-accent rounded-full min-h-11 px-6 text-lg w-full flex items-center justify-center gap-2 disabled:opacity-50"

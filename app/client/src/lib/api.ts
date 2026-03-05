@@ -160,14 +160,36 @@ export async function activateRealtimeSession(
 
 // --- Data Export ---
 
-export async function downloadDataExport(): Promise<Blob> {
+export interface DataExportOptions {
+  includeAudio?: boolean;
+  fromDate?: string;
+  toDate?: string;
+}
+
+export async function downloadDataExport(
+  options: DataExportOptions = {},
+): Promise<Blob> {
   const token = await getIdToken();
 
   if (token === null) {
     throw new Error("認証されていません。ログインしてください。");
   }
 
-  const response = await fetch("/api/data-export", {
+  const params = new URLSearchParams();
+  if (options.includeAudio === true) {
+    params.set("includeAudio", "true");
+  }
+  if (typeof options.fromDate === "string" && options.fromDate.length > 0) {
+    params.set("fromDate", options.fromDate);
+  }
+  if (typeof options.toDate === "string" && options.toDate.length > 0) {
+    params.set("toDate", options.toDate);
+  }
+  const query = params.toString();
+  const path =
+    query.length > 0 ? `/api/data-export?${query}` : "/api/data-export";
+
+  const response = await fetch(path, {
     headers: { Authorization: `Bearer ${token}` },
   });
 

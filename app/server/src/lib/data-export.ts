@@ -1,6 +1,6 @@
 import archiver from "archiver";
 import { Readable } from "node:stream";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc, count, gte, lt } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import { conversations, users } from "../db/schema.js";
@@ -22,11 +22,55 @@ import {
 
 export { formatDate } from "./data-export-formatters.js";
 
-export async function generateDataExportZip(userId: string): Promise<Readable> {
+interface DataExportScopeOptions {
+  startedAtFrom?: Date;
+  startedAtToExclusive?: Date;
+}
+
+export async function countDataExportConversations(
+  userId: string,
+  options: DataExportScopeOptions = {},
+): Promise<number> {
+  const whereClause = and(
+    eq(conversations.userId, userId),
+    options.startedAtFrom !== undefined
+      ? gte(conversations.startedAt, options.startedAtFrom)
+      : undefined,
+    options.startedAtToExclusive !== undefined
+      ? lt(conversations.startedAt, options.startedAtToExclusive)
+      : undefined,
+  );
+
+  const [result] = await db
+    .select({ value: count() })
+    .from(conversations)
+    .where(whereClause);
+  return result?.value ?? 0;
+}
+
+interface GenerateDataExportOptions extends DataExportScopeOptions {
+  includeAudio?: boolean;
+}
+
+export async function generateDataExportZip(
+  userId: string,
+  options: GenerateDataExportOptions = {},
+): Promise<Readable> {
+  const includeAudio = options.includeAudio === true;
+  const whereClause = and(
+    eq(conversations.userId, userId),
+    options.startedAtFrom !== undefined
+      ? gte(conversations.startedAt, options.startedAtFrom)
+      : undefined,
+    options.startedAtToExclusive !== undefined
+      ? lt(conversations.startedAt, options.startedAtToExclusive)
+      : undefined,
+  );
+
   const rows = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.userId, userId))
+    .where(whereClause)
     .orderBy(desc(conversations.startedAt));
 
   const userRow = await db.query.users.findFirst({
@@ -68,7 +112,12 @@ export async function generateDataExportZip(userId: string): Promise<Readable> {
     archive.append(summaryText, { name: `${convDir}/要約.txt` });
 
     let exportedAudioFileName: string | null = null;
-    if (row.audioAvailable && row.audioStorageKey !== null && r2 !== null) {
+    if (
+      includeAudio &&
+      row.audioAvailable &&
+      row.audioStorageKey !== null &&
+      r2 !== null
+    ) {
       try {
         const result = await r2.downloadObject(row.audioStorageKey);
         const ext = getAudioExtension(row.audioMimeType);
@@ -107,13 +156,16 @@ export async function generateDataExportZip(userId: string): Promise<Readable> {
     });
   }
 
-  archive.append(buildAudioLinkageCsv(audioLinkageRows), {
-    name: `${rootDir}/音源対応表.csv`,
-  });
+  if (includeAudio) {
+    archive.append(buildAudioLinkageCsv(audioLinkageRows), {
+      name: `${rootDir}/音源対応表.csv`,
+    });
+  }
 
   const metadata = {
     exportedAt: new Date().toISOString(),
     userName,
+    includeAudio,
     totalConversations: rows.length,
     conversations: rows.map((row, i) => {
       const linkage = audioLinkageRows.find(
@@ -140,7 +192,8 @@ export async function generateDataExportZip(userId: string): Promise<Readable> {
 
   const readmeText = buildReadmeText(audioFailures, {
     includesPdf: true,
-    includesAudioLinkage: true,
+    includesAudioLinkage: includeAudio,
+    includesAudio: includeAudio,
   });
   archive.append(readmeText, { name: `${rootDir}/README.txt` });
 
