@@ -2,6 +2,10 @@ FROM node:20-slim AS base
 
 WORKDIR /app
 
+# Keep npm version aligned with the lockfile generator to avoid ci lock checks drifting.
+ARG NPM_VERSION=11.5.1
+RUN npm install -g "npm@${NPM_VERSION}"
+
 # Copy package files + lockfile for deterministic dependency resolution
 COPY package.json ./
 COPY package-lock.json ./
@@ -31,6 +35,10 @@ FROM node:20-slim
 ENV NODE_ENV=production
 
 WORKDIR /app
+
+# Use the same npm major/minor as build stage for consistent workspace resolution.
+ARG NPM_VERSION=11.5.1
+RUN npm install -g "npm@${NPM_VERSION}"
 
 # Copy package files + lockfile
 COPY package.json ./
