@@ -33,6 +33,8 @@ interface SpringState {
 interface AiFaceProps {
   state: ConversationState;
   audioLevel: number;
+  /** Remote (AI) audio level [0.0, 1.0] for mouth animation during ai-speaking. */
+  remoteAudioLevel: number;
   onMicToggle: () => void;
   /** Render the face at a larger size (for landscape mode). */
   large?: boolean;
@@ -230,6 +232,7 @@ function MicButtonContent({ state }: { state: ConversationState }): ReactNode {
 export function AiFace({
   state,
   audioLevel,
+  remoteAudioLevel,
   onMicToggle,
   large = false,
   characterId,
@@ -243,6 +246,8 @@ export function AiFace({
   });
   const audioLevelRef = useRef(audioLevel);
   audioLevelRef.current = audioLevel;
+  const remoteAudioLevelRef = useRef(remoteAudioLevel);
+  remoteAudioLevelRef.current = remoteAudioLevel;
 
   // Animate mouth during ai-speaking; set static position for other states
   useEffect(() => {
@@ -262,7 +267,7 @@ export function AiFace({
 
     const animate = (): void => {
       const spring = springRef.current;
-      const level = audioLevelRef.current;
+      const level = remoteAudioLevelRef.current;
 
       spring.smoothedLevel += (level - spring.smoothedLevel) * AUDIO_SMOOTHING;
 

@@ -219,6 +219,7 @@ export interface UseConversationReturn {
   transcript: TranscriptEntry[];
   pendingAssistantText: string;
   audioLevel: number;
+  remoteAudioLevel: number;
   characterId: CharacterId | null;
   summaryStatus: SummaryStatus;
   /** Remaining session time in milliseconds, or null when idle. */
@@ -1665,6 +1666,7 @@ export function useConversation(): UseConversationReturn {
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
     audioLevel: webrtc.audioLevel,
+    remoteAudioLevel: webrtc.remoteAudioLevel,
     characterId: characterIdRef.current,
     summaryStatus: state.summaryStatus,
     remainingMs: state.remainingMs,

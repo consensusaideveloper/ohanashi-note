@@ -363,6 +363,7 @@ export interface UseOnboardingConversationReturn {
   transcript: TranscriptEntry[];
   pendingAssistantText: string;
   audioLevel: number;
+  remoteAudioLevel: number;
   characterId: CharacterId;
   start: () => void;
   stop: () => void;
@@ -1223,6 +1224,7 @@ export function useOnboardingConversation({
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
     audioLevel: webrtc.audioLevel,
+    remoteAudioLevel: webrtc.remoteAudioLevel,
     characterId: state.characterId,
     start,
     stop,

@@ -71,6 +71,8 @@ interface UseWebRTCReturn {
   status: WebRTCStatus;
   /** Mic audio level [0.0, 1.0] for UI visualisation. */
   audioLevel: number;
+  /** Remote (AI) audio level [0.0, 1.0] for mouth animation. */
+  remoteAudioLevel: number;
   /** Register a handler for incoming data channel events. */
   addMessageHandler: (handler: MessageHandler) => void;
   /** Unregister a handler. */
@@ -102,6 +104,7 @@ interface ReleaseResourcesOptions {
 export function useWebRTC(): UseWebRTCReturn {
   const [status, setStatus] = useState<WebRTCStatus>("disconnected");
   const [audioLevel, setAudioLevel] = useState(0);
+  const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -254,6 +257,7 @@ export function useWebRTC(): UseWebRTCReturn {
     remoteAudioPendingEpochRef.current = null;
     remoteAudioLastActiveAtRef.current = 0;
     remoteAudioEpochRef.current = 0;
+    setRemoteAudioLevel(0);
   }, []);
 
   const startRemoteAudioMonitor = useCallback(
@@ -281,6 +285,7 @@ export function useWebRTC(): UseWebRTCReturn {
             sum += sample * sample;
           }
           const rms = Math.sqrt(sum / dataArray.length);
+          setRemoteAudioLevel(rms);
           const now = Date.now();
 
           if (rms >= REMOTE_AUDIO_ACTIVITY_THRESHOLD) {
@@ -532,6 +537,7 @@ export function useWebRTC(): UseWebRTCReturn {
     send,
     status,
     audioLevel,
+    remoteAudioLevel,
     addMessageHandler,
     removeMessageHandler,
     onRemoteAudioEnded,

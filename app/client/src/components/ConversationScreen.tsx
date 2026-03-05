@@ -62,6 +62,7 @@ export function ConversationScreen({
     transcript,
     pendingAssistantText,
     audioLevel,
+    remoteAudioLevel,
     characterId,
     summaryStatus,
     remainingMs,
@@ -429,6 +430,7 @@ export function ConversationScreen({
             <AiFace
               state={state}
               audioLevel={audioLevel}
+              remoteAudioLevel={remoteAudioLevel}
               onMicToggle={handleButtonClick}
               large={isLandscape}
               characterId={characterId}

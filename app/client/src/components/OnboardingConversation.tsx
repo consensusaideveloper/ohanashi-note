@@ -32,6 +32,7 @@ export function OnboardingConversation({
     transcript,
     pendingAssistantText,
     audioLevel,
+    remoteAudioLevel,
     characterId,
     start,
     stop,
@@ -120,6 +121,7 @@ export function OnboardingConversation({
         <AiFace
           state={state}
           audioLevel={audioLevel}
+          remoteAudioLevel={remoteAudioLevel}
           onMicToggle={handleOrbClick}
           characterId={characterId}
         />
