@@ -4,7 +4,6 @@ import { logger } from "../lib/logger.js";
 import { sanitizeText } from "./sanitizer.js";
 import {
   getAllQuestionsListJson,
-  getQuestionListForCategory,
 } from "../lib/questions.js";
 import type { QuestionCategory } from "../types/conversation.js";
 
@@ -276,15 +275,16 @@ ${lines}
 
 function buildSystemPrompt(
   category: QuestionCategory,
-  questionListJson: string,
+  allQuestionsJson: string,
   previousNoteEntries?: PreviousNoteEntry[],
 ): string {
   return `あなたはエンディングノートの会話を分析し、構造化されたノートエントリーに変換するアシスタントです。
 
-以下の会話は「${category}」カテゴリに関するものです。
+以下の会話は「${category}」カテゴリを主テーマにしたものです。
+会話中に他カテゴリの内容が含まれる場合があります。その場合は主テーマへ無理に当てはめず、内容に最も合うカテゴリで整理してください。
 
-このカテゴリには以下の質問項目があります：
-${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
+以下は全カテゴリの質問項目一覧です：
+${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 
 【タスク】
 会話を分析し、以下のJSON形式で結果を返してください：
@@ -323,10 +323,11 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 2. ユーザーの言葉を尊重しつつ、簡潔にまとめてください。
 3. クレジットカード番号、口座番号、パスワードなどの機密情報は「[保護済み]」に置き換えてください。
 4. 回答は日本語で記述してください。
-5. noteEntriesの各項目のquestionIdは、上記の質問リストに含まれるIDのみを使用してください。
+5. noteEntriesの各項目のquestionIdは、上記の質問一覧に含まれるIDのみを使用してください。
+5.1. 主テーマ（${category}）に沿った内容を優先して抽出しつつ、会話中に他カテゴリへ明確に該当する内容が出た場合は、そのカテゴリのquestionIdで記録してください（主テーマへ無理に寄せない）。
 6. 必ず有効なJSONのみを返してください。説明文は不要です。
 7. oneLinerSummaryは「〜についてお話ししました」のような形式で、一覧カードの一行プレビューに使います。40文字以内で。
-8. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support
+8. discussedCategoriesには、実際に話題に上がったカテゴリのIDを含めてください。有効値: memories, people, house, medical, funeral, money, work, digital, legal, trust, support。主テーマだけに固定せず、実際の話題に合わせて列挙してください。
 9. keyPointsのdecisions, undecidedItemsは最大5個まで。importantStatementsは最大7個まで。該当がなければ空配列にしてください。
 9.2. keyPoints.importantStatements には、質問項目に直接は入らなくても後から人物像の理解に役立つ内容を優先してください。「この人はどんな人だったのか」を家族が知る手がかりになるかを判断基準にしてください。
 9.3. 各importantStatementにはcategoryとimportanceを付与してください。
@@ -351,7 +352,7 @@ ${questionListJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 12. noteEntries.answerは、ユーザー発話に含まれる事実のみで作成してください。アシスタントの提案・推測・一般論を事実として書かないでください。
 13. noteEntries.sourceEvidenceには、ユーザー発話から3〜40文字程度を原文のまま引用してください（要約・改変しない）。短い返答（「はい」「あります」など）の場合は1〜2文字でも可。
 14. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
-15. カテゴリが legal（相続・遺言）、trust（信託・委任）、support（支援制度）の場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
+15. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 16. 質問リストの各項目には type が含まれます。type: "accumulative" の質問（思い出、大事な人、連絡先リストなど）は複数の回答が並立できます。この種の質問では、ユーザーが以前の回答と明らかに同一の項目について話していない限り、常に新しいnoteEntryとして追加してください。以前の回答を上書き・統合しないでください。
 
 【カテゴリ別の分析ガイド】
@@ -756,10 +757,10 @@ export async function summarizeConversation(
 
   let systemPrompt: string;
   if (request.category !== null) {
-    const questionListJson = getQuestionListForCategory(request.category);
+    const allQuestionsJson = getAllQuestionsListJson();
     systemPrompt = buildSystemPrompt(
       request.category,
-      questionListJson,
+      allQuestionsJson,
       request.previousNoteEntries,
     );
   } else {

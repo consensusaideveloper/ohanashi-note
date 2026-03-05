@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { TERMS_CONSENT_MESSAGES } from "../lib/constants";
+import { printTargetElement } from "../lib/print";
 
 import type { ReactNode } from "react";
 import type { LegalSection } from "../lib/legal-content";
@@ -16,12 +17,17 @@ export function LegalDocumentViewer({
   content,
   onClose,
 }: LegalDocumentViewerProps): ReactNode {
+  const printRootRef = useRef<HTMLDivElement | null>(null);
+
   const handlePrint = useCallback((): void => {
-    window.print();
+    printTargetElement(printRootRef.current);
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg-primary overflow-y-auto">
+    <div
+      ref={printRootRef}
+      className="print-target fixed inset-0 z-50 bg-bg-primary overflow-y-auto"
+    >
       {/* Header bar */}
       <div className="print-hidden sticky top-0 bg-bg-primary/95 backdrop-blur-sm border-b border-border-light px-4 py-3 flex items-center justify-between z-10">
         <button

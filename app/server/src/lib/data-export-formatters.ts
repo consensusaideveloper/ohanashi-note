@@ -71,6 +71,9 @@ const MIME_EXT_MAP: Record<string, string> = {
 };
 
 const DEFAULT_AUDIO_EXT = ".webm";
+const QUESTION_META_BY_ID = new Map(
+  QUESTIONS.map((q) => [q.id, q] as const),
+);
 
 // --- Public functions ---
 
@@ -210,8 +213,16 @@ export function buildConversationSummaryText(conv: ConversationRow): string {
 }
 
 function isAccumulativeQuestion(questionId: string): boolean {
-  const q = QUESTIONS.find((item) => item.id === questionId);
+  const q = QUESTION_META_BY_ID.get(questionId);
   return q?.questionType === "accumulative";
+}
+
+function inferCategoryFromQuestionId(questionId: string): string | null {
+  const idx = questionId.lastIndexOf("-");
+  if (idx <= 0) {
+    return null;
+  }
+  return questionId.slice(0, idx);
 }
 
 export function buildEndingNoteText(
@@ -224,27 +235,36 @@ export function buildEndingNoteText(
 
   for (const row of rows) {
     const entries = parseNoteEntries(row.noteEntries);
-    const categories = row.discussedCategories ?? [];
-    const category = categories[0] ?? row.category ?? "other";
-
-    let catMap = noteMap.get(category);
-    if (catMap === undefined) {
-      catMap = new Map();
-      noteMap.set(category, catMap);
-    }
 
     for (const entry of entries) {
+      const questionMeta = QUESTION_META_BY_ID.get(entry.questionId);
+      const category =
+        questionMeta?.category ??
+        inferCategoryFromQuestionId(entry.questionId) ??
+        row.category ??
+        "other";
+      const normalizedEntry =
+        questionMeta !== undefined
+          ? { ...entry, questionTitle: questionMeta.title }
+          : entry;
+
+      let catMap = noteMap.get(category);
+      if (catMap === undefined) {
+        catMap = new Map();
+        noteMap.set(category, catMap);
+      }
+
       const existing = catMap.get(entry.questionId);
       if (isAccumulativeQuestion(entry.questionId)) {
         if (existing !== undefined) {
-          existing.push(entry);
+          existing.push(normalizedEntry);
         } else {
-          catMap.set(entry.questionId, [entry]);
+          catMap.set(entry.questionId, [normalizedEntry]);
         }
       } else {
         // Rows are newest-first, so keep the first seen single entry.
         if (existing === undefined) {
-          catMap.set(entry.questionId, [entry]);
+          catMap.set(entry.questionId, [normalizedEntry]);
         }
       }
     }
@@ -316,22 +336,78 @@ export function getAudioExtension(mimeType: string | null): string {
   return MIME_EXT_MAP[mimeType] ?? DEFAULT_AUDIO_EXT;
 }
 
-export function buildReadmeText(audioFailures: string[]): string {
+export interface AudioLinkageRow {
+  index: number;
+  conversationId: string;
+  folderName: string;
+  categoryLabel: string;
+  startedAt: Date;
+  audioFileName: string | null;
+  conversationPdfFileName: string;
+}
+
+export function buildAudioLinkageCsv(rows: readonly AudioLinkageRow[]): string {
+  const header = [
+    "index",
+    "conversation_id",
+    "category",
+    "started_at",
+    "folder",
+    "conversation_pdf",
+    "audio_file",
+  ];
+
+  const lines = [header.join(",")];
+  for (const row of rows) {
+    lines.push(
+      [
+        String(row.index),
+        row.conversationId,
+        row.categoryLabel,
+        formatDateTime(row.startedAt),
+        row.folderName,
+        row.conversationPdfFileName,
+        row.audioFileName ?? "",
+      ]
+        .map((field) => `"${field.replaceAll('"', '""')}"`)
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+export function buildReadmeText(
+  audioFailures: string[],
+  options?: { includesPdf?: boolean; includesAudioLinkage?: boolean },
+): string {
   const lines: string[] = [];
   lines.push(
     "このフォルダには、おはなしエンディングノートのすべてのデータが入っています。",
   );
   lines.push("");
+  if (options?.includesPdf === true) {
+    lines.push("■ エンディングノート.pdf");
+    lines.push("  印刷しやすい形式でまとめたエンディングノートです。");
+    lines.push("");
+  }
   lines.push("■ エンディングノート.txt");
   lines.push("  会話から記録されたノートの内容です。");
   lines.push("");
   lines.push("■ 会話フォルダ");
   lines.push("  これまでの会話の記録が入っています。");
   lines.push("  各フォルダには以下のファイルが含まれます：");
+  if (options?.includesPdf === true) {
+    lines.push("  - 会話記録.pdf … 会話内容を見やすくまとめたPDF");
+  }
   lines.push("  - 会話内容.txt … 会話の書き起こし");
   lines.push("  - 要約.txt … 会話の要約と記録内容");
   lines.push("  - 録音（ある場合） … 会話の録音");
   lines.push("");
+  if (options?.includesAudioLinkage === true) {
+    lines.push("■ 音源対応表.csv");
+    lines.push("  会話ID・PDF・録音ファイルの対応表です。");
+    lines.push("");
+  }
   lines.push("■ メタデータ.json");
   lines.push("  データの詳細情報です（技術的な内容）。");
 

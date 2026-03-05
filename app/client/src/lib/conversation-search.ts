@@ -132,6 +132,13 @@ function collectScoredFields(record: ConversationRecord): ScoredField[] {
       fields.push({ text: s, weight: 1 });
     }
   }
+  if (record.transcript.length > 0) {
+    for (const entry of record.transcript) {
+      if (entry.role === "user" && entry.text.trim() !== "") {
+        fields.push({ text: entry.text, weight: 1 });
+      }
+    }
+  }
 
   return fields;
 }
@@ -150,6 +157,35 @@ function scoreRecord(fields: ScoredField[], tokens: string[]): number {
   return total;
 }
 
+function questionIdToCategory(questionId: string): string | null {
+  const idx = questionId.lastIndexOf("-");
+  if (idx <= 0) {
+    return null;
+  }
+  return questionId.slice(0, idx);
+}
+
+function hasCategoryContentByQuestionIds(
+  record: ConversationRecord,
+  category: QuestionCategory,
+): boolean {
+  if (record.noteEntries !== undefined) {
+    for (const entry of record.noteEntries) {
+      if (questionIdToCategory(entry.questionId) === category) {
+        return true;
+      }
+    }
+  }
+  if (record.coveredQuestionIds !== undefined) {
+    for (const questionId of record.coveredQuestionIds) {
+      if (questionIdToCategory(questionId) === category) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function matchesCategory(
   record: ConversationRecord,
   category: QuestionCategory,
@@ -159,6 +195,9 @@ function matchesCategory(
     record.discussedCategories !== undefined &&
     record.discussedCategories.includes(category)
   ) {
+    return true;
+  }
+  if (hasCategoryContentByQuestionIds(record, category)) {
     return true;
   }
   return false;
@@ -205,15 +244,8 @@ export function searchPastConversations(
   }> = [];
 
   for (const record of records) {
-    // Skip conversations with no useful content
-    if (
-      record.summary === null &&
-      record.oneLinerSummary === undefined &&
-      (record.noteEntries === undefined || record.noteEntries.length === 0) &&
-      record.keyPoints === undefined
-    ) {
-      continue;
-    }
+    const fields = collectScoredFields(record);
+    if (fields.length === 0) continue;
 
     // Category filter
     if (
@@ -223,8 +255,6 @@ export function searchPastConversations(
     ) {
       continue;
     }
-
-    const fields = collectScoredFields(record);
     const score = scoreRecord(fields, tokens);
 
     if (score > 0) {
@@ -303,6 +333,9 @@ export function getNoteEntriesForAI(
     if (!matchesCategory(record, category)) continue;
 
     for (const entry of record.noteEntries) {
+      if (questionIdToCategory(entry.questionId) !== category) {
+        continue;
+      }
       const existing = versionsMap.get(entry.questionId);
       if (existing !== undefined) {
         existing.push(entry);

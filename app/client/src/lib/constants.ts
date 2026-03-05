@@ -952,6 +952,10 @@ export const ONBOARDING_COMPLETE_MESSAGES = {
   startButton: "はじめる",
 } as const;
 
+/** localStorage key for deferred topic handoff from onboarding to first main conversation. */
+export const ONBOARDING_DEFERRED_TOPIC_STORAGE_KEY =
+  "onboarding_deferred_topic";
+
 // --- Settings screen messages (Japanese) ---
 export const SETTINGS_MESSAGES = {
   saved: "設定を保存しました",
@@ -992,7 +996,7 @@ export const SETTINGS_MESSAGES = {
   dataExport: {
     sectionTitle: "データの一括ダウンロード",
     sectionDescription:
-      "会話の記録、ノート、録音をまとめてダウンロードします。パソコンやUSBメモリに保存しておくと安心です。",
+      "会話の記録PDF、ノートPDF、録音をまとめてダウンロードします。パソコンやUSBメモリに保存しておくと安心です。",
     buttonLabel: "すべてのデータをダウンロード",
     exporting: "データを準備しています...",
     exportSuccess: "ダウンロードが始まりました",

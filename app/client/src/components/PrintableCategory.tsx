@@ -13,7 +13,7 @@ export function PrintableCategory({
 }: {
   data: CategoryNoteData;
 }): ReactNode {
-  if (data.noteEntries.length === 0) {
+  if (data.noteEntries.length === 0 && data.unansweredQuestions.length === 0) {
     return null;
   }
 
@@ -98,6 +98,28 @@ export function PrintableCategory({
             )}
           </div>
         ))}
+
+        {data.unansweredQuestions.length > 0 && (
+          <div className="print-no-break mt-5 pt-4 border-t border-border-light">
+            <p className="text-lg font-medium text-text-secondary mb-2">
+              未記入の項目
+            </p>
+            <div className="space-y-1.5 pl-2">
+              {data.unansweredQuestions.map((question) => (
+                <div
+                  key={question.id}
+                  className="flex items-start gap-2 text-base text-text-secondary"
+                >
+                  <span className="mt-0.5">□</span>
+                  <p>
+                    {question.title}
+                    <span className="ml-1 text-text-secondary/80">（未記入）</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {data.disclaimer !== undefined && (

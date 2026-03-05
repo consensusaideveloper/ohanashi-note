@@ -160,6 +160,38 @@ describe("buildEndingNoteText", () => {
     expect(result).toContain("生まれた場所は？");
     expect(result).toContain("北海道");
   });
+
+  it("categorizes entries by questionId even when conversation category differs", () => {
+    const rows = [
+      {
+        id: "conv-mixed",
+        category: "memories",
+        startedAt: new Date("2026-02-20"),
+        endedAt: null,
+        transcript: [],
+        summary: null,
+        summaryStatus: "completed",
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "銀行口座",
+            answer: "地方銀行に1口座",
+          },
+        ],
+        discussedCategories: ["memories", "money"],
+        keyPoints: null,
+        oneLinerSummary: null,
+        audioAvailable: false,
+        audioStorageKey: null,
+        audioMimeType: null,
+        coveredQuestionIds: null,
+      },
+    ];
+    const result = buildEndingNoteText(rows, "");
+    expect(result).toContain("【お金・資産】");
+    expect(result).toContain("メインの銀行");
+    expect(result).toContain("地方銀行に1口座");
+  });
 });
 
 describe("buildConversationFolderName", () => {

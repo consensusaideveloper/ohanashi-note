@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { SETTINGS_MESSAGES, UI_MESSAGES } from "../lib/constants";
+import { printTargetElement } from "../lib/print";
 import { PrintableCategory } from "./PrintableCategory";
 import { PrintableInsightsSection } from "./PrintableInsightsSection";
 
@@ -37,9 +38,11 @@ export function PrintableNoteLayout({
   onClose,
   onPrint,
 }: PrintableNoteLayoutProps): ReactNode {
+  const printRootRef = useRef<HTMLDivElement | null>(null);
+
   const handlePrint = useCallback((): void => {
     onPrint?.();
-    window.print();
+    printTargetElement(printRootRef.current);
   }, [onPrint]);
 
   const totalAnswered = categories.reduce(
@@ -50,11 +53,7 @@ export function PrintableNoteLayout({
     (sum, cat) => sum + cat.totalQuestions,
     0,
   );
-  const categoriesWithEntries = categories.filter(
-    (cat) => cat.noteEntries.length > 0,
-  );
-  const hasPrintableContent =
-    categoriesWithEntries.length > 0 || flexibleNotes.length > 0;
+  const hasPrintableContent = categories.length > 0 || flexibleNotes.length > 0;
 
   if (isLoading) {
     return (
@@ -91,7 +90,10 @@ export function PrintableNoteLayout({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg-primary overflow-y-auto">
+    <div
+      ref={printRootRef}
+      className="print-target fixed inset-0 z-50 bg-bg-primary overflow-y-auto"
+    >
       {/* Screen-only controls */}
       <div className="print-hidden sticky top-0 bg-bg-primary/95 backdrop-blur-sm border-b border-border-light px-4 py-3 flex items-center justify-between z-10">
         <button
@@ -150,7 +152,7 @@ export function PrintableNoteLayout({
         {/* Category sections */}
         {hasPrintableContent ? (
           <>
-            {categoriesWithEntries.map((cat) => (
+            {categories.map((cat) => (
               <PrintableCategory key={cat.category} data={cat} />
             ))}
             <PrintableInsightsSection items={flexibleNotes} />

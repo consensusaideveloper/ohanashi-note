@@ -51,7 +51,7 @@ describe("searchPastConversations", () => {
       makeRecord({
         noteEntries: [
           {
-            questionId: "q1",
+            questionId: "memories-01",
             questionTitle: "好きな場所",
             answer: "京都のお寺が好きです",
           },
@@ -125,6 +125,43 @@ describe("searchPastConversations", () => {
     expect(result.resultCount).toBe(1);
   });
 
+  it("matches category filter by noteEntries questionId prefix", () => {
+    const records = [
+      makeRecord({
+        category: "people",
+        discussedCategories: [],
+        noteEntries: [
+          {
+            questionId: "memories-01",
+            questionTitle: "大切な思い出",
+            answer: "北海道旅行",
+          },
+        ],
+      }),
+    ];
+    const result = searchPastConversations(records, {
+      query: "旅行",
+      category: "memories",
+    });
+    expect(result.resultCount).toBe(1);
+  });
+
+  it("matches category filter by coveredQuestionIds", () => {
+    const records = [
+      makeRecord({
+        category: null,
+        discussedCategories: [],
+        coveredQuestionIds: ["money-01"],
+        summary: "旅行費用の相談をした",
+      }),
+    ];
+    const result = searchPastConversations(records, {
+      query: "費用",
+      category: "money",
+    });
+    expect(result.resultCount).toBe(1);
+  });
+
   it("respects maxResults limit", () => {
     const records = Array.from({ length: 10 }, (_, i) =>
       makeRecord({ summary: `旅行の思い出 パート${i + 1}` }),
@@ -166,6 +203,21 @@ describe("searchPastConversations", () => {
     expect(result.resultCount).toBe(0);
   });
 
+  it("finds records from user transcript even before summarization", () => {
+    const records = [
+      makeRecord({
+        summary: null,
+        oneLinerSummary: undefined,
+        transcript: [
+          { role: "assistant", text: "何について話しましょうか", timestamp: 1 },
+          { role: "user", text: "証券口座のことを整理したい", timestamp: 2 },
+        ],
+      }),
+    ];
+    const result = searchPastConversations(records, { query: "証券口座" });
+    expect(result.resultCount).toBe(1);
+  });
+
   it("returns empty results for empty records array", () => {
     const result = searchPastConversations([], { query: "旅行" });
     expect(result.resultCount).toBe(0);
@@ -191,7 +243,7 @@ describe("getNoteEntriesForAI", () => {
         category: "memories",
         noteEntries: [
           {
-            questionId: "q1",
+            questionId: "memories-01",
             questionTitle: "好きな場所",
             answer: "京都",
           },
@@ -210,14 +262,22 @@ describe("getNoteEntriesForAI", () => {
         category: "memories",
         startedAt: 1000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "京都" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "京都",
+          },
         ],
       }),
       makeRecord({
         category: "memories",
         startedAt: 2000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "奈良" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "奈良",
+          },
         ],
       }),
     ];
@@ -231,7 +291,7 @@ describe("getNoteEntriesForAI", () => {
       makeRecord({
         category: "money",
         noteEntries: [
-          { questionId: "q1", questionTitle: "銀行", answer: "三菱UFJ" },
+          { questionId: "money-01", questionTitle: "銀行", answer: "三菱UFJ" },
         ],
       }),
     ];
@@ -246,7 +306,7 @@ describe("getNoteEntriesForAI", () => {
         category: "money",
         noteEntries: [
           {
-            questionId: "q1",
+            questionId: "money-01",
             questionTitle: "口座情報",
             answer: "パスワード：secret123",
           },
@@ -270,14 +330,22 @@ describe("getNoteEntriesForAI", () => {
         category: "memories",
         startedAt: 1000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "京都" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "京都",
+          },
         ],
       }),
       makeRecord({
         category: "memories",
         startedAt: 2000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "奈良" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "奈良",
+          },
         ],
       }),
     ];
@@ -293,7 +361,11 @@ describe("getNoteEntriesForAI", () => {
         category: "memories",
         startedAt: 1000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "京都" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "京都",
+          },
         ],
       }),
     ];
@@ -308,21 +380,33 @@ describe("getNoteEntriesForAI", () => {
         category: "memories",
         startedAt: 1000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "京都" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "京都",
+          },
         ],
       }),
       makeRecord({
         category: "memories",
         startedAt: 2000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "奈良" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "奈良",
+          },
         ],
       }),
       makeRecord({
         category: "memories",
         startedAt: 3000,
         noteEntries: [
-          { questionId: "q1", questionTitle: "好きな場所", answer: "東京" },
+          {
+            questionId: "memories-01",
+            questionTitle: "好きな場所",
+            answer: "東京",
+          },
         ],
       }),
     ];
@@ -330,5 +414,38 @@ describe("getNoteEntriesForAI", () => {
     expect(result.entries[0]?.answer).toBe("東京");
     expect(result.entries[0]?.previousAnswer).toBe("奈良");
     expect(result.entries[0]?.updateCount).toBe(2);
+  });
+
+  it("excludes note entries whose questionId belongs to another category", () => {
+    const records = [
+      makeRecord({
+        category: "memories",
+        noteEntries: [
+          { questionId: "memories-01", questionTitle: "思い出", answer: "修学旅行" },
+          { questionId: "money-01", questionTitle: "メインの銀行", answer: "三菱UFJ" },
+        ],
+      }),
+    ];
+    const result = getNoteEntriesForAI(records, "memories");
+    expect(result.totalEntries).toBe(1);
+    expect(result.entries[0]?.questionTitle).toBe("思い出");
+    expect(result.entries[0]?.answer).toBe("修学旅行");
+  });
+
+  it("collects matching questionIds from discussedCategories conversations", () => {
+    const records = [
+      makeRecord({
+        category: null,
+        discussedCategories: ["memories", "money"],
+        noteEntries: [
+          { questionId: "memories-01", questionTitle: "思い出", answer: "京都旅行" },
+          { questionId: "money-01", questionTitle: "メインの銀行", answer: "SBI" },
+        ],
+      }),
+    ];
+    const result = getNoteEntriesForAI(records, "money");
+    expect(result.totalEntries).toBe(1);
+    expect(result.entries[0]?.questionTitle).toBe("メインの銀行");
+    expect(result.entries[0]?.answer).toBe("SBI");
   });
 });

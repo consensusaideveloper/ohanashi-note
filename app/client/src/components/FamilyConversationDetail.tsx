@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getFamilyConversationDetail,
   getFamilyAudioUrl,
+  logPrintEvent,
 } from "../lib/family-api";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { TRANSCRIPT_DISCLAIMER, UI_MESSAGES } from "../lib/constants";
@@ -88,6 +89,18 @@ export function FamilyConversationDetail({
     anchor.click();
     document.body.removeChild(anchor);
   }, [audioUrl, audioMimeType, record]);
+
+  const handleLogConversationPrint = useCallback((): void => {
+    logPrintEvent(creatorId, "conversation", conversationId).catch(
+      (err: unknown) => {
+        console.error("Failed to log family conversation print event:", {
+          error: err instanceof Error ? err.message : "Unknown error",
+          creatorId,
+          conversationId,
+        });
+      },
+    );
+  }, [creatorId, conversationId]);
 
   const loadData = useCallback((): void => {
     setIsLoading(true);
@@ -508,6 +521,7 @@ export function FamilyConversationDetail({
             coveredQuestionIds: record.coveredQuestionIds,
           }}
           onClose={handleClosePrint}
+          onPrint={handleLogConversationPrint}
         />
       )}
     </div>

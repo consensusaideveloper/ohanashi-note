@@ -13,6 +13,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.998.0",
     "@aws-sdk/s3-request-presigner": "^3.998.0",
+    "@fontsource/noto-sans-jp": "^5.2.9",
     "@hono/node-server": "^1.14.0",
     "@hono/node-ws": "^1.1.0",
     "archiver": "^7.0.1",
@@ -21,11 +22,13 @@
     "firebase-admin": "^13.6.1",
     "hono": "^4.7.0",
     "openai": "^6.24.0",
+    "pdfkit": "^0.17.2",
     "pg": "^8.18.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
+    "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.16.0",
     "@types/ws": "^8.5.0",
     "drizzle-kit": "^0.31.9",

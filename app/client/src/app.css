@@ -373,6 +373,28 @@ details[open] > summary .details-chevron {
 /* --- Print Styles --- */
 
 @media print {
+  body.print-mode-active * {
+    visibility: hidden !important;
+  }
+
+  body.print-mode-active .print-target-active,
+  body.print-mode-active .print-target-active * {
+    visibility: visible !important;
+  }
+
+  body.print-mode-active .print-target-active {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+    z-index: 2147483647 !important;
+  }
+
   .print-hidden {
     display: none !important;
   }

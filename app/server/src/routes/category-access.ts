@@ -99,30 +99,82 @@ async function requireOpenedLifecycle(
 }
 
 /**
- * Format a conversation DB row for the note/conversations API response.
- * Mirrors the shape used by the legacy sharing route.
- */
-function formatConversation(
-  row: typeof conversations.$inferSelect,
-): Record<string, unknown> {
-  return {
-    id: row.id,
-    category: row.category,
-    startedAt: row.startedAt.getTime(),
-    summary: row.summary,
-    oneLinerSummary: row.oneLinerSummary,
-    noteEntries: row.noteEntries ?? [],
-    coveredQuestionIds: row.coveredQuestionIds ?? [],
-    keyPoints: row.keyPoints ?? null,
-  };
-}
-
-/**
  * Extract the category prefix from a question ID (e.g. "memories-01" → "memories").
  */
 function questionCategoryId(questionId: string): string | undefined {
   const idx = questionId.lastIndexOf("-");
   return idx > 0 ? questionId.slice(0, idx) : undefined;
+}
+
+function filterNoteEntriesByCategories(
+  noteEntries: unknown,
+  accessibleCategories?: Set<string>,
+): unknown[] {
+  if (!Array.isArray(noteEntries)) {
+    return [];
+  }
+  if (accessibleCategories === undefined) {
+    return noteEntries;
+  }
+  return noteEntries.filter((entry) => {
+    const typed = entry as { questionId?: string };
+    if (typeof typed.questionId !== "string") {
+      return false;
+    }
+    const catId = questionCategoryId(typed.questionId);
+    return catId !== undefined && accessibleCategories.has(catId);
+  });
+}
+
+function filterCoveredQuestionIdsByCategories(
+  coveredQuestionIds: string[] | null,
+  accessibleCategories?: Set<string>,
+): string[] {
+  if (!Array.isArray(coveredQuestionIds)) {
+    return [];
+  }
+  if (accessibleCategories === undefined) {
+    return coveredQuestionIds;
+  }
+  return coveredQuestionIds.filter((qId) => {
+    const catId = questionCategoryId(qId);
+    return catId !== undefined && accessibleCategories.has(catId);
+  });
+}
+
+function collectConversationCategories(
+  row: Pick<
+    typeof conversations.$inferSelect,
+    "category" | "noteEntries" | "coveredQuestionIds"
+  >,
+): Set<string> {
+  const categories = new Set<string>();
+
+  if (row.category !== null) {
+    categories.add(row.category);
+  }
+
+  if (Array.isArray(row.noteEntries)) {
+    for (const entry of row.noteEntries) {
+      const typed = entry as { questionId?: string };
+      if (typeof typed.questionId !== "string") continue;
+      const catId = questionCategoryId(typed.questionId);
+      if (catId !== undefined) {
+        categories.add(catId);
+      }
+    }
+  }
+
+  if (Array.isArray(row.coveredQuestionIds)) {
+    for (const qId of row.coveredQuestionIds) {
+      const catId = questionCategoryId(qId);
+      if (catId !== undefined) {
+        categories.add(catId);
+      }
+    }
+  }
+
+  return categories;
 }
 
 /**
@@ -137,29 +189,70 @@ function hasAccessibleContent(
   >,
   accessibleCategories: Set<string>,
 ): boolean {
-  if (row.category !== null && accessibleCategories.has(row.category)) {
-    return true;
-  }
-  if (Array.isArray(row.noteEntries)) {
-    for (const entry of row.noteEntries) {
-      const typed = entry as { questionId?: string };
-      if (typeof typed.questionId === "string") {
-        const catId = questionCategoryId(typed.questionId);
-        if (catId !== undefined && accessibleCategories.has(catId)) {
-          return true;
-        }
-      }
-    }
-  }
-  if (Array.isArray(row.coveredQuestionIds)) {
-    for (const qId of row.coveredQuestionIds) {
-      const catId = questionCategoryId(qId);
-      if (catId !== undefined && accessibleCategories.has(catId)) {
-        return true;
-      }
+  for (const catId of collectConversationCategories(row)) {
+    if (accessibleCategories.has(catId)) {
+      return true;
     }
   }
   return false;
+}
+
+function hasOnlyAccessibleContent(
+  row: Pick<
+    typeof conversations.$inferSelect,
+    "category" | "noteEntries" | "coveredQuestionIds"
+  >,
+  accessibleCategories: Set<string>,
+): boolean {
+  const categories = collectConversationCategories(row);
+  if (categories.size === 0) {
+    return true;
+  }
+
+  for (const catId of categories) {
+    if (!accessibleCategories.has(catId)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Format a conversation DB row for the note/conversations API response.
+ * Mirrors the shape used by the legacy sharing route.
+ */
+function formatConversation(
+  row: typeof conversations.$inferSelect,
+  options?: {
+    accessibleCategories?: Set<string>;
+    redactNarrative?: boolean;
+    includeKeyPoints?: boolean;
+  },
+): Record<string, unknown> {
+  const filteredNoteEntries = filterNoteEntriesByCategories(
+    row.noteEntries,
+    options?.accessibleCategories,
+  );
+  const filteredCoveredQuestionIds = filterCoveredQuestionIdsByCategories(
+    row.coveredQuestionIds,
+    options?.accessibleCategories,
+  );
+
+  return {
+    id: row.id,
+    category:
+      row.category === null ||
+      options?.accessibleCategories === undefined ||
+      options.accessibleCategories.has(row.category)
+        ? row.category
+        : null,
+    startedAt: row.startedAt.getTime(),
+    summary: options?.redactNarrative ? null : row.summary,
+    oneLinerSummary: options?.redactNarrative ? null : row.oneLinerSummary,
+    noteEntries: filteredNoteEntries,
+    coveredQuestionIds: filteredCoveredQuestionIds,
+    keyPoints: options?.includeKeyPoints === false ? null : row.keyPoints ?? null,
+  };
 }
 
 async function getActiveTargetMember(
@@ -652,7 +745,12 @@ categoryAccessRoute.get(
 
       return c.json({
         categoryId,
-        conversations: rows.map(formatConversation),
+        conversations: rows.map((row) =>
+          formatConversation(row, {
+            accessibleCategories: new Set([categoryId]),
+            includeKeyPoints: role !== "member",
+          }),
+        ),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -708,7 +806,7 @@ categoryAccessRoute.get(
 
       if (role === "representative" || role === "creator") {
         return c.json({
-          conversations: allRows.map(formatConversation),
+          conversations: allRows.map((row) => formatConversation(row)),
         });
       }
 
@@ -748,7 +846,17 @@ categoryAccessRoute.get(
       );
 
       return c.json({
-        conversations: filtered.map(formatConversation),
+        conversations: filtered.map((row) => {
+          const fullyAccessible = hasOnlyAccessibleContent(
+            row,
+            accessibleCategories,
+          );
+          return formatConversation(row, {
+            accessibleCategories,
+            redactNarrative: !fullyAccessible,
+            includeKeyPoints: false,
+          });
+        }),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -770,10 +878,28 @@ categoryAccessRoute.get(
 /** Format a conversation DB row with full detail (transcript, emotions, etc.). */
 function formatConversationDetail(
   row: typeof conversations.$inferSelect,
+  options?: {
+    accessibleCategories?: Set<string>;
+    includeKeyPoints?: boolean;
+  },
 ): Record<string, unknown> {
+  const filteredNoteEntries = filterNoteEntriesByCategories(
+    row.noteEntries,
+    options?.accessibleCategories,
+  );
+  const filteredCoveredQuestionIds = filterCoveredQuestionIdsByCategories(
+    row.coveredQuestionIds,
+    options?.accessibleCategories,
+  );
+
   return {
     id: row.id,
-    category: row.category,
+    category:
+      row.category === null ||
+      options?.accessibleCategories === undefined ||
+      options.accessibleCategories.has(row.category)
+        ? row.category
+        : null,
     startedAt: row.startedAt.getTime(),
     endedAt: row.endedAt ? row.endedAt.getTime() : null,
     transcript: row.transcript ?? [],
@@ -781,9 +907,9 @@ function formatConversationDetail(
     summaryStatus: row.summaryStatus,
     oneLinerSummary: row.oneLinerSummary,
     discussedCategories: row.discussedCategories,
-    keyPoints: row.keyPoints ?? null,
-    noteEntries: row.noteEntries ?? [],
-    coveredQuestionIds: row.coveredQuestionIds ?? [],
+    keyPoints: options?.includeKeyPoints === false ? null : row.keyPoints ?? null,
+    noteEntries: filteredNoteEntries,
+    coveredQuestionIds: filteredCoveredQuestionIds,
     audioAvailable: row.audioAvailable,
   };
 }
@@ -862,9 +988,13 @@ categoryAccessRoute.get(
           accessRows.map((r) => r.categoryId),
         );
 
-        if (!hasAccessibleContent(row, accessibleCategories)) {
+        if (!hasOnlyAccessibleContent(row, accessibleCategories)) {
           return c.json(
-            { error: "この会話を閲覧する権限がありません", code: "FORBIDDEN" },
+            {
+              error:
+                "この会話には許可されていないカテゴリの内容が含まれるため閲覧できません",
+              code: "FORBIDDEN",
+            },
             403,
           );
         }
@@ -879,7 +1009,9 @@ categoryAccessRoute.get(
         resourceId: conversationId,
       });
 
-      return c.json(formatConversationDetail(row));
+      return c.json(
+        formatConversationDetail(row, { includeKeyPoints: role !== "member" }),
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       logger.error("Failed to get conversation detail", {
@@ -1003,10 +1135,11 @@ categoryAccessRoute.get(
           accessRows.map((r) => r.categoryId),
         );
 
-        if (!hasAccessibleContent(row, accessibleCategories)) {
+        if (!hasOnlyAccessibleContent(row, accessibleCategories)) {
           return c.json(
             {
-              error: "この会話の音声を再生する権限がありません",
+              error:
+                "この会話には許可されていないカテゴリの内容が含まれるため音声を再生できません",
               code: "FORBIDDEN",
             },
             403,

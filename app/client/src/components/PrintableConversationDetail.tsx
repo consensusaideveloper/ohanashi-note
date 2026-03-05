@@ -1,7 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { SETTINGS_MESSAGES, TRANSCRIPT_DISCLAIMER } from "../lib/constants";
+import { printTargetElement } from "../lib/print";
 
 import type { ReactNode } from "react";
 import type { QuestionCategory } from "../types/conversation";
@@ -27,6 +28,7 @@ interface PrintableConversationData {
 interface PrintableConversationDetailProps {
   data: PrintableConversationData;
   onClose: () => void;
+  onPrint?: () => void;
 }
 
 function formatDateJapanese(timestamp: number): string {
@@ -49,13 +51,20 @@ function getCategoryLabel(categoryId: string): string | null {
 export function PrintableConversationDetail({
   data,
   onClose,
+  onPrint,
 }: PrintableConversationDetailProps): ReactNode {
+  const printRootRef = useRef<HTMLDivElement | null>(null);
+
   const handlePrint = useCallback((): void => {
-    window.print();
-  }, []);
+    onPrint?.();
+    printTargetElement(printRootRef.current);
+  }, [onPrint]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg-primary overflow-y-auto">
+    <div
+      ref={printRootRef}
+      className="print-target fixed inset-0 z-50 bg-bg-primary overflow-y-auto"
+    >
       {/* Screen-only controls */}
       <div className="print-hidden sticky top-0 bg-bg-primary/95 backdrop-blur-sm border-b border-border-light px-4 py-3 flex items-center justify-between z-10">
         <button

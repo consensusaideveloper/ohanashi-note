@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-import { getConversation, getAudioRecording } from "../lib/storage";
+import {
+  getConversation,
+  getAudioRecording,
+  getUserProfile,
+} from "../lib/storage";
 import { QUESTION_CATEGORIES } from "../lib/questions";
 import { verifyRecordIntegrity } from "../lib/integrity";
 import { TRANSCRIPT_DISCLAIMER, UI_MESSAGES } from "../lib/constants";
+import { logPrintEvent } from "../lib/family-api";
 import { AudioPlayer } from "./AudioPlayer";
 import { PrintableConversationDetail } from "./PrintableConversationDetail";
 
@@ -74,6 +79,7 @@ export function ConversationDetail({
   const [integrityStatus, setIntegrityStatus] =
     useState<IntegrityStatus | null>(null);
   const [showPrint, setShowPrint] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const handleOpenPrint = useCallback((): void => {
     setShowPrint(true);
@@ -93,6 +99,25 @@ export function ConversationDetail({
     anchor.click();
     document.body.removeChild(anchor);
   }, [audioUrl, record]);
+
+  const handleLogConversationPrint = useCallback((): void => {
+    if (userId === null) return;
+    logPrintEvent(userId, "conversation", conversationId).catch(
+      (err: unknown) => {
+        console.error("Failed to log conversation print event:", {
+          error: err instanceof Error ? err.message : "Unknown error",
+          userId,
+          conversationId,
+        });
+      },
+    );
+  }, [userId, conversationId]);
+
+  useEffect(() => {
+    void getUserProfile().then((profile) => {
+      setUserId(profile?.id ?? null);
+    });
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -528,6 +553,7 @@ export function ConversationDetail({
             coveredQuestionIds: record.coveredQuestionIds ?? [],
           }}
           onClose={handleClosePrint}
+          onPrint={handleLogConversationPrint}
         />
       )}
     </div>
