@@ -316,7 +316,7 @@ export function ConversationHistory({
 
   return (
     <div className="flex-1 w-full overflow-y-auto px-4 py-4">
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-lg md:max-w-2xl mx-auto">
         {/* Period filter pills */}
         <div
           className="flex gap-2 mb-4"

@@ -71,9 +71,7 @@ const MIME_EXT_MAP: Record<string, string> = {
 };
 
 const DEFAULT_AUDIO_EXT = ".webm";
-const QUESTION_META_BY_ID = new Map(
-  QUESTIONS.map((q) => [q.id, q] as const),
-);
+const QUESTION_META_BY_ID = new Map(QUESTIONS.map((q) => [q.id, q] as const));
 
 // --- Public functions ---
 

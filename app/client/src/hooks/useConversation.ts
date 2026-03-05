@@ -1505,7 +1505,9 @@ export function useConversation(): UseConversationReturn {
               // Step 3: Build session config
               const character = getCharacterById(characterId);
               const familyCtx = familyContextRef.current ?? undefined;
-              const deferredTopic = getOnboardingDeferredTopic(profile?.id ?? null);
+              const deferredTopic = getOnboardingDeferredTopic(
+                profile?.id ?? null,
+              );
               onboardingDeferredTopicRef.current = deferredTopic;
               let instructions: string;
               if (category !== null) {
@@ -1532,7 +1534,8 @@ export function useConversation(): UseConversationReturn {
                 );
               }
               if (deferredTopic !== null) {
-                instructions += buildOnboardingHandoffInstruction(deferredTopic);
+                instructions +=
+                  buildOnboardingHandoffInstruction(deferredTopic);
               }
 
               const silenceDurationMs =

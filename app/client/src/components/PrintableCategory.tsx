@@ -113,7 +113,9 @@ export function PrintableCategory({
                   <span className="mt-0.5">□</span>
                   <p>
                     {question.title}
-                    <span className="ml-1 text-text-secondary/80">（未記入）</span>
+                    <span className="ml-1 text-text-secondary/80">
+                      （未記入）
+                    </span>
                   </p>
                 </div>
               ))}

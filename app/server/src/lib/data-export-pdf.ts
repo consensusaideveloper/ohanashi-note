@@ -27,12 +27,9 @@ const require = createRequire(import.meta.url);
 function resolveJapaneseFonts(): FontSet | null {
   try {
     return {
-      regular: require.resolve(
-        "@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff",
-      ),
-      bold: require.resolve(
-        "@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-700-normal.woff",
-      ),
+      regular:
+        require.resolve("@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff"),
+      bold: require.resolve("@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-700-normal.woff"),
     };
   } catch {
     return null;
@@ -117,9 +114,12 @@ export async function buildEndingNotePdf(
   applyFonts(doc);
 
   writeTitle(doc, "わたしのエンディングノート");
-  doc.font("jp-regular").fontSize(11).text(`作成日: ${formatDate(new Date())}`, {
-    align: "center",
-  });
+  doc
+    .font("jp-regular")
+    .fontSize(11)
+    .text(`作成日: ${formatDate(new Date())}`, {
+      align: "center",
+    });
   if (userName !== "") {
     doc.text(`作成者: ${userName}`, { align: "center" });
   }

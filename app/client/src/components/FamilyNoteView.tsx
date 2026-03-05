@@ -165,7 +165,7 @@ export function FamilyNoteView({
 
       {/* Category sections */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <div className="space-y-3 max-w-lg mx-auto">
+        <div className="space-y-3 max-w-lg md:max-w-2xl mx-auto">
           {flexibleNotes.length > 0 && (
             <ConversationInsightsSection
               items={flexibleNotes}

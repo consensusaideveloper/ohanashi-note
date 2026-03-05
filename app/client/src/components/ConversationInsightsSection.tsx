@@ -33,7 +33,11 @@ function formatRecordedAt(timestamp: number): string {
 
 function groupByCategory(
   items: FlexibleNoteItem[],
-): Array<{ category: InsightCategory; label: string; items: FlexibleNoteItem[] }> {
+): Array<{
+  category: InsightCategory;
+  label: string;
+  items: FlexibleNoteItem[];
+}> {
   const map = new Map<InsightCategory, FlexibleNoteItem[]>();
 
   for (const item of items) {

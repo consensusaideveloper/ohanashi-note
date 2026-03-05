@@ -520,7 +520,7 @@ export function TodoDetailScreen({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <div className="space-y-6 max-w-lg mx-auto">
+        <div className="space-y-6 max-w-lg md:max-w-2xl mx-auto">
           {/* Loading */}
           {isLoading && (
             <div className="flex items-center justify-center py-12">

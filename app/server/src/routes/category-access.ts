@@ -251,7 +251,8 @@ function formatConversation(
     oneLinerSummary: options?.redactNarrative ? null : row.oneLinerSummary,
     noteEntries: filteredNoteEntries,
     coveredQuestionIds: filteredCoveredQuestionIds,
-    keyPoints: options?.includeKeyPoints === false ? null : row.keyPoints ?? null,
+    keyPoints:
+      options?.includeKeyPoints === false ? null : (row.keyPoints ?? null),
   };
 }
 
@@ -907,7 +908,8 @@ function formatConversationDetail(
     summaryStatus: row.summaryStatus,
     oneLinerSummary: row.oneLinerSummary,
     discussedCategories: row.discussedCategories,
-    keyPoints: options?.includeKeyPoints === false ? null : row.keyPoints ?? null,
+    keyPoints:
+      options?.includeKeyPoints === false ? null : (row.keyPoints ?? null),
     noteEntries: filteredNoteEntries,
     coveredQuestionIds: filteredCoveredQuestionIds,
     audioAvailable: row.audioAvailable,

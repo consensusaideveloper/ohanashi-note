@@ -318,7 +318,7 @@ export function ConversationScreen({
           <>
             <button
               type="button"
-              className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
+              className="min-h-[140px] min-w-[140px] md:min-h-[168px] md:min-w-[168px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center"
               onClick={handleQuickStart}
             >
               お話しする
@@ -346,7 +346,7 @@ export function ConversationScreen({
     >
       {/* Top bar with end-conversation button and remaining time */}
       <div
-        className={`flex-none w-full flex items-center justify-between px-4 pt-4 ${isLandscape ? "" : "max-w-lg"}`}
+        className={`flex-none w-full flex items-center justify-between px-4 pt-4 ${isLandscape ? "" : "max-w-lg md:max-w-2xl"}`}
       >
         <button
           type="button"
@@ -386,7 +386,7 @@ export function ConversationScreen({
       {/* Session time warning banner */}
       {sessionWarningShown && (
         <div
-          className={`flex-none w-full px-4 pt-2 ${isLandscape ? "" : "max-w-lg"}`}
+          className={`flex-none w-full px-4 pt-2 ${isLandscape ? "" : "max-w-lg md:max-w-2xl"}`}
         >
           <div className="rounded-card bg-warning/10 border border-warning/30 px-4 py-3 text-lg text-text-primary">
             {UI_MESSAGES.sessionWarning}
@@ -440,7 +440,7 @@ export function ConversationScreen({
 
         {/* Transcript (scrollable — only this area scrolls) */}
         <div
-          className={`overflow-y-auto overscroll-contain px-4 pb-8 notebook-lines ${isLandscape ? "" : "flex-1 w-full max-w-lg min-h-0"}`}
+          className={`overflow-y-auto overscroll-contain px-4 pb-8 notebook-lines ${isLandscape ? "" : "flex-1 w-full max-w-lg md:max-w-2xl min-h-0"}`}
         >
           {transcript.map((entry, index) => (
             <div
@@ -450,7 +450,7 @@ export function ConversationScreen({
               }`}
             >
               <div
-                className={`max-w-[80%] rounded-card px-4 py-3 text-lg ${
+                className={`max-w-[80%] md:max-w-[70%] rounded-card px-4 py-3 text-lg ${
                   entry.role === "user"
                     ? "bg-accent-primary-light text-text-primary"
                     : "bg-bg-surface text-text-primary shadow-sm"
@@ -463,7 +463,7 @@ export function ConversationScreen({
           {/* Show pending assistant text as it streams in */}
           {pendingAssistantText && (
             <div className="mb-3 flex justify-start animate-fade-in">
-              <div className="max-w-[80%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
+              <div className="max-w-[80%] md:max-w-[70%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
                 {pendingAssistantText}
               </div>
             </div>

@@ -328,7 +328,7 @@ export function ParticipantAccessScreen({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <div className="space-y-3 max-w-lg mx-auto">
+        <div className="space-y-3 max-w-lg md:max-w-2xl mx-auto">
           {/* Recommendation banner */}
           {hasUnappliedRecommendations && (
             <div className="rounded-card border border-accent-secondary bg-accent-secondary/10 p-4 space-y-3">

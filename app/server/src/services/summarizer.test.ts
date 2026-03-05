@@ -106,9 +106,7 @@ describe("filterMeaningfulImportantStatements", () => {
       insight("甘いものよりせんべいが好き", "hobbies"),
     ]);
 
-    expect(result).toEqual([
-      insight("甘いものよりせんべいが好き", "hobbies"),
-    ]);
+    expect(result).toEqual([insight("甘いものよりせんべいが好き", "hobbies")]);
   });
 
   it("deduplicates surviving statements", () => {

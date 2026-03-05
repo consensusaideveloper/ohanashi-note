@@ -80,7 +80,9 @@ function looksLikeDeferredTopic(text: string): boolean {
   if (includesAnyKeyword(text, NOTE_TOPIC_KEYWORDS)) return true;
 
   // Fallback for free-form narratives that do not include explicit keywords.
-  const hasNarrativeTone = /です|ます|たい|だった|けど|かな|。|！|？/.test(text);
+  const hasNarrativeTone = /です|ます|たい|だった|けど|かな|。|！|？/.test(
+    text,
+  );
   return hasNarrativeTone && text.length >= 16;
 }
 
@@ -94,7 +96,10 @@ function readDeferredTopicPayload(): DeferredTopicPayload | null {
     }
 
     const payload = parsed as Partial<DeferredTopicPayload>;
-    if (typeof payload.topic !== "string" || typeof payload.savedAt !== "number") {
+    if (
+      typeof payload.topic !== "string" ||
+      typeof payload.savedAt !== "number"
+    ) {
       return null;
     }
     const normalizedUserId = normalizeUserId(payload.userId);
@@ -133,7 +138,9 @@ export function rememberOnboardingDeferredTopic(
   }
 }
 
-export function getOnboardingDeferredTopic(userId?: string | null): string | null {
+export function getOnboardingDeferredTopic(
+  userId?: string | null,
+): string | null {
   const payload = readDeferredTopicPayload();
   if (payload === null) {
     return null;

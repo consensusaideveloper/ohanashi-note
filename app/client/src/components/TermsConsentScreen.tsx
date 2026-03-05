@@ -98,7 +98,7 @@ export function TermsConsentScreen({
   return (
     <div className="min-h-dvh flex flex-col bg-bg-primary">
       <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="max-w-lg mx-auto space-y-6">
+        <div className="max-w-lg md:max-w-2xl mx-auto space-y-6">
           {/* Heading */}
           <h1 className="text-2xl font-bold text-text-primary text-center">
             {TERMS_CONSENT_MESSAGES.heading}
@@ -195,7 +195,7 @@ export function TermsConsentScreen({
 
       {/* Submit button (sticky at bottom) */}
       <div className="sticky bottom-0 bg-bg-primary border-t border-border-light px-6 py-4">
-        <div className="max-w-lg mx-auto">
+        <div className="max-w-lg md:max-w-2xl mx-auto">
           <button
             type="button"
             disabled={!isAgreed || isSubmitting}

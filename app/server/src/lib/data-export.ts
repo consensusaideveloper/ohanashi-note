@@ -6,10 +6,7 @@ import { db } from "../db/connection.js";
 import { conversations, users } from "../db/schema.js";
 import { r2 } from "./r2.js";
 import { logger } from "./logger.js";
-import {
-  buildConversationPdf,
-  buildEndingNotePdf,
-} from "./data-export-pdf.js";
+import { buildConversationPdf, buildEndingNotePdf } from "./data-export-pdf.js";
 import {
   buildAudioLinkageCsv,
   formatDate,
@@ -76,7 +73,9 @@ export async function generateDataExportZip(userId: string): Promise<Readable> {
         const result = await r2.downloadObject(row.audioStorageKey);
         const ext = getAudioExtension(row.audioMimeType);
         exportedAudioFileName = `録音${ext}`;
-        archive.append(result.data, { name: `${convDir}/${exportedAudioFileName}` });
+        archive.append(result.data, {
+          name: `${convDir}/${exportedAudioFileName}`,
+        });
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "Unknown error";

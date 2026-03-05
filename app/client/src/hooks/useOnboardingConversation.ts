@@ -29,14 +29,8 @@ import {
   rememberOnboardingDeferredTopic,
 } from "../lib/onboarding-deferred-topic";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
-import {
-  getUserProfile,
-  saveUserProfile,
-} from "../lib/storage";
-import {
-  connectRealtimeSession,
-  endRealtimeSession,
-} from "../lib/api";
+import { getUserProfile, saveUserProfile } from "../lib/storage";
+import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";

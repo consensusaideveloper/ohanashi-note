@@ -124,7 +124,7 @@ export function OnboardingComplete({
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
-      <div className="w-full max-w-lg flex flex-col items-center">
+      <div className="w-full max-w-lg md:max-w-2xl flex flex-col items-center">
         {/* Checkmark icon */}
         <div className="w-20 h-20 rounded-full bg-accent-secondary flex items-center justify-center">
           <svg

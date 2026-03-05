@@ -321,7 +321,7 @@ export function FamilyScreen({
       {/* Notification list (expandable) */}
       {showNotifications && (
         <div className="flex-none px-4 pb-4">
-          <div className="max-w-lg mx-auto">
+          <div className="max-w-lg md:max-w-2xl mx-auto">
             <NotificationList
               notifications={notifications}
               onMarkRead={handleMarkNotificationRead}
@@ -334,7 +334,7 @@ export function FamilyScreen({
 
       {/* Segment control */}
       <div className="flex-none px-4 pb-4">
-        <div className="flex gap-2 max-w-lg mx-auto">
+        <div className="flex gap-2 max-w-lg md:max-w-2xl mx-auto">
           <button
             type="button"
             className={`flex-1 min-h-11 rounded-full text-lg font-medium transition-colors ${
@@ -367,7 +367,7 @@ export function FamilyScreen({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
-        <div className="space-y-8 max-w-lg mx-auto">
+        <div className="space-y-8 max-w-lg md:max-w-2xl mx-auto">
           {section === "my-family" && (
             <>
               {/* Section 1: Registered family members */}

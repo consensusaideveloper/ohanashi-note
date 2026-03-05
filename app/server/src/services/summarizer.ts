@@ -2,9 +2,7 @@ import OpenAI from "openai";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { sanitizeText } from "./sanitizer.js";
-import {
-  getAllQuestionsListJson,
-} from "../lib/questions.js";
+import { getAllQuestionsListJson } from "../lib/questions.js";
 import type { QuestionCategory } from "../types/conversation.js";
 
 // --- Types ---
@@ -867,9 +865,8 @@ export async function summarizeConversation(
       normalizedCategories: normalizedDiscussedCategories,
     });
   }
-  const inferredDiscussedCategories = inferDiscussedCategoriesFromNoteEntries(
-    finalizedNoteEntries,
-  );
+  const inferredDiscussedCategories =
+    inferDiscussedCategoriesFromNoteEntries(finalizedNoteEntries);
   const finalizedDiscussedCategories =
     normalizedDiscussedCategories.length > 0
       ? normalizedDiscussedCategories

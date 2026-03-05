@@ -421,8 +421,16 @@ describe("getNoteEntriesForAI", () => {
       makeRecord({
         category: "memories",
         noteEntries: [
-          { questionId: "memories-01", questionTitle: "思い出", answer: "修学旅行" },
-          { questionId: "money-01", questionTitle: "メインの銀行", answer: "三菱UFJ" },
+          {
+            questionId: "memories-01",
+            questionTitle: "思い出",
+            answer: "修学旅行",
+          },
+          {
+            questionId: "money-01",
+            questionTitle: "メインの銀行",
+            answer: "三菱UFJ",
+          },
         ],
       }),
     ];
@@ -438,8 +446,16 @@ describe("getNoteEntriesForAI", () => {
         category: null,
         discussedCategories: ["memories", "money"],
         noteEntries: [
-          { questionId: "memories-01", questionTitle: "思い出", answer: "京都旅行" },
-          { questionId: "money-01", questionTitle: "メインの銀行", answer: "SBI" },
+          {
+            questionId: "memories-01",
+            questionTitle: "思い出",
+            answer: "京都旅行",
+          },
+          {
+            questionId: "money-01",
+            questionTitle: "メインの銀行",
+            answer: "SBI",
+          },
         ],
       }),
     ];

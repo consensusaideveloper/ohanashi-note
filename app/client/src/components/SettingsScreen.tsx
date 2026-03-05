@@ -473,7 +473,7 @@ export function SettingsScreen({
 
   return (
     <div className="flex-1 w-full overflow-y-auto px-4 py-4">
-      <div className="max-w-lg mx-auto space-y-8">
+      <div className="max-w-lg md:max-w-2xl mx-auto space-y-8">
         {/* Section 1: Font Size (safe, reversible) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-text-secondary">

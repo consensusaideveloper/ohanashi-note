@@ -493,7 +493,7 @@ export function ConversationDetail({
         )}
 
         {/* Transcript — notebook ruled lines for "reading your notes" feel */}
-        <div className="w-full max-w-lg mx-auto px-4 py-4 notebook-lines">
+        <div className="w-full max-w-lg md:max-w-2xl mx-auto px-4 py-4 notebook-lines">
           {record.transcript.length > 0 && (
             <div className="flex gap-2.5 items-start mb-4 px-2 py-3 bg-bg-surface rounded-xl">
               <svg
@@ -527,7 +527,7 @@ export function ConversationDetail({
                 }`}
               >
                 <div
-                  className={`max-w-[80%] rounded-card px-4 py-3 text-lg ${
+                  className={`max-w-[80%] md:max-w-[70%] rounded-card px-4 py-3 text-lg ${
                     entry.role === "user"
                       ? "bg-accent-primary-light text-text-primary"
                       : "bg-bg-surface text-text-primary shadow-sm"

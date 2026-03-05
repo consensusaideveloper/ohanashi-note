@@ -63,7 +63,7 @@ export function CharacterSelector({
       </div>
 
       {/* Character cards — single column for clarity */}
-      <div className="w-full max-w-lg flex flex-col gap-3 md:gap-4">
+      <div className="w-full max-w-lg md:max-w-2xl flex flex-col gap-3 md:gap-4">
         {CHARACTERS.map((character) => (
           <button
             key={character.id}

@@ -56,7 +56,7 @@ export function OnboardingConversation({
   if (state === "idle") {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
-        <div className="w-full max-w-lg text-center space-y-6">
+        <div className="w-full max-w-lg md:max-w-2xl text-center space-y-6">
           <h1 className="text-2xl md:text-3xl font-bold text-text-primary">
             {ONBOARDING_CONVERSATION_MESSAGES.title}
           </h1>
@@ -65,7 +65,7 @@ export function OnboardingConversation({
           </p>
           <button
             type="button"
-            className="min-h-[140px] min-w-[140px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center mx-auto"
+            className="min-h-[140px] min-w-[140px] md:min-h-[168px] md:min-w-[168px] rounded-full bg-accent-primary text-text-on-accent text-2xl font-medium shadow-lg active:scale-95 transition-transform flex items-center justify-center mx-auto"
             onClick={start}
           >
             {ONBOARDING_CONVERSATION_MESSAGES.startButton}
@@ -83,7 +83,7 @@ export function OnboardingConversation({
       className={`min-h-dvh flex flex-col items-center bg-gradient-to-b ${gradient}`}
     >
       {/* Top bar with end-conversation button */}
-      <div className="flex-none w-full max-w-lg px-4 pt-4">
+      <div className="flex-none w-full max-w-lg md:max-w-2xl px-4 pt-4">
         <button
           type="button"
           className="min-w-11 min-h-11 flex items-center gap-1.5 rounded-full px-3 hover:bg-bg-surface/60 active:bg-bg-surface transition-colors"
@@ -128,7 +128,7 @@ export function OnboardingConversation({
       </div>
 
       {/* Transcript area */}
-      <div className="flex-1 w-full max-w-lg overflow-y-auto px-4 pb-8 notebook-lines">
+      <div className="flex-1 w-full max-w-lg md:max-w-2xl overflow-y-auto px-4 pb-8 notebook-lines">
         {transcript.map((entry, index) => (
           <div
             key={`${entry.timestamp}-${index}`}
@@ -137,7 +137,7 @@ export function OnboardingConversation({
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-card px-4 py-3 text-lg ${
+              className={`max-w-[80%] md:max-w-[70%] rounded-card px-4 py-3 text-lg ${
                 entry.role === "user"
                   ? "bg-accent-primary-light text-text-primary"
                   : "bg-bg-surface text-text-primary shadow-sm"
@@ -149,7 +149,7 @@ export function OnboardingConversation({
         ))}
         {pendingAssistantText !== "" && (
           <div className="mb-3 flex justify-start animate-fade-in">
-            <div className="max-w-[80%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
+            <div className="max-w-[80%] md:max-w-[70%] rounded-card px-4 py-3 text-lg bg-bg-surface text-text-secondary shadow-sm">
               {pendingAssistantText}
             </div>
           </div>
