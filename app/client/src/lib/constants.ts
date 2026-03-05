@@ -39,9 +39,13 @@ export const SESSION_CONFIG = {
   },
 } as const;
 
+const REALTIME_TRANSCRIPTION_MODEL =
+  (import.meta.env["VITE_REALTIME_TRANSCRIPTION_MODEL"] as string | undefined) ??
+  "gpt-4o-mini-transcribe";
+
 /** Keep client-side session.update payloads aligned with server realtime config. */
 export const SESSION_AUDIO_INPUT_CONFIG = {
-  transcription: { model: "gpt-4o-mini-transcribe" },
+  transcription: { model: REALTIME_TRANSCRIPTION_MODEL },
   noise_reduction: { type: "far_field" as const },
 } as const;
 
@@ -506,7 +510,7 @@ export const UI_MESSAGES = {
     aiUnavailable:
       "ただいま混み合っています。少し時間をおいてからお試しください。",
     quotaExceeded:
-      "本日の会話回数の上限に達しました。また明日お話ししましょう。",
+      "会話回数の上限に達しました。明日または来月にお試しください。",
     unknown: "うまくいきませんでした。もう一度お試しください。",
     saveFailed: "保存できませんでした。もう一度お試しください。",
     printLoadFailed:

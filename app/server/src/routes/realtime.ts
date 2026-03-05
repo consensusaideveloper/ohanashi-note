@@ -30,8 +30,6 @@ import {
 // --- Constants ---
 
 const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
-
-const REALTIME_MODEL = "gpt-realtime-mini";
 const REALTIME_SESSION_RESOURCE_TYPE = "realtime_session";
 const REALTIME_SESSION_STARTED_ACTION = "realtime_session_started";
 const REALTIME_SESSION_ENDED_ACTION = "realtime_session_ended";
@@ -41,9 +39,6 @@ const REALTIME_ONBOARDING_SESSION_STARTED_ACTION =
 const REALTIME_ONBOARDING_SESSION_ENDED_ACTION = "realtime_onboarding_ended";
 const MAX_INSTRUCTIONS_LENGTH = 50_000;
 const MAX_SDP_LENGTH = 200_000;
-
-/** Transcription model for GA Realtime API (replaces whisper-1 from beta). */
-const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 
 interface SessionEndRequestBody {
   sessionKey: string;
@@ -160,14 +155,21 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       if (!isOnboarding) {
         const quota = await getSessionQuota(userId);
         if (!quota.canStart) {
-          logger.warn("Daily session quota exceeded (realtime connect)", {
+          const isMonthlyLimit = quota.limitPeriod === "monthly";
+          logger.warn("Session quota exceeded (realtime connect)", {
             userId,
+            limitPeriod: quota.limitPeriod,
             usedToday: quota.usedToday,
+            usedThisMonth: quota.usedThisMonth,
           });
           return c.json(
             {
-              error: "本日の会話回数の上限に達しました",
-              code: "DAILY_QUOTA_EXCEEDED",
+              error: isMonthlyLimit
+                ? "今月の会話回数の上限に達しました"
+                : "本日の会話回数の上限に達しました",
+              code: isMonthlyLimit
+                ? "MONTHLY_QUOTA_EXCEEDED"
+                : "DAILY_QUOTA_EXCEEDED",
             },
             429,
           );
@@ -233,14 +235,14 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
     // --- Build session config for OpenAI ---
     const openaiSession = {
       type: "realtime",
-      model: REALTIME_MODEL,
+      model: config.openaiModels.realtime,
       output_modalities: ["audio"],
       instructions: sanitizedInstructions,
       tools: approvedSessionConfig.tools,
       tool_choice: "auto",
       audio: {
         input: {
-          transcription: { model: TRANSCRIPTION_MODEL },
+          transcription: { model: config.openaiModels.realtimeTranscription },
           turn_detection: approvedSessionConfig.turnDetection,
           noise_reduction: { type: "far_field" },
         },

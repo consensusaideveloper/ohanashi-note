@@ -93,6 +93,10 @@ beforeEach(async () => {
     maxDaily: 3,
     usedToday: 0,
     remaining: 3,
+    maxMonthly: null,
+    usedThisMonth: null,
+    remainingThisMonth: null,
+    limitPeriod: null,
     canStart: true,
   });
   vi.stubGlobal("fetch", vi.fn());
@@ -115,6 +119,10 @@ describe("realtimeRoute", () => {
       maxDaily: 3,
       usedToday: 3,
       remaining: 0,
+      maxMonthly: null,
+      usedThisMonth: null,
+      remainingThisMonth: null,
+      limitPeriod: "daily",
       canStart: false,
     });
 
@@ -133,6 +141,36 @@ describe("realtimeRoute", () => {
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toMatchObject({
       code: "DAILY_QUOTA_EXCEEDED",
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns monthly quota exceeded when monthly limit is reached", async () => {
+    vi.mocked(getSessionQuota).mockResolvedValue({
+      maxDaily: 3,
+      usedToday: 1,
+      remaining: 2,
+      maxMonthly: 3,
+      usedThisMonth: 3,
+      remainingThisMonth: 0,
+      limitPeriod: "monthly",
+      canStart: false,
+    });
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionConfig: validSessionConfig,
+          sdp: "v=0\r\n",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "MONTHLY_QUOTA_EXCEEDED",
     });
     expect(global.fetch).not.toHaveBeenCalled();
   });

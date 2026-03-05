@@ -64,8 +64,6 @@ export interface SummarizeResponse {
 // --- Constants ---
 
 const MAX_TRANSCRIPT_CHARS = 30_000;
-const MODEL = "gpt-5-nano";
-const TEMPERATURE = 1;
 const DISCUSSED_CATEGORY_ENUM = [
   "memories",
   "people",
@@ -772,14 +770,16 @@ export async function summarizeConversation(
 
   logger.info("Summarization request", {
     category: request.category,
+    model: config.openaiModels.summarizer,
+    temperature: config.openaiModels.summarizerTemperature,
     transcriptLength: request.transcript.length,
     userTranscriptLength: userOnlyTranscript.length,
     truncatedChars: userMessage.length,
   });
 
   const completion = await openai.chat.completions.create({
-    model: MODEL,
-    temperature: TEMPERATURE,
+    model: config.openaiModels.summarizer,
+    temperature: config.openaiModels.summarizerTemperature,
     response_format: { type: "json_schema", json_schema: RESPONSE_JSON_SCHEMA },
     messages: [
       { role: "system", content: systemPrompt },

@@ -19,12 +19,22 @@ interface R2Config {
   bucketName: string;
 }
 
+interface OpenAIModelConfig {
+  realtime: string;
+  realtimeTranscription: string;
+  retranscription: string;
+  summarizer: string;
+  summarizerTemperature: number;
+  todo: string;
+}
+
 interface Config {
   openaiApiKey: string;
   port: number;
   nodeEnv: "development" | "production";
   allowedOrigins: string[];
   logLevel: LogLevel;
+  openaiModels: OpenAIModelConfig;
   firebaseAdmin: FirebaseAdminConfig;
   r2: R2Config | null;
 }
@@ -41,6 +51,20 @@ function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
 }
 
+function getOptionalNumberEnv(name: string, defaultValue: number): number {
+  const rawValue = process.env[name];
+  if (rawValue === undefined) {
+    return defaultValue;
+  }
+  const parsed = Number.parseFloat(rawValue);
+  if (Number.isNaN(parsed)) {
+    throw new Error(
+      `Invalid numeric environment variable: ${name}=${rawValue}`,
+    );
+  }
+  return parsed;
+}
+
 export function loadConfig(): Config {
   return {
     openaiApiKey: getRequiredEnv("OPENAI_API_KEY"),
@@ -52,6 +76,23 @@ export function loadConfig(): Config {
       .split(",")
       .map((o) => o.trim()),
     logLevel: getOptionalEnv("LOG_LEVEL", "info") as LogLevel,
+    openaiModels: {
+      realtime: getOptionalEnv("OPENAI_REALTIME_MODEL", "gpt-realtime-mini"),
+      realtimeTranscription: getOptionalEnv(
+        "OPENAI_REALTIME_TRANSCRIPTION_MODEL",
+        "gpt-4o-mini-transcribe",
+      ),
+      retranscription: getOptionalEnv(
+        "OPENAI_RETRANSCRIPTION_MODEL",
+        "gpt-4o-mini-transcribe",
+      ),
+      summarizer: getOptionalEnv("OPENAI_SUMMARIZER_MODEL", "gpt-5-mini"),
+      summarizerTemperature: getOptionalNumberEnv(
+        "OPENAI_SUMMARIZER_TEMPERATURE",
+        0.2,
+      ),
+      todo: getOptionalEnv("OPENAI_TODO_MODEL", "gpt-5-nano"),
+    },
     firebaseAdmin: {
       projectId: getRequiredEnv("FIREBASE_PROJECT_ID"),
       clientEmail: getRequiredEnv("FIREBASE_CLIENT_EMAIL"),

@@ -9,7 +9,7 @@ import type { Context } from "hono";
 
 const sessionQuotaRoute = new Hono();
 
-/** GET /api/session-quota — Check remaining session quota for the day. */
+/** GET /api/session-quota — Check remaining daily/monthly session quota. */
 sessionQuotaRoute.get("/api/session-quota", async (c: Context) => {
   try {
     const firebaseUid = getFirebaseUid(c);

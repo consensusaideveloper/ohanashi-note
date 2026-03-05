@@ -76,6 +76,10 @@ export interface SessionQuota {
   maxDaily: number;
   usedToday: number;
   remaining: number;
+  maxMonthly: number | null;
+  usedThisMonth: number | null;
+  remainingThisMonth: number | null;
+  limitPeriod: "daily" | "monthly" | null;
   canStart: boolean;
 }
 

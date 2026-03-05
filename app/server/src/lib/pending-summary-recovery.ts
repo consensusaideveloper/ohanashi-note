@@ -15,6 +15,7 @@ import {
   buildHybridTranscript,
 } from "../services/transcriber.js";
 import { logger } from "./logger.js";
+import { loadConfig } from "./config.js";
 
 import type { QuestionCategory } from "../types/conversation.js";
 
@@ -44,6 +45,7 @@ interface TranscriptEntry {
 
 async function recoverPendingSummaries(): Promise<void> {
   try {
+    const config = loadConfig();
     const cutoff = new Date(Date.now() - PENDING_STALENESS_THRESHOLD_MS);
 
     const pendingRows = await db
@@ -96,7 +98,7 @@ async function recoverPendingSummaries(): Promise<void> {
               typedTranscript,
               retranscription,
             );
-            transcriptionModel = "gpt-4o-mini-transcribe";
+            transcriptionModel = config.openaiModels.retranscription;
             logger.info("Recovery: using re-transcribed audio", {
               conversationId: row.id,
             });
@@ -141,7 +143,7 @@ async function recoverPendingSummaries(): Promise<void> {
 
         logger.info("Recovered pending summary", {
           conversationId: row.id,
-          transcriptionModel: transcriptionModel ?? "whisper-1 (original)",
+          transcriptionModel: transcriptionModel ?? "original transcript",
         });
       } catch (error: unknown) {
         const message =

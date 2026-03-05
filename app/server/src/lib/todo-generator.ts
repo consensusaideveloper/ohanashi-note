@@ -27,7 +27,6 @@ interface AiTodoResponse {
 
 // --- Constants ---
 
-const MODEL = "gpt-5-nano";
 const MAX_ANSWER_LENGTH = 500;
 
 /** Categories where TODOs are typically not actionable. */
@@ -129,12 +128,13 @@ export async function generateTodosFromNotes(
   const userMessage = JSON.stringify(truncatedEntries, null, 2);
 
   logger.info("Generating TODOs from note entries", {
+    model: config.openaiModels.todo,
     entryCount: truncatedEntries.length,
     categories: [...new Set(truncatedEntries.map((e) => e.category))],
   });
 
   const completion = await openai.chat.completions.create({
-    model: MODEL,
+    model: config.openaiModels.todo,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

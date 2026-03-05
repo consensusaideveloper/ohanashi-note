@@ -1,5 +1,5 @@
 // Enhanced summarization endpoint.
-// Downloads audio from R2, re-transcribes with gpt-4o-mini-transcribe,
+// Downloads audio from R2, re-transcribes with a higher-accuracy model,
 // builds a hybrid transcript, and runs summarization for higher accuracy.
 
 import { Hono } from "hono";
@@ -10,6 +10,7 @@ import { conversations } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
+import { loadConfig } from "../lib/config.js";
 import { summarizeConversation } from "../services/summarizer.js";
 import {
   transcribeFromR2,
@@ -34,9 +35,6 @@ const VALID_CATEGORIES = new Set([
   "trust",
   "support",
 ]);
-
-const TRANSCRIPTION_MODEL_NAME = "gpt-4o-mini-transcribe";
-
 // --- Types ---
 
 interface TranscriptEntry {
@@ -59,6 +57,7 @@ enhancedSummarizeRoute.post(
   "/api/conversations/:id/enhanced-summarize",
   async (c: Context) => {
     try {
+      const config = loadConfig();
       const firebaseUid = getFirebaseUid(c);
       const userId = await resolveUserId(firebaseUid);
       const conversationId = c.req.param("id");
@@ -168,7 +167,7 @@ enhancedSummarizeRoute.post(
             originalTranscript,
             retranscription,
           );
-          usedModel = TRANSCRIPTION_MODEL_NAME;
+          usedModel = config.openaiModels.retranscription;
 
           logger.info("Using re-transcribed transcript for summarization", {
             conversationId,
@@ -227,7 +226,7 @@ enhancedSummarizeRoute.post(
 
       logger.info("Enhanced summarization completed", {
         conversationId,
-        transcriptionModel: usedModel ?? "whisper-1 (original)",
+        transcriptionModel: usedModel ?? "original transcript",
         coveredQuestions: result.coveredQuestionIds.length,
         noteEntries: result.noteEntries.length,
       });

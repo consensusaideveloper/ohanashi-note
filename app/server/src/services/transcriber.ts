@@ -1,6 +1,5 @@
 // Post-conversation re-transcription service.
-// Downloads audio from R2 and re-transcribes with gpt-4o-mini-transcribe
-// for higher accuracy than the Realtime API's whisper-1.
+// Downloads audio from R2 and re-transcribes with a higher-accuracy model.
 
 import { Readable } from "node:stream";
 
@@ -12,7 +11,6 @@ import { r2 } from "../lib/r2.js";
 
 // --- Constants ---
 
-const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const TRANSCRIPTION_LANGUAGE = "ja";
 const TRANSCRIPTION_TIMEOUT_MS = 120_000;
 
@@ -76,7 +74,7 @@ function parseTranscriptionSegments(value: unknown): TranscriptionSegment[] {
 // --- Main functions ---
 
 /**
- * Download audio from R2 and transcribe it with gpt-4o-mini-transcribe.
+ * Download audio from R2 and transcribe it with the configured model.
  * Returns null if R2 is not configured, audio cannot be downloaded,
  * or transcription fails.
  */
@@ -111,7 +109,7 @@ export async function transcribeFromR2(
     });
 
     const response = await openai.audio.transcriptions.create({
-      model: TRANSCRIPTION_MODEL,
+      model: config.openaiModels.retranscription,
       file,
       language: TRANSCRIPTION_LANGUAGE,
       response_format: "json",

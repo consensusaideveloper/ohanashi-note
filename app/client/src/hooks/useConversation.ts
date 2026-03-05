@@ -92,6 +92,10 @@ const RECORDER_MIME_CANDIDATES = [
 const ENHANCED_SUMMARIZE_MAX_ATTEMPTS = 3;
 const ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS = 1500;
 const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const QUOTA_EXCEEDED_CODES = new Set([
+  "DAILY_QUOTA_EXCEEDED",
+  "MONTHLY_QUOTA_EXCEEDED",
+]);
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
@@ -391,6 +395,26 @@ function isRetryableSummarizeError(error: unknown): boolean {
   }
   // Fetch network errors are typically surfaced as TypeError.
   return error instanceof TypeError;
+}
+
+function extractApiErrorCode(error: ApiError): string | null {
+  if (error.responseBody.length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(error.responseBody) as { code?: unknown };
+    return typeof parsed.code === "string" ? parsed.code : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSessionQuotaExceededError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 429) {
+    return false;
+  }
+  const code = extractApiErrorCode(error);
+  return code !== null && QUOTA_EXCEEDED_CODES.has(code);
 }
 
 async function requestEnhancedSummarizeWithRetry(
@@ -1580,6 +1604,8 @@ export function useConversation(): UseConversationReturn {
               err.message.includes("getUserMedia"))
           ) {
             dispatch({ type: "ERROR", errorType: "microphone" });
+          } else if (isSessionQuotaExceededError(err)) {
+            dispatch({ type: "ERROR", errorType: "quotaExceeded" });
           } else {
             dispatch({ type: "ERROR", errorType: "network" });
           }
