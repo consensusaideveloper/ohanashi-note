@@ -8,8 +8,8 @@ COPY package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
 
-# Install all dependencies exactly as locked
-RUN npm ci
+# Install all dependencies exactly as locked, including optional native packages
+RUN npm ci --include=optional
 
 # Copy source code
 COPY . .
