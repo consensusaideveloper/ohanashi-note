@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { onAuthStateChanged, signInWithGoogle, signOut } from "../lib/auth";
+import {
+  getPendingRedirectUser,
+  onAuthStateChanged,
+  signInWithGoogle,
+  signOut,
+} from "../lib/auth";
 
 import type { User } from "firebase/auth";
 
@@ -23,10 +28,37 @@ export function useAuth(): UseAuthReturn {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let authReady = false;
+    let redirectReady = false;
+
+    const settleLoading = (): void => {
+      if (authReady && redirectReady) {
+        setLoading(false);
+      }
+    };
+
     const unsubscribe = onAuthStateChanged((firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
+      authReady = true;
+      settleLoading();
     });
+
+    void getPendingRedirectUser()
+      .then((redirectUser) => {
+        if (redirectUser !== null) {
+          setUser(redirectUser);
+        }
+      })
+      .catch((err: unknown) => {
+        const message =
+          err instanceof Error ? err.message : "ログインに失敗しました";
+        setError(message);
+      })
+      .finally(() => {
+        redirectReady = true;
+        settleLoading();
+      });
+
     return unsubscribe;
   }, []);
 
