@@ -68,6 +68,7 @@ import type {
   ConversationState,
   ErrorType,
   NoteEntry,
+  NoteUpdateProposal,
   QuestionCategory,
   SpeakingPreferences,
   TranscriptEntry,
@@ -242,6 +243,10 @@ export interface UseConversationReturn {
   sessionWarningShown: boolean;
   /** Monotonic signal incremented when AI-triggered auto-end is completed. */
   autoEndSignal: number;
+  /** Conversation ID of the most recently completed session (available after summary). */
+  lastConversationId: string | null;
+  /** Note update proposals from the most recently completed guided conversation. */
+  noteUpdateProposals: NoteUpdateProposal[];
   /** Start a conversation. Pass null for category to use AI-guided mode. */
   start: (characterId: CharacterId, category: QuestionCategory | null) => void;
   /** Stop the conversation and disconnect. */
@@ -250,9 +255,11 @@ export interface UseConversationReturn {
   retry: () => void;
   /** Update speaking preferences (applied to the next session). */
   updateSessionConfig: (preferences: SpeakingPreferences) => void;
+  /** Clear pending note update proposals after user has reviewed them. */
+  clearProposals: () => void;
 }
 
-/** Collect latest note entries from past records for change-aware summarization. */
+/** Collect relevant past note entries for change-aware summarization. */
 function collectCurrentNoteEntries(
   records: readonly ConversationRecord[],
   category: QuestionCategory | null,
@@ -264,19 +271,26 @@ function collectCurrentNoteEntries(
       ? new Set(getQuestionsByCategory(category).map((q) => q.id))
       : null;
 
-  const entryMap = new Map<string, NoteEntry>();
   const sorted = [...records].sort((a, b) => a.startedAt - b.startedAt);
+  const entries: NoteEntry[] = [];
+  const seen = new Set<string>();
 
   for (const record of sorted) {
     if (record.noteEntries === undefined) continue;
     for (const entry of record.noteEntries) {
       if (questionIds === null || questionIds.has(entry.questionId)) {
-        entryMap.set(entry.questionId, entry);
+        const answer = entry.answer.trim();
+        const dedupeKey = `${entry.questionId}:${answer}`;
+        if (seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
+        entries.push(entry);
       }
     }
   }
 
-  return Array.from(entryMap.values());
+  return entries;
 }
 
 /**
@@ -468,6 +482,12 @@ function buildOnboardingHandoffInstruction(topic: string): string {
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [autoEndSignal, setAutoEndSignal] = useState(0);
+  const [lastConversationId, setLastConversationId] = useState<string | null>(
+    null,
+  );
+  const [pendingProposals, setPendingProposals] = useState<
+    NoteUpdateProposal[]
+  >([]);
 
   const webrtc = useWebRTC();
   const voiceActionRef = useVoiceActionRef();
@@ -1359,6 +1379,8 @@ export function useConversation(): UseConversationReturn {
     (characterId: CharacterId, category: QuestionCategory | null): void => {
       sessionQuotaActivationStateRef.current = "idle";
       resetMicGuard();
+      setPendingProposals([]);
+      setLastConversationId(null);
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
       categoryRef.current = category;
@@ -1741,8 +1763,22 @@ export function useConversation(): UseConversationReturn {
 
           await updateConversation(convId, {
             summary: result.summary,
-            coveredQuestionIds: result.coveredQuestionIds,
-            noteEntries: result.noteEntries,
+            coveredQuestionIds:
+              category === null && result.noteUpdateProposals.length > 0
+                ? []
+                : result.coveredQuestionIds,
+            noteEntries:
+              category === null && result.noteUpdateProposals.length > 0
+                ? []
+                : result.noteEntries,
+            pendingNoteEntries:
+              category === null && result.noteUpdateProposals.length > 0
+                ? result.noteEntries
+                : [],
+            noteUpdateProposals:
+              category === null && result.noteUpdateProposals.length > 0
+                ? result.noteUpdateProposals
+                : [],
             summaryStatus: "completed",
             oneLinerSummary: result.oneLinerSummary,
             discussedCategories:
@@ -1759,6 +1795,12 @@ export function useConversation(): UseConversationReturn {
               integrityHash,
               integrityHashedAt: Date.now(),
             });
+          }
+
+          // Expose proposals to the UI for user review
+          if (category === null && result.noteUpdateProposals.length > 0) {
+            setLastConversationId(convId);
+            setPendingProposals(result.noteUpdateProposals);
           }
 
           dispatch({ type: "SUMMARY_COMPLETED" });
@@ -1853,6 +1895,11 @@ export function useConversation(): UseConversationReturn {
     }, RETRY_DELAY_MS);
   }, [stop, start]);
 
+  const clearProposals = useCallback((): void => {
+    setPendingProposals([]);
+    setLastConversationId(null);
+  }, []);
+
   return {
     state: state.conversationState,
     errorType: state.errorType,
@@ -1865,9 +1912,12 @@ export function useConversation(): UseConversationReturn {
     remainingMs: state.remainingMs,
     sessionWarningShown: state.sessionWarningShown,
     autoEndSignal,
+    lastConversationId,
+    noteUpdateProposals: pendingProposals,
     start,
     stop,
     retry,
     updateSessionConfig,
+    clearProposals,
   };
 }

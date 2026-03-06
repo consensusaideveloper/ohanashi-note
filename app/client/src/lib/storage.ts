@@ -4,6 +4,7 @@ import { getQuestionsByCategory } from "./questions";
 import type {
   AudioRecording,
   ConversationRecord,
+  NoteUpdateProposalTarget,
   QuestionCategory,
   NoteEntry,
   UserProfile,
@@ -35,6 +36,8 @@ interface ServerConversation {
   summaryStatus: string;
   coveredQuestionIds: string[] | null;
   noteEntries: unknown;
+  pendingNoteEntries?: unknown;
+  noteUpdateProposals?: unknown;
   oneLinerSummary: string | null;
   discussedCategories: string[] | null;
   keyPoints: unknown;
@@ -65,6 +68,12 @@ function toConversationRecord(s: ServerConversation): ConversationRecord {
     coveredQuestionIds: s.coveredQuestionIds ?? [],
     noteEntries: Array.isArray(s.noteEntries)
       ? (s.noteEntries as NoteEntry[])
+      : [],
+    pendingNoteEntries: Array.isArray(s.pendingNoteEntries)
+      ? (s.pendingNoteEntries as ConversationRecord["pendingNoteEntries"])
+      : [],
+    noteUpdateProposals: Array.isArray(s.noteUpdateProposals)
+      ? (s.noteUpdateProposals as ConversationRecord["noteUpdateProposals"])
       : [],
     oneLinerSummary: s.oneLinerSummary ?? undefined,
     discussedCategories:
@@ -102,6 +111,49 @@ export async function updateConversation(
     body: JSON.stringify(updates),
   });
   notifyConversationUpdated();
+}
+
+export async function applyConversationNoteUpdates(
+  id: string,
+  targets?: NoteUpdateProposalTarget[],
+): Promise<{ success: true; appliedCount: number }> {
+  const response = await fetchWithAuth(
+    `/api/conversations/${id}/apply-note-updates`,
+    {
+      method: "POST",
+      body: JSON.stringify(targets !== undefined ? { targets } : {}),
+    },
+  );
+  const result = (await response.json()) as {
+    success: true;
+    appliedCount: number;
+  };
+  notifyConversationUpdated();
+  return result;
+}
+
+export async function dismissConversationNoteUpdates(
+  id: string,
+  targets?: NoteUpdateProposalTarget[],
+): Promise<{
+  success: true;
+  dismissedCount: number;
+  clearedAll: boolean;
+}> {
+  const response = await fetchWithAuth(
+    `/api/conversations/${id}/dismiss-note-updates`,
+    {
+      method: "POST",
+      body: JSON.stringify(targets !== undefined ? { targets } : {}),
+    },
+  );
+  const result = (await response.json()) as {
+    success: true;
+    dismissedCount: number;
+    clearedAll: boolean;
+  };
+  notifyConversationUpdated();
+  return result;
 }
 
 export async function getConversation(

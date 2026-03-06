@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  buildNoteUpdateProposals,
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
   normalizeDiscussedCategories,
@@ -145,5 +146,106 @@ describe("normalizeDiscussedCategories", () => {
 
   it("returns empty array when all categories are invalid", () => {
     expect(normalizeDiscussedCategories(["foo", "bar"])).toEqual([]);
+  });
+});
+
+describe("buildNoteUpdateProposals", () => {
+  it("creates update proposals for changed single-answer questions", () => {
+    const result = buildNoteUpdateProposals(
+      [
+        {
+          questionId: "medical-05",
+          questionTitle: "延命治療の希望",
+          answer: "延命治療は希望しない",
+          sourceEvidence: "延命治療は希望しません",
+        },
+      ],
+      [
+        {
+          questionId: "medical-05",
+          questionTitle: "延命治療の希望",
+          answer: "家族と相談して決めたい",
+        },
+      ],
+    );
+
+    expect(result).toEqual([
+      {
+        questionId: "medical-05",
+        questionTitle: "延命治療の希望",
+        category: "medical",
+        questionType: "single",
+        proposalType: "update",
+        previousAnswer: "家族と相談して決めたい",
+        proposedAnswer: "延命治療は希望しない",
+        sourceEvidence: "延命治療は希望しません",
+      },
+    ]);
+  });
+
+  it("creates add proposals for new accumulative answers and skips duplicates", () => {
+    const result = buildNoteUpdateProposals(
+      [
+        {
+          questionId: "medical-02",
+          questionTitle: "かかりつけの病院",
+          answer: "桜木クリニック",
+          sourceEvidence: "桜木クリニックに通っています",
+        },
+        {
+          questionId: "medical-02",
+          questionTitle: "かかりつけの病院",
+          answer: "中央病院",
+          sourceEvidence: "中央病院にも通っています",
+        },
+      ],
+      [
+        {
+          questionId: "medical-02",
+          questionTitle: "かかりつけの病院",
+          answer: "中央病院",
+        },
+      ],
+    );
+
+    expect(result).toEqual([
+      {
+        questionId: "medical-02",
+        questionTitle: "かかりつけの病院",
+        category: "medical",
+        questionType: "accumulative",
+        proposalType: "add",
+        previousAnswer: null,
+        proposedAnswer: "桜木クリニック",
+        sourceEvidence: "桜木クリニックに通っています",
+      },
+    ]);
+  });
+
+  it("limits proposals to two and prioritizes single-answer updates", () => {
+    const result = buildNoteUpdateProposals([
+      {
+        questionId: "money-01",
+        questionTitle: "メインの銀行",
+        answer: "北洋銀行",
+        sourceEvidence: "北洋銀行です",
+      },
+      {
+        questionId: "work-01",
+        questionTitle: "現在のお仕事",
+        answer: "今はパートをしている",
+        sourceEvidence: "今はパートをしています",
+      },
+      {
+        questionId: "people-01",
+        questionTitle: "大事な人",
+        answer: "近所の佐藤さん",
+        sourceEvidence: "佐藤さんにはお世話になっています",
+      },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.questionId).toBe("money-01");
+    expect(result[1]?.questionId).toBe("work-01");
   });
 });

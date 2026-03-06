@@ -40,8 +40,9 @@ export const SESSION_CONFIG = {
 } as const;
 
 const REALTIME_TRANSCRIPTION_MODEL =
-  (import.meta.env["VITE_REALTIME_TRANSCRIPTION_MODEL"] as string | undefined) ??
-  "gpt-4o-mini-transcribe";
+  (import.meta.env["VITE_REALTIME_TRANSCRIPTION_MODEL"] as
+    | string
+    | undefined) ?? "gpt-4o-mini-transcribe";
 
 /** Keep client-side session.update payloads aligned with server realtime config. */
 export const SESSION_AUDIO_INPUT_CONFIG = {
@@ -520,6 +521,7 @@ export const UI_MESSAGES = {
       "お話のまとめを作れませんでした。会話の内容は保存されていますのでご安心ください。",
     noteLoadFailed: "ノートの内容を読み込めませんでした。",
     historyLoadFailed: "会話の記録を読み込めませんでした。",
+    loadingText: "読み込み中...",
     loadFailed: "うまく読み込めませんでした。もう一度お試しください。",
   },
   family: {
@@ -624,9 +626,12 @@ export const UI_MESSAGES = {
     removeButton: "削除",
     editMemberDescription: "さんの情報を編集します",
     noNotifications: "通知はありません",
+    markAllReadLabel: "すべて既読にする",
     notificationBellLabel: "お知らせ",
     notificationCloseLabel: "閉じる",
-    notificationCriticalLabel: "要確認",
+    notificationCriticalLabel: "● 要確認",
+    notificationImportantLabel: "■ お知らせ",
+    notificationWellnessLabel: "△ 見守り",
     myFamilyTab: "わたしの家族",
     familyNotesTab: "家族のノート",
     pendingActionsCount: "件の対応",
@@ -1118,4 +1123,117 @@ export const TERMS_CONSENT_MESSAGES = {
   settingsSectionTitle: "利用規約・プライバシーポリシー",
   settingsViewTerms: "利用規約を見る",
   settingsViewPrivacy: "プライバシーポリシーを見る",
+} as const;
+
+// --- Wellness (見守り) feature messages (Japanese) ---
+export const WELLNESS_MESSAGES = {
+  activation: {
+    title: "見守り機能をはじめる",
+    description:
+      "毎日のおしゃべり状況を、あなたが決めた範囲でご家族に伝えます。",
+    nonSurveillance:
+      "監視する機能ではありません。共有内容はいつでも変更・停止できます。",
+    consentLabel: "上記の内容に同意します",
+    startButton: "始める",
+    laterButton: "あとで",
+    saving: "設定を保存しています...",
+    activateSuccess: "見守り機能を始めました",
+    activateFailed: "設定の保存に失敗しました。もう一度お試しください。",
+    consentRequired: "同意にチェックを入れてください",
+  },
+  shareLevel: {
+    basic: "基本だけ",
+    basicDescription: "会話回数などの基本情報のみ共有します",
+    summary: "要約も共有",
+    summaryDescription: "基本情報に加えて、短い週間まとめを共有します",
+    detailed: "詳細共有",
+    detailedDescription: "必要な変化点も含めて共有します",
+  },
+  settings: {
+    sectionTitle: "見守り機能",
+    sectionDescription: "ご家族に日々の会話状況をお知らせします",
+    enabledLabel: "見守りを使う",
+    shareLevelLabel: "共有する範囲",
+    deliveryDayLabel: "週次まとめの配信日",
+    pauseDurationLabel: "お休みする期間",
+    pauseButton: "しばらく見守りをお休みする",
+    resumeButton: "見守りを再開する",
+    pausedUntilLabel: "お休み中",
+    pausedDescription:
+      "この期間中は、ご家族への見守り通知と週間まとめを止めます。",
+    currentShareInfo: "現在共有中の情報",
+    lastUpdatedLabel: "最終更新",
+    saveFailed: "設定の保存に失敗しました。もう一度お試しください。",
+    saveSuccess: "見守り設定を更新しました",
+    pauseSuccess: "見守りを一時停止しました",
+    resumeSuccess: "見守りを再開しました",
+    pauseFailed: "一時停止の設定に失敗しました。もう一度お試しください。",
+    resumeFailed: "再開の設定に失敗しました。もう一度お試しください。",
+    confirmShareLevelChange: "共有範囲を変更してもよろしいですか？",
+    notStarted: "見守り機能はまだ始まっていません",
+    startButton: "見守りを始める",
+    loadingText: "読み込み中...",
+    loadFailed: "見守り設定の読み込みに失敗しました。",
+    retryButton: "もう一度読み込む",
+    disabledMessage: "見守り機能は現在オフです",
+    reEnableButton: "見守りをもう一度始める",
+    disableButton: "見守りをやめる",
+    disableConfirmTitle: "見守りをやめる",
+    disableConfirmMessage:
+      "見守り機能を停止してもよろしいですか？ご家族への情報共有がすべて止まります。",
+    pauseConfirmTemplate: "ご家族への見守り通知と週間まとめを止めます。",
+    resumeConfirmMessage: "見守りを再開してもよろしいですか？",
+    shareLevelBasicInfo: "会話回数などの基本情報",
+    shareLevelSummaryInfo: "基本情報 + 週間まとめ",
+    shareLevelDetailedInfo: "基本情報 + 週間まとめ + 変化点",
+  },
+  ownerStatus: {
+    title: "見守り状況",
+    engagedDaysLabel: "直近7日の会話回数",
+    daysUnit: "日",
+    missedStreakLabel: "連続未接触",
+    shareLevelLabel: "共有レベル",
+    noData: "まだ記録がありません",
+  },
+  familySummary: {
+    title: "見守りサマリー",
+    engagedDaysLabel: "今週の会話日数",
+    statusStable: "安定",
+    statusWarning: "注意",
+    statusUrgent: "要確認",
+    stableMessage: "今週は安定して会話できています。",
+    warningMessage: "2日連続で会話がありません。ご連絡をおすすめします。",
+    urgentMessage:
+      "3日以上会話が確認できていません。早めのご確認をお願いします。",
+    noData: "まだ見守りデータがありません",
+    emptyDescription: "見守りが始まると、ここに1週間の会話状況が表示されます。",
+    notEnabled: "この方は見守り機能を利用されていません",
+    notEnabledDescription:
+      "ご本人が見守りを始めると、ここに会話状況が表示されます。",
+    highlightsLabel: "変化点",
+    lastContactLabel: "最終接触",
+    missedStreakLabel: "連続未接触",
+    daysUnit: "日",
+    warningAction: "お電話やメッセージで様子を聞いてみてください。",
+    urgentAction: "早めにお電話でご確認をお願いします。",
+    periodLabel: "期間",
+    loadFailed: "見守りサマリーの読み込みに失敗しました。",
+    retryButton: "もう一度読み込む",
+    pausedLabel: "お休み中",
+    pausedDescription: "ご本人が見守りを一時停止しています。",
+  },
+  weekdays: [
+    "月曜日",
+    "火曜日",
+    "水曜日",
+    "木曜日",
+    "金曜日",
+    "土曜日",
+    "日曜日",
+  ] as readonly string[],
+  pauseDurations: {
+    oneWeek: "1週間",
+    twoWeeks: "2週間",
+    oneMonth: "1ヶ月",
+  },
 } as const;

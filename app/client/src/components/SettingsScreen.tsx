@@ -29,6 +29,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { PrintableEndingNote } from "./PrintableEndingNote";
 import { LegalDocumentViewer } from "./LegalDocumentViewer";
 import { Toast } from "./Toast";
+import { WellnessSettingsSection } from "./WellnessSettingsSection";
 
 import type {
   CharacterId,
@@ -798,6 +799,9 @@ export function SettingsScreen({
             ログアウト
           </button>
         </section>
+
+        {/* Section: Wellness monitoring */}
+        <WellnessSettingsSection />
 
         {/* Section: Legal Documents */}
         <section className="space-y-3">

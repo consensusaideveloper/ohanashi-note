@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { sanitizeText } from "./sanitizer.js";
-import { getAllQuestionsListJson } from "../lib/questions.js";
+import { getAllQuestionsListJson, getQuestionById } from "../lib/questions.js";
 import type { QuestionCategory } from "../types/conversation.js";
 
 // --- Types ---
@@ -43,6 +43,17 @@ export interface NoteEntry {
   sourceEvidence: string;
 }
 
+export interface NoteUpdateProposal {
+  questionId: string;
+  questionTitle: string;
+  category: QuestionCategory;
+  questionType: "single" | "accumulative";
+  proposalType: "add" | "update";
+  previousAnswer: string | null;
+  proposedAnswer: string;
+  sourceEvidence: string;
+}
+
 export interface KeyPoints {
   importantStatements: InsightStatement[];
   decisions: string[];
@@ -53,6 +64,7 @@ export interface SummarizeResponse {
   summary: string;
   coveredQuestionIds: string[];
   noteEntries: NoteEntry[];
+  noteUpdateProposals: NoteUpdateProposal[];
   extractedUserName?: string | null;
   oneLinerSummary: string;
   discussedCategories: string[];
@@ -709,6 +721,13 @@ function validateResponse(data: unknown): data is SummarizeResponse {
     if (typeof e["sourceEvidence"] !== "string") return false;
   }
 
+  if (
+    "noteUpdateProposals" in obj &&
+    obj["noteUpdateProposals"] !== undefined
+  ) {
+    return false;
+  }
+
   // extractedUserName is optional: string or null
   if (
     "extractedUserName" in obj &&
@@ -727,6 +746,111 @@ function validateResponse(data: unknown): data is SummarizeResponse {
   if (typeof obj["offTopicSummary"] !== "string") return false;
 
   return true;
+}
+
+function normalizeProposalText(value: string): string {
+  return value
+    .trim()
+    .replace(/[\s\u3000]+/g, " ")
+    .toLowerCase();
+}
+
+export function buildNoteUpdateProposals(
+  noteEntries: NoteEntry[],
+  previousNoteEntries?: PreviousNoteEntry[],
+): NoteUpdateProposal[] {
+  if (noteEntries.length === 0) {
+    return [];
+  }
+
+  const previousByQuestion = new Map<string, PreviousNoteEntry[]>();
+  for (const entry of previousNoteEntries ?? []) {
+    const existing = previousByQuestion.get(entry.questionId);
+    if (existing !== undefined) {
+      existing.push(entry);
+    } else {
+      previousByQuestion.set(entry.questionId, [entry]);
+    }
+  }
+
+  const proposals: NoteUpdateProposal[] = [];
+  const seenSingleQuestionIds = new Set<string>();
+  const seenAccumulativeKeys = new Set<string>();
+
+  for (const entry of noteEntries) {
+    const question = getQuestionById(entry.questionId);
+    const category =
+      question?.category ?? questionIdToCategory(entry.questionId);
+    if (question === undefined || category === null) {
+      continue;
+    }
+
+    const previousEntriesForQuestion =
+      previousByQuestion.get(entry.questionId) ?? [];
+    const normalizedAnswer = normalizeProposalText(entry.answer);
+
+    if (question.questionType === "single") {
+      if (seenSingleQuestionIds.has(entry.questionId)) {
+        continue;
+      }
+      seenSingleQuestionIds.add(entry.questionId);
+
+      const latestPrevious =
+        previousEntriesForQuestion[previousEntriesForQuestion.length - 1];
+      if (
+        latestPrevious !== undefined &&
+        normalizeProposalText(latestPrevious.answer) === normalizedAnswer
+      ) {
+        continue;
+      }
+
+      proposals.push({
+        questionId: entry.questionId,
+        questionTitle: question.title,
+        category,
+        questionType: question.questionType,
+        proposalType: latestPrevious === undefined ? "add" : "update",
+        previousAnswer: latestPrevious?.answer ?? null,
+        proposedAnswer: entry.answer.trim(),
+        sourceEvidence: entry.sourceEvidence.trim(),
+      });
+      continue;
+    }
+
+    const duplicateExists = previousEntriesForQuestion.some(
+      (previousEntry) =>
+        normalizeProposalText(previousEntry.answer) === normalizedAnswer,
+    );
+    if (duplicateExists) {
+      continue;
+    }
+
+    const dedupeKey = `${entry.questionId}:${normalizedAnswer}`;
+    if (seenAccumulativeKeys.has(dedupeKey)) {
+      continue;
+    }
+    seenAccumulativeKeys.add(dedupeKey);
+
+    proposals.push({
+      questionId: entry.questionId,
+      questionTitle: question.title,
+      category,
+      questionType: question.questionType,
+      proposalType: "add",
+      previousAnswer: null,
+      proposedAnswer: entry.answer.trim(),
+      sourceEvidence: entry.sourceEvidence.trim(),
+    });
+  }
+
+  const singleProposals = proposals.filter(
+    (proposal) => proposal.questionType === "single",
+  );
+  const accumulativeProposals = proposals.filter(
+    (proposal) => proposal.questionType === "accumulative",
+  );
+
+  return [...singleProposals, ...accumulativeProposals].slice(0, 2);
 }
 
 // --- Main function ---
@@ -880,6 +1004,10 @@ export async function summarizeConversation(
     ...parsed,
     discussedCategories: finalizedDiscussedCategories,
     noteEntries: finalizedNoteEntries,
+    noteUpdateProposals: buildNoteUpdateProposals(
+      finalizedNoteEntries,
+      request.previousNoteEntries,
+    ),
     coveredQuestionIds,
     keyPoints: {
       ...parsed.keyPoints,

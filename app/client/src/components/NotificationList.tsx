@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { UI_MESSAGES } from "../lib/constants";
+import { UI_MESSAGES, WELLNESS_MESSAGES } from "../lib/constants";
 
 import type { ReactNode } from "react";
 import type { Notification } from "../lib/family-api";
@@ -12,7 +12,7 @@ interface NotificationListProps {
   onClose: () => void;
 }
 
-const MARK_ALL_READ_LABEL = "すべて既読にする";
+const MARK_ALL_READ_LABEL = UI_MESSAGES.family.markAllReadLabel;
 
 /** Milliseconds per minute. */
 const MS_PER_MINUTE = 60_000;
@@ -26,6 +26,7 @@ const CRITICAL_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
   "death_reported",
   "consent_requested",
   "deletion_consent_requested",
+  "wellness_missed_day3",
 ]);
 
 /** Notification types with elevated importance. */
@@ -35,6 +36,15 @@ const IMPORTANT_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
   "creator_account_deleted",
   "death_report_cancelled",
   "consent_reset",
+  "wellness_missed_day2",
+  "wellness_weekly_summary",
+]);
+
+/** Notification types related to wellness monitoring. */
+const WELLNESS_NOTIFICATION_TYPES: ReadonlySet<string> = new Set([
+  "wellness_missed_day2",
+  "wellness_missed_day3",
+  "wellness_weekly_summary",
 ]);
 
 function formatRelativeTime(dateString: string): string {
@@ -67,6 +77,17 @@ function getUnreadBorderClass(type: string): string {
   return "border-l-4 border-l-accent-primary border-t border-r border-b border-t-border-light border-r-border-light border-b-border-light";
 }
 
+/** Returns a recommended action hint for wellness notifications, or null. */
+function getWellnessActionHint(type: string): string | null {
+  if (type === "wellness_missed_day2") {
+    return WELLNESS_MESSAGES.familySummary.warningAction;
+  }
+  if (type === "wellness_missed_day3") {
+    return WELLNESS_MESSAGES.familySummary.urgentAction;
+  }
+  return null;
+}
+
 interface NotificationCardProps {
   notification: Notification;
   onMarkRead: (id: string) => void;
@@ -89,6 +110,8 @@ function NotificationCard({
   const isCritical =
     !notification.isRead && CRITICAL_NOTIFICATION_TYPES.has(notification.type);
 
+  const wellnessActionHint = getWellnessActionHint(notification.type);
+
   return (
     <button
       type="button"
@@ -100,6 +123,21 @@ function NotificationCard({
           {UI_MESSAGES.family.notificationCriticalLabel}
         </span>
       )}
+      {!isCritical &&
+        !notification.isRead &&
+        WELLNESS_NOTIFICATION_TYPES.has(notification.type) && (
+          <span className="text-warning text-base font-medium">
+            {UI_MESSAGES.family.notificationWellnessLabel}
+          </span>
+        )}
+      {!isCritical &&
+        !notification.isRead &&
+        !WELLNESS_NOTIFICATION_TYPES.has(notification.type) &&
+        IMPORTANT_NOTIFICATION_TYPES.has(notification.type) && (
+          <span className="text-accent-primary-hover text-base font-medium">
+            {UI_MESSAGES.family.notificationImportantLabel}
+          </span>
+        )}
       <div className="flex items-start justify-between gap-3">
         <h3
           className={`text-lg ${notification.isRead ? "text-text-secondary" : "text-text-primary font-medium"}`}
@@ -115,6 +153,11 @@ function NotificationCard({
       >
         {notification.message}
       </p>
+      {wellnessActionHint !== null && !notification.isRead && (
+        <p className="text-base text-accent-primary-hover font-medium pt-1">
+          {wellnessActionHint}
+        </p>
+      )}
     </button>
   );
 }

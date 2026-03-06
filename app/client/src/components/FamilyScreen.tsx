@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 
-import { UI_MESSAGES, MAX_REPRESENTATIVES } from "../lib/constants";
+import {
+  UI_MESSAGES,
+  MAX_REPRESENTATIVES,
+  WELLNESS_MESSAGES,
+} from "../lib/constants";
 import { ApiError } from "../lib/api";
 import {
   listFamilyMembers,
@@ -15,6 +19,7 @@ import { useToast } from "../hooks/useToast";
 import { FamilyMemberCard } from "./FamilyMemberCard";
 import { FamilyInviteDialog } from "./FamilyInviteDialog";
 import { CreatorConnectionCard } from "./CreatorConnectionCard";
+import { FamilyWellnessSummaryCard } from "./FamilyWellnessSummaryCard";
 import { AccessPresetsSection } from "./AccessPresetsSection";
 import { NotificationBell } from "./NotificationBell";
 import { NotificationList } from "./NotificationList";
@@ -380,7 +385,9 @@ export function FamilyScreen({
                 </p>
 
                 {membersLoading && (
-                  <p className="text-lg text-text-secondary">読み込み中...</p>
+                  <p className="text-lg text-text-secondary">
+                    {UI_MESSAGES.error.loadingText}
+                  </p>
                 )}
 
                 {membersError && (
@@ -480,8 +487,28 @@ export function FamilyScreen({
                 {UI_MESSAGES.family.dashboardDescription}
               </p>
 
+              {/* Wellness summary cards */}
+              {!connectionsLoading &&
+                !connectionsError &&
+                connections.length > 0 && (
+                  <div className="space-y-3">
+                    <h2 className="text-lg font-semibold text-text-secondary">
+                      {WELLNESS_MESSAGES.familySummary.title}
+                    </h2>
+                    {connections.map((connection) => (
+                      <FamilyWellnessSummaryCard
+                        key={`wellness-${connection.id}`}
+                        creatorId={connection.creatorId}
+                        creatorName={connection.creatorName}
+                      />
+                    ))}
+                  </div>
+                )}
+
               {connectionsLoading && (
-                <p className="text-lg text-text-secondary">読み込み中...</p>
+                <p className="text-lg text-text-secondary">
+                  {UI_MESSAGES.error.loadingText}
+                </p>
               )}
 
               {connectionsError && (

@@ -7,6 +7,7 @@ import { useOrientation } from "../hooks/useOrientation";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiFace } from "./AiFace";
 import { ErrorDisplay } from "./ErrorDisplay";
+import { NoteUpdateProposalDialog } from "./NoteUpdateProposalDialog";
 
 import type { ReactNode } from "react";
 import type { UseConversationReturn } from "../hooks/useConversation";
@@ -68,9 +69,12 @@ export function ConversationScreen({
     remainingMs,
     sessionWarningShown,
     autoEndSignal,
+    lastConversationId,
+    noteUpdateProposals,
     start,
     stop,
     retry,
+    clearProposals,
   } = conversation;
 
   const orientation = useOrientation();
@@ -290,6 +294,10 @@ export function ConversationScreen({
     );
   }
 
+  // Show note update proposals after summary completes
+  const hasProposals =
+    noteUpdateProposals.length > 0 && lastConversationId !== null;
+
   // Idle screen — quick start button or auto-start preparing state
   if (state === "idle") {
     // Show preparing screen when auto-starting from note or manually starting
@@ -329,6 +337,15 @@ export function ConversationScreen({
               </p>
             )}
           </>
+        )}
+
+        {/* Note update proposal dialog — shown after summary completes */}
+        {hasProposals && (
+          <NoteUpdateProposalDialog
+            conversationId={lastConversationId}
+            proposals={noteUpdateProposals}
+            onComplete={clearProposals}
+          />
         )}
       </div>
     );

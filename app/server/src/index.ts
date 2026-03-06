@@ -22,12 +22,14 @@ import { todoRoute } from "./routes/todos.js";
 import { activityRoute } from "./routes/activity.js";
 import { realtimeRoute } from "./routes/realtime.js";
 import { dataExportRoute } from "./routes/data-export.js";
+import { wellnessRoute } from "./routes/wellness.js";
 import { loadConfig } from "./lib/config.js";
 import { logger } from "./lib/logger.js";
 
 // Start periodic background jobs (side-effect imports start the intervals)
 import "./lib/pending-summary-recovery.js";
 import "./lib/data-retention.js";
+import "./lib/wellness-jobs.js";
 import { authMiddleware } from "./middleware/auth.js";
 
 // --- Configuration ---
@@ -58,6 +60,8 @@ app.use("/api/terms-consent/*", authMiddleware);
 app.use("/api/terms-consent", authMiddleware);
 app.use("/api/realtime/*", authMiddleware);
 app.use("/api/data-export", authMiddleware);
+app.use("/api/wellness/*", authMiddleware);
+app.use("/api/wellness", authMiddleware);
 
 // --- Routes ---
 
@@ -79,6 +83,7 @@ app.route("/", activityRoute);
 app.route("/", termsConsentRoute);
 app.route("/", realtimeRoute);
 app.route("/", dataExportRoute);
+app.route("/", wellnessRoute);
 
 // In production, serve the client static files
 // Use absolute path to avoid CWD dependency on deployment platforms

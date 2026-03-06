@@ -4,6 +4,7 @@ import type {
   TranscriptEntry,
   QuestionCategory,
   NoteEntry,
+  NoteUpdateProposal,
   KeyPoints,
 } from "../types/conversation";
 
@@ -62,6 +63,7 @@ export interface SummarizeResult {
   summary: string;
   coveredQuestionIds: string[];
   noteEntries: NoteEntry[];
+  noteUpdateProposals: NoteUpdateProposal[];
   extractedUserName?: string | null;
   oneLinerSummary: string;
   discussedCategories: string[];

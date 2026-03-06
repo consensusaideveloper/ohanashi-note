@@ -114,11 +114,19 @@ async function recoverPendingSummaries(): Promise<void> {
         });
 
         // Only update if still pending (avoid overwriting a concurrent client update)
+        const shouldKeepAsPending =
+          category === null && result.noteUpdateProposals.length > 0;
         const updateData: Record<string, unknown> = {
           summary: result.summary,
           summaryStatus: "completed",
-          coveredQuestionIds: result.coveredQuestionIds,
-          noteEntries: result.noteEntries,
+          coveredQuestionIds: shouldKeepAsPending
+            ? []
+            : result.coveredQuestionIds,
+          noteEntries: shouldKeepAsPending ? [] : result.noteEntries,
+          pendingNoteEntries: shouldKeepAsPending ? result.noteEntries : [],
+          noteUpdateProposals: shouldKeepAsPending
+            ? result.noteUpdateProposals
+            : [],
           oneLinerSummary: result.oneLinerSummary,
           discussedCategories: result.discussedCategories,
           keyPoints: result.keyPoints,

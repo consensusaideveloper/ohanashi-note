@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
-import { conversations } from "../db/schema.js";
+import { activityLog, conversations } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
@@ -29,6 +29,8 @@ interface ClientConversation {
   summaryStatus: string;
   coveredQuestionIds: string[] | null;
   noteEntries: unknown;
+  pendingNoteEntries: unknown;
+  noteUpdateProposals: unknown;
   oneLinerSummary: string | null;
   discussedCategories: string[] | null;
   keyPoints: unknown;
@@ -57,6 +59,8 @@ function toClientConversation(
     summaryStatus: row.summaryStatus,
     coveredQuestionIds: row.coveredQuestionIds,
     noteEntries: row.noteEntries,
+    pendingNoteEntries: row.pendingNoteEntries,
+    noteUpdateProposals: row.noteUpdateProposals,
     oneLinerSummary: row.oneLinerSummary,
     discussedCategories: row.discussedCategories,
     keyPoints: row.keyPoints,
@@ -83,7 +87,56 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
+interface NoteUpdateTarget {
+  questionId: string;
+  proposedAnswer: string;
+}
+
+function parseNoteUpdateTargets(value: unknown): NoteUpdateTarget[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const targets: NoteUpdateTarget[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) {
+      return null;
+    }
+    const obj = item as Record<string, unknown>;
+    if (
+      typeof obj["questionId"] !== "string" ||
+      typeof obj["proposedAnswer"] !== "string"
+    ) {
+      return null;
+    }
+    targets.push({
+      questionId: obj["questionId"],
+      proposedAnswer: obj["proposedAnswer"],
+    });
+  }
+
+  return targets;
+}
+
 type ConversationWriteValues = Omit<typeof conversations.$inferInsert, "id">;
+const CONVERSATION_RESOURCE_TYPE = "conversation";
+
+async function logConversationAction(
+  creatorId: string,
+  action: string,
+  resourceId: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  await db.insert(activityLog).values({
+    creatorId,
+    actorId: creatorId,
+    actorRole: "creator",
+    action,
+    resourceType: CONVERSATION_RESOURCE_TYPE,
+    resourceId,
+    metadata: metadata ?? null,
+  });
+}
 
 // --- Route ---
 
@@ -233,6 +286,12 @@ conversationsRoute.post("/api/conversations", async (c: Context) => {
       noteEntries: Array.isArray(body["noteEntries"])
         ? body["noteEntries"]
         : [],
+      pendingNoteEntries: Array.isArray(body["pendingNoteEntries"])
+        ? body["pendingNoteEntries"]
+        : [],
+      noteUpdateProposals: Array.isArray(body["noteUpdateProposals"])
+        ? body["noteUpdateProposals"]
+        : [],
       oneLinerSummary: toStringOrNull(body["oneLinerSummary"]),
       discussedCategories: toStringArray(body["discussedCategories"]),
       keyPoints: body["keyPoints"] ?? null,
@@ -373,6 +432,12 @@ conversationsRoute.patch("/api/conversations/:id", async (c: Context) => {
     if ("coveredQuestionIds" in body)
       updates["coveredQuestionIds"] = body["coveredQuestionIds"];
     if ("noteEntries" in body) updates["noteEntries"] = body["noteEntries"];
+    if ("pendingNoteEntries" in body) {
+      updates["pendingNoteEntries"] = body["pendingNoteEntries"];
+    }
+    if ("noteUpdateProposals" in body) {
+      updates["noteUpdateProposals"] = body["noteUpdateProposals"];
+    }
     if ("oneLinerSummary" in body)
       updates["oneLinerSummary"] = body["oneLinerSummary"];
     if ("discussedCategories" in body)
@@ -425,6 +490,405 @@ conversationsRoute.patch("/api/conversations/:id", async (c: Context) => {
     );
   }
 });
+
+conversationsRoute.post(
+  "/api/conversations/:id/apply-note-updates",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const conversationId = c.req.param("id");
+
+      const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+      if (isDeletionBlocked(lifecycleStatus)) {
+        return c.json(
+          {
+            error: "ノートが保護されているため、この操作は実行できません",
+            code: "MODIFICATION_BLOCKED_BY_LIFECYCLE",
+          },
+          403,
+        );
+      }
+
+      const existing = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, conversationId),
+          eq(conversations.userId, userId),
+        ),
+      });
+
+      if (!existing) {
+        return c.json(
+          { error: "会話が見つかりません", code: "NOT_FOUND" },
+          404,
+        );
+      }
+
+      const body = await c.req.json<Record<string, unknown>>();
+      const targets = parseNoteUpdateTargets(body["targets"]);
+      const questionIds =
+        Array.isArray(body["questionIds"]) &&
+        body["questionIds"].every((value) => typeof value === "string")
+          ? (body["questionIds"] as string[])
+          : null;
+
+      const pendingEntries = Array.isArray(existing.pendingNoteEntries)
+        ? existing.pendingNoteEntries
+        : [];
+      const proposals = Array.isArray(existing.noteUpdateProposals)
+        ? existing.noteUpdateProposals
+        : [];
+
+      if (pendingEntries.length === 0 || proposals.length === 0) {
+        return c.json({ success: true, appliedCount: 0 });
+      }
+
+      const approvedTargetKeys =
+        targets !== null
+          ? new Set(
+              targets.map(
+                (target) => `${target.questionId}:${target.proposedAnswer}`,
+              ),
+            )
+          : null;
+      const approvedQuestionIds =
+        targets === null
+          ? new Set(
+              questionIds ??
+                proposals.map((proposal) => String(proposal["questionId"])),
+            )
+          : null;
+
+      const currentNoteEntries = Array.isArray(existing.noteEntries)
+        ? existing.noteEntries
+        : [];
+      const noteEntryMap = new Map<string, unknown>();
+      for (const entry of currentNoteEntries) {
+        if (
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["questionId"] === "string"
+        ) {
+          noteEntryMap.set(
+            String((entry as Record<string, unknown>)["questionId"]),
+            entry,
+          );
+        }
+      }
+
+      const nextPendingEntries: unknown[] = [];
+      const appliedEntries: unknown[] = [];
+      for (const entry of pendingEntries) {
+        const questionId =
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["questionId"] === "string"
+            ? String((entry as Record<string, unknown>)["questionId"])
+            : null;
+
+        const answer =
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["answer"] === "string"
+            ? String((entry as Record<string, unknown>)["answer"])
+            : null;
+        const targetKey =
+          questionId !== null && answer !== null
+            ? `${questionId}:${answer}`
+            : null;
+
+        const isApproved =
+          approvedTargetKeys !== null
+            ? targetKey !== null && approvedTargetKeys.has(targetKey)
+            : questionId !== null &&
+              approvedQuestionIds !== null &&
+              approvedQuestionIds.has(questionId);
+
+        if (!isApproved) {
+          nextPendingEntries.push(entry);
+          continue;
+        }
+        if (questionId === null) {
+          nextPendingEntries.push(entry);
+          continue;
+        }
+
+        noteEntryMap.set(questionId, entry);
+        appliedEntries.push(entry);
+      }
+
+      const nextProposals = proposals.filter((proposal) => {
+        const questionId =
+          typeof proposal === "object" &&
+          proposal !== null &&
+          typeof (proposal as Record<string, unknown>)["questionId"] ===
+            "string"
+            ? String((proposal as Record<string, unknown>)["questionId"])
+            : null;
+        const proposedAnswer =
+          typeof proposal === "object" &&
+          proposal !== null &&
+          typeof (proposal as Record<string, unknown>)["proposedAnswer"] ===
+            "string"
+            ? String((proposal as Record<string, unknown>)["proposedAnswer"])
+            : null;
+        const targetKey =
+          questionId !== null && proposedAnswer !== null
+            ? `${questionId}:${proposedAnswer}`
+            : null;
+
+        if (approvedTargetKeys !== null) {
+          return targetKey === null || !approvedTargetKeys.has(targetKey);
+        }
+
+        return (
+          questionId === null ||
+          approvedQuestionIds === null ||
+          !approvedQuestionIds.has(questionId)
+        );
+      });
+
+      const nextCoveredQuestionIds = new Set(existing.coveredQuestionIds ?? []);
+      for (const entry of appliedEntries) {
+        if (
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["questionId"] === "string"
+        ) {
+          nextCoveredQuestionIds.add(
+            String((entry as Record<string, unknown>)["questionId"]),
+          );
+        }
+      }
+
+      await db
+        .update(conversations)
+        .set({
+          noteEntries: Array.from(noteEntryMap.values()),
+          pendingNoteEntries: nextPendingEntries,
+          noteUpdateProposals: nextProposals,
+          coveredQuestionIds: Array.from(nextCoveredQuestionIds),
+        })
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+          ),
+        );
+
+      await logConversationAction(
+        userId,
+        "conversation_note_updates_applied",
+        conversationId,
+        {
+          approvedQuestionIds:
+            approvedQuestionIds !== null
+              ? Array.from(approvedQuestionIds)
+              : null,
+          approvedTargets:
+            targets?.map((target) => ({
+              questionId: target.questionId,
+              proposedAnswer: target.proposedAnswer,
+            })) ?? null,
+          appliedCount: appliedEntries.length,
+          remainingProposalCount: nextProposals.length,
+        },
+      );
+
+      return c.json({ success: true, appliedCount: appliedEntries.length });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to apply note updates", { error: message });
+      return c.json(
+        { error: "ノート更新の反映に失敗しました", code: "APPLY_FAILED" },
+        500,
+      );
+    }
+  },
+);
+
+conversationsRoute.post(
+  "/api/conversations/:id/dismiss-note-updates",
+  async (c: Context) => {
+    try {
+      const firebaseUid = getFirebaseUid(c);
+      const userId = await resolveUserId(firebaseUid);
+      const conversationId = c.req.param("id");
+
+      const lifecycleStatus = await getCreatorLifecycleStatus(userId);
+      if (isDeletionBlocked(lifecycleStatus)) {
+        return c.json(
+          {
+            error: "ノートが保護されているため、この操作は実行できません",
+            code: "MODIFICATION_BLOCKED_BY_LIFECYCLE",
+          },
+          403,
+        );
+      }
+
+      const existing = await db.query.conversations.findFirst({
+        where: and(
+          eq(conversations.id, conversationId),
+          eq(conversations.userId, userId),
+        ),
+      });
+
+      if (!existing) {
+        return c.json(
+          { error: "会話が見つかりません", code: "NOT_FOUND" },
+          404,
+        );
+      }
+
+      const body = await c.req.json<Record<string, unknown>>();
+      const targets = parseNoteUpdateTargets(body["targets"]);
+      const questionIds =
+        Array.isArray(body["questionIds"]) &&
+        body["questionIds"].every((value) => typeof value === "string")
+          ? new Set(body["questionIds"] as string[])
+          : null;
+
+      if (questionIds === null && targets === null) {
+        await db
+          .update(conversations)
+          .set({
+            pendingNoteEntries: [],
+            noteUpdateProposals: [],
+          })
+          .where(
+            and(
+              eq(conversations.id, conversationId),
+              eq(conversations.userId, userId),
+            ),
+          );
+
+        await logConversationAction(
+          userId,
+          "conversation_note_updates_dismissed",
+          conversationId,
+          {
+            dismissedQuestionIds: "all",
+            remainingProposalCount: 0,
+          },
+        );
+
+        return c.json({ success: true, dismissedCount: 0, clearedAll: true });
+      }
+
+      const pendingEntries = Array.isArray(existing.pendingNoteEntries)
+        ? existing.pendingNoteEntries
+        : [];
+      const proposals = Array.isArray(existing.noteUpdateProposals)
+        ? existing.noteUpdateProposals
+        : [];
+      const dismissedTargetKeys =
+        targets !== null
+          ? new Set(
+              targets.map(
+                (target) => `${target.questionId}:${target.proposedAnswer}`,
+              ),
+            )
+          : null;
+
+      const nextPendingEntries = pendingEntries.filter((entry) => {
+        const questionId =
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["questionId"] === "string"
+            ? String((entry as Record<string, unknown>)["questionId"])
+            : null;
+        const answer =
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>)["answer"] === "string"
+            ? String((entry as Record<string, unknown>)["answer"])
+            : null;
+        const targetKey =
+          questionId !== null && answer !== null
+            ? `${questionId}:${answer}`
+            : null;
+
+        if (dismissedTargetKeys !== null) {
+          return targetKey === null || !dismissedTargetKeys.has(targetKey);
+        }
+
+        return questionId === null || !questionIds?.has(questionId);
+      });
+
+      const nextProposals = proposals.filter((proposal) => {
+        const questionId =
+          typeof proposal === "object" &&
+          proposal !== null &&
+          typeof (proposal as Record<string, unknown>)["questionId"] ===
+            "string"
+            ? String((proposal as Record<string, unknown>)["questionId"])
+            : null;
+        const proposedAnswer =
+          typeof proposal === "object" &&
+          proposal !== null &&
+          typeof (proposal as Record<string, unknown>)["proposedAnswer"] ===
+            "string"
+            ? String((proposal as Record<string, unknown>)["proposedAnswer"])
+            : null;
+        const targetKey =
+          questionId !== null && proposedAnswer !== null
+            ? `${questionId}:${proposedAnswer}`
+            : null;
+
+        if (dismissedTargetKeys !== null) {
+          return targetKey === null || !dismissedTargetKeys.has(targetKey);
+        }
+
+        return questionId === null || !questionIds?.has(questionId);
+      });
+
+      await db
+        .update(conversations)
+        .set({
+          pendingNoteEntries: nextPendingEntries,
+          noteUpdateProposals: nextProposals,
+        })
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+          ),
+        );
+
+      await logConversationAction(
+        userId,
+        "conversation_note_updates_dismissed",
+        conversationId,
+        {
+          dismissedQuestionIds:
+            questionIds !== null ? Array.from(questionIds) : null,
+          dismissedTargets:
+            targets?.map((target) => ({
+              questionId: target.questionId,
+              proposedAnswer: target.proposedAnswer,
+            })) ?? null,
+          remainingProposalCount: nextProposals.length,
+        },
+      );
+
+      return c.json({
+        success: true,
+        dismissedCount: targets?.length ?? questionIds?.size ?? 0,
+        clearedAll: false,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      logger.error("Failed to dismiss note updates", { error: message });
+      return c.json(
+        {
+          error: "ノート更新候補の取り消しに失敗しました",
+          code: "DISMISS_FAILED",
+        },
+        500,
+      );
+    }
+  },
+);
 
 /** DELETE /api/conversations/:id — Delete a conversation. */
 conversationsRoute.delete("/api/conversations/:id", async (c: Context) => {

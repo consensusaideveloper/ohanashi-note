@@ -717,3 +717,7 @@ export function getAllQuestionsListJson(): string {
   }));
   return JSON.stringify(all, null, 2);
 }
+
+export function getQuestionById(questionId: string): Question | undefined {
+  return QUESTIONS.find((question) => question.id === questionId);
+}

@@ -7,6 +7,7 @@ import {
   boolean,
   index,
   unique,
+  integer,
 } from "drizzle-orm/pg-core";
 
 const tz = { withTimezone: true } as const;
@@ -45,7 +46,10 @@ export const conversations = pgTable(
     summaryStatus: text("summary_status").notNull().default("pending"),
     coveredQuestionIds: text("covered_question_ids").array().default([]),
     noteEntries: jsonb("note_entries").default([]),
+    pendingNoteEntries: jsonb("pending_note_entries").default([]),
+    noteUpdateProposals: jsonb("note_update_proposals").default([]),
     oneLinerSummary: text("one_liner_summary"),
+    emotionAnalysis: text("emotion_analysis"),
     discussedCategories: text("discussed_categories").array().default([]),
     keyPoints: jsonb("key_points"),
     topicAdherence: text("topic_adherence"),
@@ -219,6 +223,97 @@ export const notifications = pgTable(
   },
   (table) => [
     index("idx_notifications_user_unread").on(table.userId, table.isRead),
+  ],
+);
+
+// --- Wellness Settings ---
+
+export const wellnessSettings = pgTable(
+  "wellness_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    shareLevel: text("share_level").notNull().default("basic"),
+    timezone: text("timezone").notNull().default("Asia/Tokyo"),
+    weeklySummaryDay: integer("weekly_summary_day").notNull().default(0),
+    escalationRule: jsonb("escalation_rule")
+      .notNull()
+      .default({ day2: "warn", day3: "urgent" }),
+    pausedUntil: timestamp("paused_until", tz),
+    consentVersion: text("consent_version").notNull().default("2026-03-v1"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_wellness_settings_enabled").on(table.enabled),
+    index("idx_wellness_settings_creator").on(table.creatorId),
+  ],
+);
+
+// --- Wellness Check-ins ---
+
+export const wellnessCheckins = pgTable(
+  "wellness_checkins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    checkinDate: text("checkin_date").notNull(),
+    status: text("status").notNull(),
+    conversationId: uuid("conversation_id").references(() => conversations.id, {
+      onDelete: "set null",
+    }),
+    signals: jsonb("signals").notNull().default({}),
+    summaryForFamily: text("summary_for_family"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_wellness_checkins_creator_date").on(
+      table.creatorId,
+      table.checkinDate,
+    ),
+    index("idx_wellness_checkins_status").on(table.status),
+    unique("uq_wellness_checkins_creator_date").on(
+      table.creatorId,
+      table.checkinDate,
+    ),
+  ],
+);
+
+// --- Wellness Notification Log ---
+
+export const wellnessNotificationLog = pgTable(
+  "wellness_notification_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: uuid("creator_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    windowStart: timestamp("window_start", tz).notNull(),
+    windowEnd: timestamp("window_end", tz).notNull(),
+    deliveryChannel: text("delivery_channel").notNull().default("in_app"),
+    deliveryStatus: text("delivery_status").notNull().default("sent"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_wellness_notification_log_creator").on(table.creatorId),
+    unique("uq_wellness_notification_window").on(
+      table.creatorId,
+      table.recipientUserId,
+      table.type,
+      table.windowEnd,
+    ),
   ],
 );
 

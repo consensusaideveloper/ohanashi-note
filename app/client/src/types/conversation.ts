@@ -71,6 +71,22 @@ export interface NoteEntry {
   sourceEvidence?: string;
 }
 
+export interface NoteUpdateProposal {
+  questionId: string;
+  questionTitle: string;
+  category: QuestionCategory;
+  questionType: "single" | "accumulative";
+  proposalType: "add" | "update";
+  previousAnswer: string | null;
+  proposedAnswer: string;
+  sourceEvidence: string;
+}
+
+export interface NoteUpdateProposalTarget {
+  questionId: string;
+  proposedAnswer: string;
+}
+
 export type InsightCategory =
   | "hobbies"
   | "values"
@@ -118,6 +134,8 @@ export interface ConversationRecord {
   summary: string | null;
   coveredQuestionIds?: string[];
   noteEntries?: NoteEntry[];
+  pendingNoteEntries?: NoteEntry[];
+  noteUpdateProposals?: NoteUpdateProposal[];
   summaryStatus?: "pending" | "completed" | "failed";
   /** Whether an audio recording is stored. */
   audioAvailable?: boolean;
