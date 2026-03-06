@@ -15,8 +15,13 @@ describe("validateRealtimeSessionConfig", () => {
   it("returns approved tools for normal sessions", () => {
     const result = validateRealtimeSessionConfig(validSessionConfig, false);
     expect(result?.tools.map((tool) => tool.name)).toEqual([
+      "search_my_information",
       "search_past_conversations",
       "get_note_entries",
+      "get_current_settings",
+      "get_current_screen_context",
+      "get_recommended_next_action",
+      "get_family_status",
       "navigate_to_screen",
       "view_note_category",
       "filter_conversation_history",

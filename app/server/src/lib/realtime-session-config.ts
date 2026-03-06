@@ -15,8 +15,13 @@ const CATEGORY_ENUM = [
 const VALID_VOICES = new Set(["shimmer", "echo", "coral"]);
 const VALID_SILENCE_DURATION_MS = new Set([500, 800, 1500]);
 const VALID_TOOL_NAMES = new Set([
+  "search_my_information",
   "search_past_conversations",
   "get_note_entries",
+  "get_current_settings",
+  "get_current_screen_context",
+  "get_recommended_next_action",
+  "get_family_status",
   "navigate_to_screen",
   "view_note_category",
   "filter_conversation_history",
@@ -32,8 +37,13 @@ const VALID_TOOL_NAMES = new Set([
   "end_conversation",
 ]);
 const NORMAL_TOOL_NAMES = new Set([
+  "search_my_information",
   "search_past_conversations",
   "get_note_entries",
+  "get_current_settings",
+  "get_current_screen_context",
+  "get_recommended_next_action",
+  "get_family_status",
   "navigate_to_screen",
   "view_note_category",
   "filter_conversation_history",
@@ -81,6 +91,19 @@ export interface ValidatedRealtimeSessionConfig {
 const ALL_REALTIME_TOOLS: readonly ToolDefinition[] = [
   {
     type: "function",
+    name: "search_my_information",
+    description: "過去の会話とノートを横断して情報を検索します。",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        category: { type: "string", enum: CATEGORY_ENUM },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    type: "function",
     name: "search_past_conversations",
     description: "過去の会話から関連する内容を検索します。",
     parameters: {
@@ -102,6 +125,42 @@ const ALL_REALTIME_TOOLS: readonly ToolDefinition[] = [
         category: { type: "string", enum: CATEGORY_ENUM },
       },
       required: ["category"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_current_settings",
+    description: "現在の設定内容を取得します。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function",
+    name: "get_current_screen_context",
+    description: "現在表示中の画面情報を取得します。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function",
+    name: "get_recommended_next_action",
+    description: "現在の状況でおすすめの次の行動を案内します。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function",
+    name: "get_family_status",
+    description: "登録済みの家族と開封設定を取得します。",
+    parameters: {
+      type: "object",
+      properties: {},
     },
   },
   {

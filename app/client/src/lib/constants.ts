@@ -1,3 +1,5 @@
+import { ONBOARDING_REALTIME_TOOL_NAMES } from "./ai-capabilities";
+
 import type {
   FontSizeLevel,
   SpeakingSpeed,
@@ -52,6 +54,40 @@ export const SESSION_AUDIO_INPUT_CONFIG = {
 
 // Function calling tools for the Realtime API session
 export const REALTIME_TOOLS = [
+  {
+    type: "function" as const,
+    name: "search_my_information",
+    description:
+      "過去の会話と記録済みノートをまとめて検索します。ユーザーが「前に話したことある？」「もう記録されてる？」と聞いた場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "探したいキーワード（例：「保険」「実家」「通院」）",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "memories",
+            "people",
+            "house",
+            "medical",
+            "funeral",
+            "money",
+            "work",
+            "digital",
+            "legal",
+            "trust",
+            "support",
+          ],
+          description:
+            "検索対象のカテゴリ（省略可。省略すると全カテゴリを横断して探します）",
+        },
+      },
+      required: ["query"],
+    },
+  },
   {
     type: "function" as const,
     name: "search_past_conversations",
@@ -113,6 +149,46 @@ export const REALTIME_TOOLS = [
         },
       },
       required: ["category"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_current_settings",
+    description:
+      "現在の設定内容を取得します。ユーザーが「今の設定を教えて」「文字の大きさは今どうなってる？」などと聞いた場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_current_screen_context",
+    description:
+      "現在表示中の画面で何ができるかを案内します。ユーザーが「この画面で何ができるの？」「今どこを見てるの？」と聞いた場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_recommended_next_action",
+    description:
+      "現在の画面や設定状況を踏まえて、次に何をするとよいか案内します。ユーザーが「次は何をすればいい？」「どう進めればいい？」と聞いた場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
+    name: "get_family_status",
+    description:
+      "登録されている家族と現在の開封設定を取得します。ユーザーが「今の家族設定を教えて」「誰が登録されてる？」と聞いた場合に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {},
     },
   },
   // --- Tier 0: Navigation tools ---
@@ -936,19 +1012,8 @@ export const ONBOARDING_MESSAGES = {
 
 // --- Onboarding conversation ---
 /** Tool names used during the onboarding conversation. */
-const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "update_user_name",
-  "update_assistant_name",
-  "change_character",
-  "change_font_size",
-  "update_speaking_preferences",
-  "complete_onboarding",
-  "end_conversation",
-]);
-
-/** Subset of REALTIME_TOOLS for the onboarding conversation. */
 export const ONBOARDING_TOOLS = REALTIME_TOOLS.filter((t) =>
-  ONBOARDING_TOOL_NAMES.has(t.name),
+  ONBOARDING_REALTIME_TOOL_NAMES.has(t.name),
 );
 
 export const ONBOARDING_CONVERSATION_MESSAGES = {

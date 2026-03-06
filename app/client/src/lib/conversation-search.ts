@@ -52,6 +52,24 @@ export interface NoteEntriesResponse {
   }>;
 }
 
+export interface InformationSearchParams {
+  query: string;
+  category?: QuestionCategory | null;
+  maxResults?: number;
+}
+
+export interface InformationSearchResponse {
+  query: string;
+  resultCount: number;
+  noteMatches: Array<{
+    category: string;
+    questionTitle: string;
+    answer: string;
+    updateCount: number;
+  }>;
+  conversationMatches: SearchResult[];
+}
+
 // ---- Sanitization (duplicated from server/sanitizer.ts for client use) ----
 
 const REDACTION_MARKER = "[保護済み]";
@@ -74,6 +92,7 @@ const DEFAULT_MAX_RESULTS = 5;
 const MAX_RESULTS_LIMIT = 10;
 const EXCERPT_MAX_LENGTH = 100;
 const OUTPUT_MAX_LENGTH = 2000;
+const NOTE_MATCH_ANSWER_MAX_LENGTH = 160;
 
 interface ScoredField {
   text: string;
@@ -104,6 +123,16 @@ function extractExcerpt(text: string, token: string): string {
   if (start > 0) excerpt = "..." + excerpt;
   if (end < text.length) excerpt = excerpt + "...";
   return excerpt;
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  if (maxLength <= 3) {
+    return text.slice(0, maxLength);
+  }
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function collectScoredFields(record: ConversationRecord): ScoredField[] {
@@ -214,6 +243,84 @@ function truncateResponse(json: string): string {
   }
   parsed.resultCount = parsed.results.length;
   return JSON.stringify(parsed);
+}
+
+function collectLatestNoteMatches(
+  records: readonly ConversationRecord[],
+  params: InformationSearchParams,
+): InformationSearchResponse["noteMatches"] {
+  const query = params.query.trim();
+  if (query === "") {
+    return [];
+  }
+
+  const tokens = query.split(/\s+/).filter((token) => token.length > 0);
+  const latestByQuestionId = new Map<
+    string,
+    {
+      entry: NoteEntry;
+      category: QuestionCategory | null;
+      startedAt: number;
+      updateCount: number;
+    }
+  >();
+  const versionCounts = new Map<string, number>();
+
+  const sorted = [...records].sort((a, b) => a.startedAt - b.startedAt);
+  for (const record of sorted) {
+    if (record.noteEntries === undefined) continue;
+    if (
+      params.category !== undefined &&
+      params.category !== null &&
+      !matchesCategory(record, params.category)
+    ) {
+      continue;
+    }
+    for (const entry of record.noteEntries) {
+      const entryCategory = questionIdToCategory(entry.questionId);
+      if (
+        params.category !== undefined &&
+        params.category !== null &&
+        entryCategory !== params.category
+      ) {
+        continue;
+      }
+      versionCounts.set(entry.questionId, (versionCounts.get(entry.questionId) ?? 0) + 1);
+      latestByQuestionId.set(entry.questionId, {
+        entry,
+        category: entryCategory as QuestionCategory | null,
+        startedAt: record.startedAt,
+        updateCount: (versionCounts.get(entry.questionId) ?? 1) - 1,
+      });
+    }
+  }
+
+  const matches = [...latestByQuestionId.values()]
+    .map(({ entry, category, startedAt, updateCount }) => {
+      const haystacks = [entry.questionTitle, entry.answer];
+      let score = 0;
+      for (const token of tokens) {
+        const lower = token.toLowerCase();
+        if (haystacks.some((text) => text.toLowerCase().includes(lower))) {
+          score += 1;
+        }
+      }
+      return { entry, category, startedAt, score, updateCount };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.startedAt - a.startedAt;
+    })
+    .slice(0, Math.min(params.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_LIMIT))
+    .map((item) => ({
+      category: getCategoryLabel(item.category),
+      questionTitle: item.entry.questionTitle,
+      answer: truncateText(sanitize(item.entry.answer), NOTE_MATCH_ANSWER_MAX_LENGTH),
+      updateCount: item.updateCount,
+    }));
+
+  return matches;
 }
 
 // ---- Public API ----
@@ -365,5 +472,30 @@ export function getNoteEntriesForAI(
     category: getCategoryLabel(category),
     totalEntries: entries.length,
     entries,
+  };
+}
+
+export function searchMyInformation(
+  records: readonly ConversationRecord[],
+  params: InformationSearchParams,
+): InformationSearchResponse {
+  const query = params.query.trim();
+  if (query === "") {
+    return {
+      query,
+      resultCount: 0,
+      noteMatches: [],
+      conversationMatches: [],
+    };
+  }
+
+  const noteMatches = collectLatestNoteMatches(records, params);
+  const conversationResponse = searchPastConversations(records, params);
+
+  return {
+    query,
+    resultCount: noteMatches.length + conversationResponse.resultCount,
+    noteMatches,
+    conversationMatches: conversationResponse.results,
   };
 }

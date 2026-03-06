@@ -40,6 +40,7 @@ import {
   activateRealtimeSession,
 } from "../lib/api";
 import {
+  searchMyInformation,
   searchPastConversations,
   getNoteEntriesForAI,
 } from "../lib/conversation-search";
@@ -306,6 +307,14 @@ function dispatchVoiceAction(
   argsJson: string,
 ): VoiceActionResult | Promise<VoiceActionResult> | null {
   switch (functionName) {
+    case "get_current_settings":
+      return callbacks.getCurrentSettings();
+    case "get_current_screen_context":
+      return callbacks.getCurrentScreenContext();
+    case "get_recommended_next_action":
+      return callbacks.getRecommendedNextAction();
+    case "get_family_status":
+      return callbacks.getFamilyStatus();
     // Tier 0: Navigation
     case "navigate_to_screen": {
       const args = JSON.parse(argsJson) as { screen: string };
@@ -1095,7 +1104,28 @@ export function useConversation(): UseConversationReturn {
 
         let result: string;
 
-        if (functionName === "search_past_conversations") {
+        if (functionName === "search_my_information") {
+          const args = JSON.parse(argsJson) as {
+            query: string;
+            category?: QuestionCategory | null;
+          };
+          listConversations()
+            .then((records) => {
+              allRecordsRef.current = records;
+              return records;
+            })
+            .catch(() => allRecordsRef.current)
+            .then((records) => {
+              const searchResult = searchMyInformation(records, args);
+              sendResult(JSON.stringify(searchResult));
+            })
+            .catch(() => {
+              sendResult(
+                JSON.stringify({ error: "検索中にエラーが発生しました" }),
+              );
+            });
+          return;
+        } else if (functionName === "search_past_conversations") {
           const args = JSON.parse(argsJson) as {
             query: string;
             category?: QuestionCategory | null;

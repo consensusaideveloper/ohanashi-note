@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   searchPastConversations,
   getNoteEntriesForAI,
+  searchMyInformation,
 } from "./conversation-search";
 
 import type { ConversationRecord } from "../types/conversation";
@@ -463,5 +464,102 @@ describe("getNoteEntriesForAI", () => {
     expect(result.totalEntries).toBe(1);
     expect(result.entries[0]?.questionTitle).toBe("メインの銀行");
     expect(result.entries[0]?.answer).toBe("SBI");
+  });
+});
+
+describe("searchMyInformation", () => {
+  it("returns both note matches and conversation matches", () => {
+    const records = [
+      makeRecord({
+        startedAt: 1000,
+        summary: "保険の見直しについて話した",
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "保険",
+            answer: "県民共済に入っている",
+          },
+        ],
+      }),
+    ];
+
+    const result = searchMyInformation(records, { query: "保険" });
+
+    expect(result.resultCount).toBe(2);
+    expect(result.noteMatches[0]?.questionTitle).toBe("保険");
+    expect(result.conversationMatches[0]?.oneLinerSummary).toContain("保険");
+  });
+
+  it("supports category filtering across note and conversation results", () => {
+    const records = [
+      makeRecord({
+        category: "money",
+        summary: "保険の見直しについて話した",
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "保険",
+            answer: "県民共済に入っている",
+          },
+        ],
+      }),
+      makeRecord({
+        category: "memories",
+        summary: "旅行保険の思い出を話した",
+        noteEntries: [
+          {
+            questionId: "memories-01",
+            questionTitle: "旅行",
+            answer: "修学旅行で保険証をなくした",
+          },
+        ],
+      }),
+    ];
+
+    const result = searchMyInformation(records, {
+      query: "保険",
+      category: "money",
+    });
+
+    expect(result.noteMatches).toHaveLength(1);
+    expect(result.noteMatches[0]?.category).toBe("お金・資産");
+    expect(result.conversationMatches).toHaveLength(1);
+    expect(result.conversationMatches[0]?.category).toBe("お金・資産");
+  });
+
+  it("keeps note updateCount and truncates long note answers", () => {
+    const records = [
+      makeRecord({
+        category: "money",
+        startedAt: 1000,
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "保険",
+            answer: "最初の回答",
+          },
+        ],
+      }),
+      makeRecord({
+        category: "money",
+        startedAt: 2000,
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "保険",
+            answer: "あ".repeat(220),
+          },
+        ],
+      }),
+    ];
+
+    const result = searchMyInformation(records, {
+      query: "保険",
+      category: "money",
+    });
+
+    expect(result.noteMatches[0]?.updateCount).toBe(1);
+    expect(result.noteMatches[0]?.answer.length).toBeLessThanOrEqual(160);
+    expect(result.noteMatches[0]?.answer.endsWith("...")).toBe(true);
   });
 });

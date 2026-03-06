@@ -23,6 +23,8 @@
 - [MVP 技術判断](/Users/y-masamura/develop/conversational-ai-research/docs/mvp-tech-decisions.md)
 - [Realtime API MVP Plan](/Users/y-masamura/develop/conversational-ai-research/docs/realtime-api-mvp-plan.md)
 - [見守り機能の配信仕様](/Users/y-masamura/develop/conversational-ai-research/docs/wellness-check-delivery-spec.md)
+- [AI参照・操作アーキテクチャ設計](/Users/y-masamura/develop/conversational-ai-research/docs/ai-capability-architecture.md)
+  - AI が何を参照・操作できるか、今後の capability 追加方針、高齢者向け UX の設計原則
 
 ## Guidance
 

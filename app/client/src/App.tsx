@@ -23,6 +23,12 @@ import {
   getAccountStatus,
 } from "./lib/storage";
 import {
+  describeCurrentSettings,
+  describeCurrentScreenContext,
+  describeFamilyStatus,
+  describeRecommendedNextAction,
+} from "./lib/ai-state-descriptions";
+import {
   createInvitation,
   getLifecycleState,
   listFamilyMembers,
@@ -747,6 +753,66 @@ function AppContent({ onRequireOnboarding }: AppContentProps): ReactNode {
 
   useEffect(() => {
     voiceActionRef.current = {
+      getCurrentSettings: async () => {
+        try {
+          const profile = await getUserProfile();
+          return {
+            success: true,
+            message: describeCurrentSettings(profile),
+          };
+        } catch {
+          return {
+            success: false,
+            message: "設定の確認に失敗しました。あとでまたお試しください。",
+          };
+        }
+      },
+      getCurrentScreenContext: () => {
+        return {
+          success: true,
+          message: describeCurrentScreenContext(screenRef.current),
+        };
+      },
+      getRecommendedNextAction: async () => {
+        try {
+          const [profile, familyResult] = await Promise.all([
+            getUserProfile(),
+            listFamilyMembers().catch(() => ({ members: [], lifecycleStatus: "active" })),
+          ]);
+          return {
+            success: true,
+            message: describeRecommendedNextAction(
+              screenRef.current,
+              profile,
+              familyResult.members,
+            ),
+          };
+        } catch {
+          return {
+            success: false,
+            message:
+              "今のおすすめの進め方をうまく確認できませんでした。必要なら今の画面でできることから一緒に確認しましょう。",
+          };
+        }
+      },
+      getFamilyStatus: async () => {
+        try {
+          const [{ members }, presets] = await Promise.all([
+            listFamilyMembers(),
+            listAccessPresets(),
+          ]);
+          return {
+            success: true,
+            message: describeFamilyStatus(members, presets),
+          };
+        } catch {
+          return {
+            success: false,
+            message:
+              "家族の状況をうまく確認できませんでした。家族画面で確かめてみましょうか。",
+          };
+        }
+      },
       // Tier 0: Navigation
       navigateToScreen: (target: string) => {
         const entry = VOICE_SCREEN_MAP[target];

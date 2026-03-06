@@ -12,6 +12,10 @@ export interface VoiceActionCallbacks {
     period?: string;
     category?: string;
   }) => VoiceActionResult;
+  getCurrentSettings: () => Promise<VoiceActionResult>;
+  getCurrentScreenContext: () => VoiceActionResult;
+  getRecommendedNextAction: () => Promise<VoiceActionResult>;
+  getFamilyStatus: () => Promise<VoiceActionResult>;
 
   // Tier 1: Reversible settings (auto-execute, AI confirms verbally)
   changeFontSize: (level: string) => VoiceActionResult;
