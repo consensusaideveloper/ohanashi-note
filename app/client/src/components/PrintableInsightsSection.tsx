@@ -30,9 +30,7 @@ function formatRecordedAt(timestamp: number): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function groupByCategory(
-  items: FlexibleNoteItem[],
-): Array<{
+function groupByCategory(items: FlexibleNoteItem[]): Array<{
   category: InsightCategory;
   label: string;
   items: FlexibleNoteItem[];

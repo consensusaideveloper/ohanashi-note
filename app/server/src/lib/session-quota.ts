@@ -146,7 +146,8 @@ export async function getSessionQuota(userId: string): Promise<SessionQuota> {
       remaining: MAX_DAILY_SESSIONS,
       maxMonthly: MAX_MONTHLY_SESSIONS > 0 ? MAX_MONTHLY_SESSIONS : null,
       usedThisMonth: MAX_MONTHLY_SESSIONS > 0 ? 0 : null,
-      remainingThisMonth: MAX_MONTHLY_SESSIONS > 0 ? MAX_MONTHLY_SESSIONS : null,
+      remainingThisMonth:
+        MAX_MONTHLY_SESSIONS > 0 ? MAX_MONTHLY_SESSIONS : null,
       limitPeriod: null,
       canStart: true,
     };

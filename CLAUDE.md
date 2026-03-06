@@ -203,3 +203,9 @@ After any implementation work, run the full verification suite before marking wo
 - Auth: Firebase Authentication
 - Environment configs: `.env` (local), `.env.staging`, `.env.production` — none committed to git
 - `.env.example` is the template for required environment variables
+
+## Context Management
+
+- When the conversation gets long and context usage feels high, proactively suggest the user run `/compact` to summarize and free up context space.
+- If response quality noticeably drops (e.g., forgetting earlier instructions, repeating mistakes, ignoring CLAUDE.md rules), remind the user that `/compact` can help restore accuracy.
+- For completely new tasks unrelated to the current conversation, suggest `/clear` instead to start fresh.
