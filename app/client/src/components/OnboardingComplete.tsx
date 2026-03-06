@@ -9,6 +9,10 @@ import {
 } from "../lib/constants";
 import { getCharacterById } from "../lib/characters";
 import { getUserProfile } from "../lib/storage";
+import {
+  OnboardingSettingsSummaryCard,
+  type OnboardingSettingsSummary,
+} from "./OnboardingSettingsSummaryCard";
 
 import type { ReactNode } from "react";
 import type {
@@ -53,15 +57,8 @@ async function getUserProfileWithRetry(): Promise<UserProfile | null> {
 export function OnboardingComplete({
   onStart,
 }: OnboardingCompleteProps): ReactNode {
-  const [userName, setUserName] = useState("");
-  const [characterName, setCharacterName] = useState("");
-  const [characterDescription, setCharacterDescription] = useState("");
-  const [assistantName, setAssistantName] = useState("");
-  const [fontSizeLabel, setFontSizeLabel] = useState("");
-  const [speakingSpeedLabel, setSpeakingSpeedLabel] = useState("");
-  const [silenceDurationLabel, setSilenceDurationLabel] = useState("");
-  const [confirmationLevelLabel, setConfirmationLevelLabel] = useState("");
   const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<OnboardingSettingsSummary | null>(null);
 
   useEffect(() => {
     void getUserProfileWithRetry()
@@ -74,22 +71,27 @@ export function OnboardingComplete({
         const confirmation =
           profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL;
 
-        setUserName(name);
-
         const character = getCharacterById(charId);
-        setCharacterName(character.name);
-        setCharacterDescription(character.description);
-        setAssistantName(profile?.assistantName ?? character.name);
-
         const label =
           FONT_SIZE_LABELS[fontSize] ??
           FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ??
           "";
-        setFontSizeLabel(label);
+        const nextAssistantName = profile?.assistantName ?? character.name;
+        const nextSpeakingSpeedLabel = SPEAKING_SPEED_LABELS[speed];
+        const nextSilenceDurationLabel = SILENCE_DURATION_LABELS[silence];
+        const nextConfirmationLevelLabel =
+          CONFIRMATION_LEVEL_LABELS[confirmation];
 
-        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[speed]);
-        setSilenceDurationLabel(SILENCE_DURATION_LABELS[silence]);
-        setConfirmationLevelLabel(CONFIRMATION_LEVEL_LABELS[confirmation]);
+        setSummary({
+          userName: name,
+          characterName: character.name,
+          characterDescription: character.description,
+          assistantName: nextAssistantName,
+          fontSizeLabel: label,
+          speakingSpeedLabel: nextSpeakingSpeedLabel,
+          silenceDurationLabel: nextSilenceDurationLabel,
+          confirmationLevelLabel: nextConfirmationLevelLabel,
+        });
       })
       .catch((error: unknown) => {
         console.error("Failed to load profile for onboarding complete:", {
@@ -97,17 +99,18 @@ export function OnboardingComplete({
         });
         // Use defaults so the screen is still usable
         const character = getCharacterById(DEFAULT_CHARACTER_ID);
-        setCharacterName(character.name);
-        setCharacterDescription(character.description);
-        setAssistantName(character.name);
-        setFontSizeLabel(FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "");
-        setSpeakingSpeedLabel(SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED]);
-        setSilenceDurationLabel(
-          SILENCE_DURATION_LABELS[DEFAULT_SILENCE_DURATION],
-        );
-        setConfirmationLevelLabel(
-          CONFIRMATION_LEVEL_LABELS[DEFAULT_CONFIRMATION_LEVEL],
-        );
+        setSummary({
+          userName: "",
+          characterName: character.name,
+          characterDescription: character.description,
+          assistantName: character.name,
+          fontSizeLabel: FONT_SIZE_LABELS[DEFAULT_FONT_SIZE_KEY] ?? "",
+          speakingSpeedLabel: SPEAKING_SPEED_LABELS[DEFAULT_SPEAKING_SPEED],
+          silenceDurationLabel:
+            SILENCE_DURATION_LABELS[DEFAULT_SILENCE_DURATION],
+          confirmationLevelLabel:
+            CONFIRMATION_LEVEL_LABELS[DEFAULT_CONFIRMATION_LEVEL],
+        });
       })
       .finally(() => {
         setLoading(false);
@@ -123,7 +126,7 @@ export function OnboardingComplete({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6">
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-bg-primary px-6 py-8">
       <div className="w-full max-w-lg md:max-w-2xl flex flex-col items-center">
         {/* Checkmark icon */}
         <div className="w-20 h-20 rounded-full bg-accent-secondary flex items-center justify-center">
@@ -150,84 +153,10 @@ export function OnboardingComplete({
         </h1>
 
         {/* Settings summary card */}
-        <div
-          className="mt-8 w-full rounded-card bg-bg-surface p-6 shadow-sm space-y-4"
-          aria-live="polite"
-        >
-          {/* Name */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.nameLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {userName !== "" ? `${userName}さん` : "―"}
-            </span>
-          </div>
-
-          {/* Character */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.characterLabel}
-            </span>
-            <div>
-              <span className="text-lg text-text-primary font-medium">
-                {characterName}
-              </span>
-              <span className="ml-2 text-base text-text-secondary">
-                {characterDescription}
-              </span>
-            </div>
-          </div>
-
-          {/* Assistant display name */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.assistantNameLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {assistantName}
-            </span>
-          </div>
-
-          {/* Font size */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.fontSizeLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {fontSizeLabel}
-            </span>
-          </div>
-
-          {/* Speaking speed */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.speakingSpeedLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {speakingSpeedLabel}
-            </span>
-          </div>
-
-          {/* Silence duration */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.silenceDurationLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {silenceDurationLabel}
-            </span>
-          </div>
-
-          {/* Confirmation level */}
-          <div className="flex items-center gap-3">
-            <span className="text-base text-text-secondary flex-shrink-0">
-              {ONBOARDING_COMPLETE_MESSAGES.confirmationLevelLabel}
-            </span>
-            <span className="text-lg text-text-primary font-medium">
-              {confirmationLevelLabel}
-            </span>
-          </div>
+        <div className="mt-8 w-full">
+          {summary !== null ? (
+            <OnboardingSettingsSummaryCard summary={summary} />
+          ) : null}
         </div>
 
         {/* Description */}

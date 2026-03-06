@@ -6,6 +6,7 @@ import { useOnboardingConversation } from "../hooks/useOnboardingConversation";
 import { StatusIndicator } from "./StatusIndicator";
 import { AiFace } from "./AiFace";
 import { ErrorDisplay } from "./ErrorDisplay";
+import { OnboardingSettingsSummaryCard } from "./OnboardingSettingsSummaryCard";
 
 import type { ReactNode } from "react";
 
@@ -31,6 +32,7 @@ export function OnboardingConversation({
     errorType,
     transcript,
     pendingAssistantText,
+    settingsSummary,
     audioLevel,
     remoteAudioLevel,
     characterId,
@@ -129,6 +131,17 @@ export function OnboardingConversation({
 
       {/* Transcript area */}
       <div className="flex-1 w-full max-w-lg md:max-w-2xl overflow-y-auto px-4 pb-8 notebook-lines">
+        {settingsSummary !== null ? (
+          <div className="mb-4 animate-fade-in">
+            <div className="mb-2 text-sm text-text-secondary">
+              設定内容を確認しています
+            </div>
+            <OnboardingSettingsSummaryCard
+              summary={settingsSummary}
+              compact
+            />
+          </div>
+        ) : null}
         {transcript.map((entry, index) => (
           <div
             key={`${entry.timestamp}-${index}`}

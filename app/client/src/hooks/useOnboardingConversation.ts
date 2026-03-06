@@ -2,7 +2,7 @@
 // Based on useConversation but without session persistence, summarization,
 // session limits, or VoiceActionContext dependency.
 
-import { useCallback, useEffect, useRef, useReducer } from "react";
+import { useCallback, useEffect, useRef, useReducer, useState } from "react";
 
 import {
   SESSION_CONFIG,
@@ -32,6 +32,7 @@ import { buildOnboardingPrompt } from "../lib/prompt-builder";
 import { getUserProfile, saveUserProfile } from "../lib/storage";
 import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
+import type { OnboardingSettingsSummary } from "../components/OnboardingSettingsSummaryCard";
 
 import type { DataChannelServerEvent } from "../lib/realtime-protocol";
 import type {
@@ -48,8 +49,9 @@ import type {
 } from "../types/conversation";
 
 // --- End-conversation flow ---
-const END_CONVERSATION_FAREWELL_DELAY_MS = 6000;
-const END_CONVERSATION_FALLBACK_MS = 12000;
+const MIN_END_CONVERSATION_FAREWELL_DELAY_MS = 6000;
+const MAX_END_CONVERSATION_FAREWELL_DELAY_MS = 18000;
+const END_CONVERSATION_FALLBACK_MS = 30000;
 const PROFILE_SAVE_WAIT_TIMEOUT_MS = 3000;
 const MAX_ASSISTANT_NAME_LENGTH = 40;
 
@@ -64,6 +66,36 @@ const DEFAULT_SPEAKING_PREFERENCES: SpeakingPreferences = {
   confirmationLevel: DEFAULT_CONFIRMATION_LEVEL,
 };
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function estimateFarewellDelayMs(text: string): number {
+  const normalizedLength = text.trim().length;
+  if (normalizedLength === 0) {
+    return MIN_END_CONVERSATION_FAREWELL_DELAY_MS;
+  }
+
+  // Japanese TTS is roughly 7-9 chars/sec for this tone. Add a small buffer
+  // so screen transition waits until the last confirmation is audible.
+  const estimatedMs = normalizedLength * 180 + 2000;
+  return clamp(
+    estimatedMs,
+    MIN_END_CONVERSATION_FAREWELL_DELAY_MS,
+    MAX_END_CONVERSATION_FAREWELL_DELAY_MS,
+  );
+}
+
+function getLatestAssistantText(transcript: TranscriptEntry[]): string {
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    const entry = transcript[i];
+    if (entry?.role === "assistant") {
+      return entry.text;
+    }
+  }
+  return "";
+}
+
 function getProfileSpeakingPreferences(
   profile: UserProfile | null,
 ): SpeakingPreferences {
@@ -71,6 +103,32 @@ function getProfileSpeakingPreferences(
     speakingSpeed: profile?.speakingSpeed ?? DEFAULT_SPEAKING_SPEED,
     silenceDuration: profile?.silenceDuration ?? DEFAULT_SILENCE_DURATION,
     confirmationLevel: profile?.confirmationLevel ?? DEFAULT_CONFIRMATION_LEVEL,
+  };
+}
+
+function getFontSizeLabel(level: FontSizeLevel): string {
+  return FONT_SIZE_LABELS[level] ?? level;
+}
+
+function buildOnboardingSettingsSummary(input: {
+  userName: string | null;
+  characterId: CharacterId;
+  assistantName: string | null;
+  fontSize: FontSizeLevel;
+  preferences: SpeakingPreferences;
+}): OnboardingSettingsSummary {
+  const character = getCharacterById(input.characterId);
+  return {
+    userName: input.userName ?? "",
+    characterName: character.name,
+    characterDescription: character.description,
+    assistantName: input.assistantName ?? character.name,
+    fontSizeLabel: getFontSizeLabel(input.fontSize),
+    speakingSpeedLabel: SPEAKING_SPEED_LABELS[input.preferences.speakingSpeed],
+    silenceDurationLabel:
+      SILENCE_DURATION_LABELS[input.preferences.silenceDuration],
+    confirmationLevelLabel:
+      CONFIRMATION_LEVEL_LABELS[input.preferences.confirmationLevel],
   };
 }
 
@@ -328,6 +386,7 @@ export interface UseOnboardingConversationReturn {
   errorType: ErrorType | null;
   transcript: TranscriptEntry[];
   pendingAssistantText: string;
+  settingsSummary: OnboardingSettingsSummary | null;
   audioLevel: number;
   remoteAudioLevel: number;
   characterId: CharacterId;
@@ -341,6 +400,8 @@ export function useOnboardingConversation({
   onComplete,
 }: UseOnboardingConversationProps): UseOnboardingConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [settingsSummary, setSettingsSummary] =
+    useState<OnboardingSettingsSummary | null>(null);
 
   const webrtc = useWebRTC();
 
@@ -363,6 +424,9 @@ export function useOnboardingConversation({
   );
   const assistantNameRef = useRef<string | null>(null);
   const onboardingUserIdRef = useRef<string | null>(null);
+  const userNameRef = useRef<string | null>(null);
+  const fontSizeRef = useRef<FontSizeLevel>("standard");
+  const characterIdRef = useRef<CharacterId>(DEFAULT_CHARACTER_ID);
 
   // Track whether AI is currently speaking (for UI state)
   const aiSpeakingRef = useRef(false);
@@ -532,7 +596,11 @@ export function useOnboardingConversation({
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
     assistantNameRef.current = null;
     onboardingUserIdRef.current = null;
+    userNameRef.current = null;
+    fontSizeRef.current = "standard";
+    characterIdRef.current = DEFAULT_CHARACTER_ID;
     onboardingCompletedRef.current = false;
+    setSettingsSummary(null);
     webrtc.disconnect();
 
     const key = sessionKeyRef.current;
@@ -661,15 +729,23 @@ export function useOnboardingConversation({
         }
 
         if (functionName === "complete_onboarding") {
+          const summary = buildOnboardingSettingsSummary({
+            userName: userNameRef.current,
+            characterId: characterIdRef.current,
+            assistantName: assistantNameRef.current,
+            fontSize: fontSizeRef.current,
+            preferences: speakingPrefsRef.current,
+          });
           void enqueueProfileSave({
             onboardingCompletedAt: Date.now(),
           })
             .then(() => {
               onboardingCompletedRef.current = true;
+              setSettingsSummary(summary);
               sendResult(
                 JSON.stringify({
                   success: true,
-                  message: "オンボーディング完了を記録しました",
+                  message: `オンボーディング完了を記録しました。確認内容: お名前は「${summary.userName !== "" ? `${summary.userName}さん` : "未設定"}」、話し相手は「${summary.characterName}」、呼び名は「${summary.assistantName}」、文字は「${summary.fontSizeLabel}」、話す速さは「${summary.speakingSpeedLabel}」、待ち時間は「${summary.silenceDurationLabel}」、確認の頻度は「${summary.confirmationLevelLabel}」です。`,
                 }),
               );
             })
@@ -697,6 +773,7 @@ export function useOnboardingConversation({
             name: trimmedName,
           })
             .then(() => {
+              userNameRef.current = trimmedName;
               sendResult(
                 JSON.stringify({
                   success: true,
@@ -784,6 +861,7 @@ export function useOnboardingConversation({
           }
           const character = getCharacterById(normalizedId);
           dispatch({ type: "SET_CHARACTER", characterId: character.id });
+          characterIdRef.current = character.id;
           void enqueueProfileSave({
             characterId: character.id,
           })
@@ -816,6 +894,7 @@ export function useOnboardingConversation({
             return;
           }
           setFontSizeRef.current(level);
+          fontSizeRef.current = level;
           const label = FONT_SIZE_LABELS[level] ?? level;
           void enqueueProfileSave({ fontSize: level })
             .then(() => {
@@ -934,6 +1013,7 @@ export function useOnboardingConversation({
       requestEndConversation,
       enqueueProfileSave,
       applySpeakingPreferencesToSession,
+      setSettingsSummary,
     ],
   );
 
@@ -1032,6 +1112,11 @@ export function useOnboardingConversation({
             });
 
             // Timer fallback: stop after delay even if audio-end event never fires.
+            const farewellText =
+              state.pendingAssistantText !== ""
+                ? state.pendingAssistantText
+                : getLatestAssistantText(state.transcript);
+            const farewellDelayMs = estimateFarewellDelayMs(farewellText);
             endConversationStopTimeoutRef.current = setTimeout(() => {
               endConversationStopTimeoutRef.current = null;
               if (!stopAfterAudioScheduledRef.current) return;
@@ -1041,7 +1126,7 @@ export function useOnboardingConversation({
                 audioEndUnsubscribeRef.current = null;
               }
               stopRef.current();
-            }, END_CONVERSATION_FAREWELL_DELAY_MS);
+            }, farewellDelayMs);
           }
           break;
         }
@@ -1107,6 +1192,8 @@ export function useOnboardingConversation({
       clearAiSpeakingTracking,
       resetEndConversationFlow,
       requestEndConversation,
+      state.transcript,
+      state.pendingAssistantText,
     ],
   );
 
@@ -1142,6 +1229,7 @@ export function useOnboardingConversation({
     resetMicGuard();
     clearOnboardingDeferredTopic();
     onboardingCompletedRef.current = false;
+    setSettingsSummary(null);
     dispatch({ type: "CONNECT" });
 
     // Step 1: Request mic access first (must be in user gesture context for iOS)
@@ -1153,6 +1241,13 @@ export function useOnboardingConversation({
           speakingPrefsRef.current = preferences;
           assistantNameRef.current = profile?.assistantName ?? null;
           onboardingUserIdRef.current = profile?.id ?? null;
+          userNameRef.current = profile?.name ?? null;
+          fontSizeRef.current = profile?.fontSize ?? "standard";
+          characterIdRef.current = profile?.characterId ?? DEFAULT_CHARACTER_ID;
+          dispatch({
+            type: "SET_CHARACTER",
+            characterId: characterIdRef.current,
+          });
 
           // Step 2: Build session config
           const character = getCharacterById("character-a");
@@ -1228,8 +1323,12 @@ export function useOnboardingConversation({
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
     assistantNameRef.current = null;
     onboardingUserIdRef.current = null;
+    userNameRef.current = null;
+    fontSizeRef.current = "standard";
+    characterIdRef.current = DEFAULT_CHARACTER_ID;
     const completed = onboardingCompletedRef.current;
     onboardingCompletedRef.current = false;
+    setSettingsSummary(null);
 
     // Wait briefly for any in-flight profile saves so completion screen
     // reflects the selected values reliably.
@@ -1273,6 +1372,7 @@ export function useOnboardingConversation({
     errorType: state.errorType,
     transcript: state.transcript,
     pendingAssistantText: state.pendingAssistantText,
+    settingsSummary,
     audioLevel: webrtc.audioLevel,
     remoteAudioLevel: webrtc.remoteAudioLevel,
     characterId: state.characterId,
