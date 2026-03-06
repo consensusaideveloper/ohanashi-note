@@ -97,6 +97,7 @@ const QUOTA_EXCEEDED_CODES = new Set([
   "DAILY_QUOTA_EXCEEDED",
   "MONTHLY_QUOTA_EXCEEDED",
 ]);
+const ONBOARDING_REQUIRED_CODE = "ONBOARDING_REQUIRED";
 
 /** Delay (ms) after AI finishes speaking before re-enabling the mic. */
 const MIC_REENABLE_DELAY_MS = 300;
@@ -243,6 +244,8 @@ export interface UseConversationReturn {
   sessionWarningShown: boolean;
   /** Monotonic signal incremented when AI-triggered auto-end is completed. */
   autoEndSignal: number;
+  /** Monotonic signal incremented when the server requires onboarding. */
+  onboardingRequiredSignal: number;
   /** Conversation ID of the most recently completed session (available after summary). */
   lastConversationId: string | null;
   /** Note update proposals from the most recently completed guided conversation. */
@@ -431,6 +434,13 @@ function isSessionQuotaExceededError(error: unknown): boolean {
   return code !== null && QUOTA_EXCEEDED_CODES.has(code);
 }
 
+function isOnboardingRequiredError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 403) {
+    return false;
+  }
+  return extractApiErrorCode(error) === ONBOARDING_REQUIRED_CODE;
+}
+
 async function requestEnhancedSummarizeWithRetry(
   conversationId: string,
   category: QuestionCategory | null,
@@ -482,6 +492,7 @@ function buildOnboardingHandoffInstruction(topic: string): string {
 export function useConversation(): UseConversationReturn {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [autoEndSignal, setAutoEndSignal] = useState(0);
+  const [onboardingRequiredSignal, setOnboardingRequiredSignal] = useState(0);
   const [lastConversationId, setLastConversationId] = useState<string | null>(
     null,
   );
@@ -1618,6 +1629,13 @@ export function useConversation(): UseConversationReturn {
         .catch((err: unknown) => {
           discardLocalRecording();
           console.error("Failed to start conversation:", { error: err });
+          if (isOnboardingRequiredError(err)) {
+            cleanupRealtimeSessionRef.current();
+            dispatch({ type: "DISCONNECT" });
+            setOnboardingRequiredSignal((value) => value + 1);
+            clearSessionTimer();
+            return;
+          }
           // Determine error type based on failure
           if (
             err instanceof Error &&
@@ -1912,6 +1930,7 @@ export function useConversation(): UseConversationReturn {
     remainingMs: state.remainingMs,
     sessionWarningShown: state.sessionWarningShown,
     autoEndSignal,
+    onboardingRequiredSignal,
     lastConversationId,
     noteUpdateProposals: pendingProposals,
     start,

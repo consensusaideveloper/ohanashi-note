@@ -132,37 +132,18 @@ describe("profileRoute", () => {
     });
   });
 
-  it("accepts onboarding completion timestamps on PUT", async () => {
-    const completedAt = new Date("2026-03-06T01:02:03.000Z");
-    vi.mocked(db.query.users.findFirst).mockResolvedValue({
-      id: "user-1",
-      name: "太郎",
-      assistantName: "にこ",
-      characterId: "character-a",
-      fontSize: "standard",
-      speakingSpeed: "normal",
-      silenceDuration: "normal",
-      confirmationLevel: "normal",
-      onboardingCompletedAt: completedAt,
-      updatedAt: new Date("2026-03-06T01:02:04.000Z"),
-    } as never);
-
+  it("rejects onboarding completion timestamps on generic profile PUT", async () => {
     const response = await profileRoute.fetch(
       new Request("http://localhost/api/profile", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ onboardingCompletedAt: completedAt.getTime() }),
+        body: JSON.stringify({ onboardingCompletedAt: Date.now() }),
       }),
     );
 
-    expect(response.status).toBe(200);
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        onboardingCompletedAt: completedAt,
-      }),
-    );
+    expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      onboardingCompletedAt: completedAt.getTime(),
+      code: "INVALID_PROFILE_FIELD",
     });
   });
 });

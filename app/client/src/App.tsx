@@ -143,7 +143,7 @@ type NavigationWarningKind = "summarizing" | "todo-generating" | null;
 function needsOnboarding(
   profile: { onboardingCompletedAt?: number | null } | null,
 ): boolean {
-  return profile !== null && profile.onboardingCompletedAt == null;
+  return profile?.onboardingCompletedAt == null;
 }
 
 function AuthGate(): ReactNode {
@@ -299,6 +299,11 @@ function AuthGate(): ReactNode {
     setOnboardingPhase("none");
   }, []);
 
+  const handleOnboardingRequired = useCallback((): void => {
+    setOnboardingPhase("conversation");
+    setOnboardingChecked(true);
+  }, []);
+
   // Show loading spinner while auth state is being determined
   if (loading) {
     return (
@@ -386,12 +391,16 @@ function AuthGate(): ReactNode {
 
   return (
     <VoiceActionProvider>
-      <AppContent />
+      <AppContent onRequireOnboarding={handleOnboardingRequired} />
     </VoiceActionProvider>
   );
 }
 
-function AppContent(): ReactNode {
+interface AppContentProps {
+  onRequireOnboarding: () => void;
+}
+
+function AppContent({ onRequireOnboarding }: AppContentProps): ReactNode {
   const conversation = useConversation();
   const { setFontSize } = useFontSize();
 
@@ -522,6 +531,23 @@ function AppContent(): ReactNode {
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmAction | null>(
     null,
   );
+  const lastOnboardingRequiredSignalRef = useRef(
+    conversation.onboardingRequiredSignal,
+  );
+
+  useEffect(() => {
+    if (
+      conversation.onboardingRequiredSignal !==
+      lastOnboardingRequiredSignalRef.current
+    ) {
+      lastOnboardingRequiredSignalRef.current =
+        conversation.onboardingRequiredSignal;
+      setPendingCategory(undefined);
+      setSelectedConversationId(null);
+      setVoiceConfirm(null);
+      onRequireOnboarding();
+    }
+  }, [conversation.onboardingRequiredSignal, onRequireOnboarding]);
 
   const handleVoiceConfirm = useCallback((): void => {
     if (voiceConfirm === null) return;

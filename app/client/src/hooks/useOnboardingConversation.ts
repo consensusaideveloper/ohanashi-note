@@ -30,7 +30,11 @@ import {
 } from "../lib/onboarding-deferred-topic";
 import { buildOnboardingPrompt } from "../lib/prompt-builder";
 import { getUserProfile, saveUserProfile } from "../lib/storage";
-import { connectRealtimeSession, endRealtimeSession } from "../lib/api";
+import {
+  completeOnboardingSession,
+  connectRealtimeSession,
+  endRealtimeSession,
+} from "../lib/api";
 import { useWebRTC } from "./useWebRTC";
 import type { OnboardingSettingsSummary } from "../components/OnboardingSettingsSummaryCard";
 
@@ -736,9 +740,14 @@ export function useOnboardingConversation({
             fontSize: fontSizeRef.current,
             preferences: speakingPrefsRef.current,
           });
-          void enqueueProfileSave({
-            onboardingCompletedAt: Date.now(),
-          })
+          const sessionKey = sessionKeyRef.current;
+          if (sessionKey === "") {
+            sendResult(
+              JSON.stringify({ error: "セッションが確認できませんでした" }),
+            );
+            return;
+          }
+          void completeOnboardingSession(sessionKey)
             .then(() => {
               onboardingCompletedRef.current = true;
               setSettingsSummary(summary);

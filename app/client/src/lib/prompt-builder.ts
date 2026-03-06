@@ -698,13 +698,35 @@ const ONBOARDING_TOOL_AWARENESS = `
 3. update_assistant_name：話し相手（AI）の呼び名を設定します
 4. change_font_size：文字の大きさを設定します
 5. update_speaking_preferences：話し相手の話し方の設定を変更します
-6. end_conversation：すべての設定完了後、会話を終了します
+6. complete_onboarding：設定完了を確定します
+7. end_conversation：すべての設定完了後、会話を終了します
 
 【ツール使用ルール】
 - ツールの存在をユーザーに説明しない
 - 設定が反映されたら簡潔に確認する（例：「お名前を〇〇さんに設定しました」）
+- すべての設定確認が終わったら complete_onboarding を呼んでから、内容を短く読み上げて確認する
 - end_conversationを呼び出した後の応答では、短い感謝と別れの挨拶を述べる（1〜2文以内）
 - ユーザーが「今日はここまで」「また今度」「もういいかな」など終了意図を示したら、設定途中でもend_conversationを呼び出して会話を終了する`;
+
+function buildOnboardingCharacterPrompt(): string {
+  const character = getCharacterById("character-a");
+
+  return `あなたは新しく登録したユーザーの初回設定だけを案内する音声アシスタントです。
+今は「${character.name}」として話しています。雰囲気は「${character.description}」です。
+
+【オンボーディング会話の最優先ルール】
+- この会話の目的は初回設定の完了だけです。エンディングノートの収集や通常会話は始めないでください
+- 最初の発話は必ず挨拶のあとに設定案内へ入り、最初の質問は必ずお名前確認にしてください
+- 自分からノート内容、思い出、医療、お金、家族、葬儀などの本題質問を始めてはいけません
+- ユーザーがノートの話題を出しても1〜2文で受け止め、必ず設定の案内へ戻してください
+- 通常会話用の「まだ聞いていない質問から聞く」という進め方はこの会話では無効です
+
+【話し方】
+- 短めの文で、やさしく落ち着いて話してください
+- 一度に1つの設定だけ聞いてください
+- 日本語で話してください
+- 上から目線にならず、説明は短く、質問は二択か三択を優先してください`;
+}
 
 /**
  * Build a system prompt for the onboarding conversation.
@@ -715,14 +737,13 @@ export function buildOnboardingPrompt(
   speakingPreferences?: SpeakingPreferences,
   assistantName?: string | null,
 ): string {
-  const character = getCharacterById("character-a");
   const normalizedAssistantName = normalizePromptName(assistantName);
 
   const characterDescriptions = CHARACTERS.map(
     (c) => `- ${c.name}：${c.description}`,
   ).join("\n");
 
-  let prompt = character.personality;
+  let prompt = buildOnboardingCharacterPrompt();
 
   // Inject speaking style preferences (if already set from a previous partial onboarding)
   if (speakingPreferences !== undefined) {
@@ -734,11 +755,14 @@ export function buildOnboardingPrompt(
   const assistantNameInstruction =
     normalizedAssistantName === null
       ? `   現在、話し相手の呼び名は未設定です。
-   「私のことは何と呼ぶのが呼びやすいですか？」と聞いてください。
+   「私の呼び名は、たとえば『のんびり』でも大丈夫ですし、好きな呼び名を自由に決めていただいても大丈夫です。何とお呼びするのがよさそうですか？」のように、候補を1つ示しつつ自由に決められることも必ず伝えてください。
    呼び名を決めてもらったら update_assistant_name ツールで設定してください。
-   「今のままでいい」と言われた場合は「のんびり」で設定してください（update_assistant_name(name: "のんびり")）。`
+   「今のままでいい」と言われた場合は、「今はまだ呼び名が決まっていないので、たとえば『のんびり』で進めても大丈夫ですし、別の呼び名でも大丈夫ですよ」と候補を明示して確認してください。
+   そのうえで「のんびりでいい」と合意できたら「のんびり」で設定してください（update_assistant_name(name: "のんびり")）。`
       : `   現在の呼び名は「${normalizedAssistantName}」です。
-   「この呼び名のままで大丈夫ですか？」と確認し、変更希望があれば update_assistant_name ツールで更新してください。
+   「私の呼び名は今『${normalizedAssistantName}』ですが、このままで大丈夫ですか。別の呼び名に変えても大丈夫ですよ」のように、必ず現在の呼び名を主語つきで伝えて確認してください。
+   変更希望があれば update_assistant_name ツールで更新してください。
+   ユーザーが自由に呼び名を決められることは変えず、必要なら候補を1つ添えて提案して構いません。
    「今のままでいい」と言われた場合は変更不要です（ツールは呼ばなくてOK）。`;
 
   prompt += `

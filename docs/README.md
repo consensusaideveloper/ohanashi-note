@@ -8,6 +8,8 @@
   - 退会、復元、ハードデリート、家族通知、監査証跡、関連エッジケース
 - [家族ライフサイクル仕様](/Users/y-masamura/develop/conversational-ai-research/docs/family-lifecycle-spec.md)
   - 死亡報告、同意収集、ノート開封、家族側の状態遷移
+- [音声会話・オンボーディング仕様](/Users/y-masamura/develop/conversational-ai-research/docs/voice-automation-spec.md)
+  - 通常会話、音声操作、初回オンボーディング、セッション制限、保存ルール
 
 ## Operations
 

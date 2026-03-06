@@ -164,6 +164,16 @@ export async function activateRealtimeSession(
   return response.json() as Promise<{ success: true; counted: boolean }>;
 }
 
+export async function completeOnboardingSession(
+  sessionKey: string,
+): Promise<{ success: true; completedAt: number }> {
+  const response = await fetchWithAuth("/api/realtime/complete-onboarding", {
+    method: "POST",
+    body: JSON.stringify({ sessionKey }),
+  });
+  return response.json() as Promise<{ success: true; completedAt: number }>;
+}
+
 // --- Data Export ---
 
 export interface DataExportOptions {

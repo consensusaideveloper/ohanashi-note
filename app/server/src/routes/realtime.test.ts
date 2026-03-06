@@ -14,6 +14,7 @@ vi.mock("../db/connection.js", () => ({
       },
     },
     insert: vi.fn(),
+    update: vi.fn(),
   },
 }));
 
@@ -63,6 +64,10 @@ let trackSessionStart: typeof import("../lib/session-tracker.js").trackSessionSt
 let trackSessionEnd: typeof import("../lib/session-tracker.js").trackSessionEnd;
 
 const insertValuesMock = vi.fn();
+const updateWhereMock = vi.fn();
+const updateSetMock = vi.fn(() => ({
+  where: updateWhereMock,
+}));
 
 const validSessionConfig = {
   instructions: "こんにちは",
@@ -90,7 +95,11 @@ beforeEach(async () => {
   vi.mocked(db.insert).mockReturnValue({
     values: insertValuesMock,
   } as never);
+  vi.mocked(db.update).mockReturnValue({
+    set: updateSetMock,
+  } as never);
   insertValuesMock.mockResolvedValue(undefined);
+  updateWhereMock.mockResolvedValue(undefined);
   vi.mocked(trackSessionStart).mockReturnValue("session-key-1");
   vi.mocked(trackSessionEnd).mockReturnValue(undefined);
   vi.mocked(getSessionQuota).mockResolvedValue({
@@ -263,6 +272,31 @@ describe("realtimeRoute", () => {
       counted: false,
     });
     expect(insertValuesMock).not.toHaveBeenCalled();
+  });
+
+  it("marks onboarding complete only for an active onboarding session", async () => {
+    vi.mocked(db.query.activityLog.findFirst).mockResolvedValue({
+      id: "start-1",
+    } as never);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/complete-onboarding", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionKey: "session-key-1" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+    });
+    expect(updateSetMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onboardingCompletedAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+    );
   });
 
   it("blocks normal sessions until onboarding is complete", async () => {

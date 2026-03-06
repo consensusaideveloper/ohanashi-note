@@ -48,6 +48,10 @@ interface SessionActivateRequestBody {
   sessionKey: string;
 }
 
+interface OnboardingCompleteRequestBody {
+  sessionKey: string;
+}
+
 // --- Route ---
 
 export const realtimeRoute = new Hono();
@@ -481,6 +485,65 @@ realtimeRoute.post("/api/realtime/session-activate", async (c) => {
       {
         error: "セッション開始の記録に失敗しました",
         code: "SESSION_ACTIVATE_FAILED",
+      },
+      500,
+    );
+  }
+});
+
+realtimeRoute.post("/api/realtime/complete-onboarding", async (c) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+    const userId = await resolveUserId(firebaseUid);
+    const body: OnboardingCompleteRequestBody = await c.req.json();
+    const { sessionKey } = body;
+
+    if (!sessionKey || typeof sessionKey !== "string") {
+      return c.json(
+        { error: "セッションキーが不正です", code: "INVALID_REQUEST" },
+        400,
+      );
+    }
+
+    const sessionStart = await db.query.activityLog.findFirst({
+      where: and(
+        eq(activityLog.creatorId, userId),
+        eq(activityLog.actorId, userId),
+        eq(activityLog.action, REALTIME_ONBOARDING_SESSION_STARTED_ACTION),
+        eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
+        eq(activityLog.resourceId, sessionKey),
+      ),
+      columns: { id: true },
+    });
+
+    if (!sessionStart) {
+      return c.json(
+        {
+          error: "オンボーディングセッションが見つかりません",
+          code: "SESSION_NOT_FOUND",
+        },
+        404,
+      );
+    }
+
+    const completedAt = new Date();
+    await db
+      .update(users)
+      .set({ onboardingCompletedAt: completedAt, updatedAt: completedAt })
+      .where(eq(users.id, userId));
+
+    return c.json({
+      success: true,
+      completedAt: completedAt.getTime(),
+    });
+  } catch (err: unknown) {
+    logger.error("Failed to complete onboarding", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return c.json(
+      {
+        error: "オンボーディング完了の記録に失敗しました",
+        code: "ONBOARDING_COMPLETE_FAILED",
       },
       500,
     );

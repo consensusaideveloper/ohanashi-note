@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSessionPrompt, buildSpeakingStylePrompt } from "./prompt-builder";
+import {
+  buildOnboardingPrompt,
+  buildSessionPrompt,
+  buildSpeakingStylePrompt,
+} from "./prompt-builder";
 
 describe("buildSpeakingStylePrompt", () => {
   it("always includes elderly-friendly guardrails", () => {
@@ -99,5 +103,33 @@ describe("buildSessionPrompt", () => {
 
     expect(prompt).toContain("【会話の冒頭ルール】");
     expect(prompt).toContain("前回の要点メモ: 前回はお墓の希望を確認した。");
+  });
+});
+
+describe("buildOnboardingPrompt", () => {
+  it("makes assistant-name confirmation explicit and offers a candidate", () => {
+    const prompt = buildOnboardingPrompt(undefined, "さくら");
+
+    expect(prompt).toContain("私の呼び名は今『さくら』ですが");
+    expect(prompt).toContain("別の呼び名に変えても大丈夫ですよ");
+  });
+
+  it("avoids ambiguous 'current as-is' wording when no assistant name exists", () => {
+    const prompt = buildOnboardingPrompt();
+
+    expect(prompt).toContain("たとえば『のんびり』でも大丈夫");
+    expect(prompt).toContain("好きな呼び名を自由に決めていただいても大丈夫");
+    expect(prompt).toContain("今はまだ呼び名が決まっていない");
+  });
+
+  it("does not inherit main-conversation note collection instructions", () => {
+    const prompt = buildOnboardingPrompt();
+
+    expect(prompt).toContain("この会話の目的は初回設定の完了だけです");
+    expect(prompt).toContain("最初の質問は必ずお名前確認にしてください");
+    expect(prompt).toContain(
+      "通常会話用の「まだ聞いていない質問から聞く」という進め方はこの会話では無効です",
+    );
+    expect(prompt).toContain("complete_onboarding");
   });
 });

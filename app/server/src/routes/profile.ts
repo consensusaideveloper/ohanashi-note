@@ -79,6 +79,26 @@ profileRoute.put("/api/profile", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
 
     const body = await c.req.json<Record<string, unknown>>();
+    const allowedFields = new Set([
+      "name",
+      "assistantName",
+      "characterId",
+      "fontSize",
+      "speakingSpeed",
+      "silenceDuration",
+      "confirmationLevel",
+    ]);
+    for (const field of Object.keys(body)) {
+      if (!allowedFields.has(field)) {
+        return c.json(
+          {
+            error: "更新できないプロフィール項目です",
+            code: "INVALID_PROFILE_FIELD",
+          },
+          400,
+        );
+      }
+    }
     const updates: Record<string, unknown> = {
       updatedAt: new Date(),
     };
@@ -91,7 +111,6 @@ profileRoute.put("/api/profile", async (c: Context) => {
       "speakingSpeed",
       "silenceDuration",
       "confirmationLevel",
-      "onboardingCompletedAt",
     ] as const) {
       if (!(field in body)) continue;
       const validation = validateProfileUpdateValue(field, body[field]);
@@ -101,14 +120,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
           400,
         );
       }
-      if (field === "onboardingCompletedAt") {
-        updates[field] =
-          validation.normalized === null
-            ? null
-            : new Date(Number(validation.normalized));
-      } else {
-        updates[field] = validation.normalized;
-      }
+      updates[field] = validation.normalized;
     }
 
     await db.update(users).set(updates).where(eq(users.id, userId));
