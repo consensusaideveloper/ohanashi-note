@@ -120,6 +120,13 @@
       "when": 1772790262511,
       "tag": "0016_red_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1772793862511,
+      "tag": "0017_fair_onboarding_gate",
+      "breakpoints": true
     }
   ]
 }
