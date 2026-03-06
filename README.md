@@ -32,6 +32,15 @@ app/
 docs/              # Research and planning documents
 ```
 
+## Key Specs
+
+README には概要だけを置き、運用や仕様の詳細は `docs/` 配下の専用ドキュメントを正本として管理します。
+
+- ドキュメント一覧: [docs/README.md](/Users/y-masamura/develop/conversational-ai-research/docs/README.md)
+- アカウント退会・削除仕様: [docs/account-deletion-spec.md](/Users/y-masamura/develop/conversational-ai-research/docs/account-deletion-spec.md)
+- 家族ライフサイクル仕様: [docs/family-lifecycle-spec.md](/Users/y-masamura/develop/conversational-ai-research/docs/family-lifecycle-spec.md)
+- Migration 運用: [docs/migration-operations.md](/Users/y-masamura/develop/conversational-ai-research/docs/migration-operations.md)
+
 ## Prerequisites
 
 - Node.js >= 20
@@ -66,8 +75,8 @@ docs/              # Research and planning documents
 4. Run database migrations:
 
    ```bash
-   cd server
-   npx drizzle-kit push
+   cd app
+   npm run db:migrate
    ```
 
 5. Start development servers:
