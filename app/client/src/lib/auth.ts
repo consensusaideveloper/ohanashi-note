@@ -14,25 +14,6 @@ import type { User, Unsubscribe } from "firebase/auth";
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-function shouldPreferRedirectSignIn(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  const ua = navigator.userAgent;
-  const isTouchMac =
-    navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  const uaData = navigator as Navigator & {
-    userAgentData?: { mobile?: boolean };
-  };
-
-  return (
-    uaData.userAgentData?.mobile === true ||
-    /Android|iPhone|iPad|iPod/i.test(ua) ||
-    isTouchMac
-  );
-}
-
 function shouldFallbackToRedirect(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
@@ -49,15 +30,11 @@ function shouldFallbackToRedirect(error: unknown): boolean {
 }
 
 /**
- * Sign in with Google using a popup window.
- * Returns the authenticated user.
+ * Sign in with Google.
+ * Always attempts popup first, then falls back to redirect if the popup
+ * is blocked (common on mobile browsers / iPad Safari).
  */
 export async function signInWithGoogle(): Promise<User | undefined> {
-  if (shouldPreferRedirectSignIn()) {
-    await signInWithRedirect(firebaseAuth, googleProvider);
-    return undefined;
-  }
-
   try {
     const result = await signInWithPopup(firebaseAuth, googleProvider);
     return result.user;
