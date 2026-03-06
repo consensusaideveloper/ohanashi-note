@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
 import {
@@ -8,11 +8,11 @@ import {
   familyMembers,
   consentRecords,
   deletionConsentRecords,
+  notifications,
+  shares,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
-import { deleteFirebaseUser } from "../lib/firebase-admin.js";
-import { deleteUserAudioFiles } from "../lib/r2-cleanup.js";
 import { logger } from "../lib/logger.js";
 import {
   getCreatorLifecycleStatus,
@@ -24,7 +24,34 @@ import {
 
 import type { Context } from "hono";
 
-const accountRoute = new Hono();
+/** Grace period before hard deletion (30 days in milliseconds). */
+const DEACTIVATION_GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+const ACCOUNT_NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+async function getAccountFamilyNotificationRecipients(
+  memberUserIds: string[],
+  type: string,
+  relatedCreatorId: string,
+): Promise<string[]> {
+  if (memberUserIds.length === 0) return [];
+
+  const since = new Date(Date.now() - ACCOUNT_NOTIFICATION_COOLDOWN_MS);
+  const existing = await Promise.all(
+    memberUserIds.map((userId) =>
+      db.query.notifications.findFirst({
+        where: and(
+          eq(notifications.userId, userId),
+          eq(notifications.type, type),
+          eq(notifications.relatedCreatorId, relatedCreatorId),
+          gte(notifications.createdAt, since),
+        ),
+        columns: { id: true },
+      }),
+    ),
+  );
+
+  return memberUserIds.filter((_, index) => existing[index] === undefined);
+}
 
 /**
  * Check if the user is participating in any active consent processes
@@ -84,7 +111,13 @@ async function hasActiveConsentParticipation(userId: string): Promise<boolean> {
   return false;
 }
 
-/** DELETE /api/account — Delete the authenticated user's account and all data. */
+const accountRoute = new Hono();
+
+/**
+ * DELETE /api/account — Soft-delete the authenticated user's account.
+ * Sets the account to "deactivated" with a 30-day grace period.
+ * After the grace period, a batch job permanently deletes all data.
+ */
 accountRoute.delete("/api/account", async (c: Context) => {
   try {
     const firebaseUid = getFirebaseUid(c);
@@ -115,61 +148,230 @@ accountRoute.delete("/api/account", async (c: Context) => {
       );
     }
 
-    // Notify family members before deletion (best-effort)
+    // Check if already deactivated
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { accountStatus: true },
+    });
+    if (user?.accountStatus === "deactivated") {
+      return c.json(
+        {
+          error: "すでに退会手続き中です。",
+          code: "ACCOUNT_ALREADY_DEACTIVATED",
+        },
+        409,
+      );
+    }
+
+    const now = new Date();
+    const scheduledDeletionAt = new Date(
+      now.getTime() + DEACTIVATION_GRACE_PERIOD_MS,
+    );
+
+    // Soft-delete: mark account as deactivated
+    await db
+      .update(users)
+      .set({
+        accountStatus: "deactivated",
+        deactivatedAt: now,
+        scheduledDeletionAt,
+        deletionReason: "user_requested",
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+
+    // Revoke existing public share links immediately while the account is hidden.
+    await db.delete(shares).where(eq(shares.userId, userId));
+
+    // Notify family members (best-effort)
     const members = await getActiveFamilyMembers(userId);
     if (members.length > 0) {
       try {
         const creatorName = await getCreatorName(userId);
         const memberUserIds = members.map((m) => m.memberId);
-        await notifyFamilyMembers(
+        const recipients = await getAccountFamilyNotificationRecipients(
           memberUserIds,
-          "creator_account_deleted",
-          "アカウント削除のお知らせ",
-          `${creatorName}さんがアカウントを削除しました。関連するノートデータはすべて削除されました。`,
+          "creator_account_deactivated",
           userId,
         );
+        if (recipients.length > 0) {
+          await notifyFamilyMembers(
+            recipients,
+            "creator_account_deactivated",
+            "退会のお知らせ",
+            `${creatorName}さんが退会手続きを開始しました。30日以内であれば復元できます。`,
+            userId,
+          );
+        }
       } catch (notifyError: unknown) {
         const msg =
           notifyError instanceof Error ? notifyError.message : "Unknown error";
         logger.error(
-          "Failed to notify family members during account deletion",
+          "Failed to notify family members during account deactivation",
           { userId, error: msg },
         );
       }
     }
 
-    // Clean up R2 audio files (best-effort) before removing DB records
-    await deleteUserAudioFiles(userId);
+    logger.info("Account deactivated (soft-delete)", {
+      userId,
+      firebaseUid,
+      scheduledDeletionAt: scheduledDeletionAt.toISOString(),
+    });
 
-    // Delete DB data first so personal data is not left behind if auth cleanup fails.
-    await db.delete(users).where(eq(users.id, userId));
-
-    let firebaseDeleted = true;
-    try {
-      await deleteFirebaseUser(firebaseUid);
-    } catch (firebaseError: unknown) {
-      firebaseDeleted = false;
-      logger.error("Failed to delete Firebase user after DB deletion", {
-        userId,
-        firebaseUid,
+    return c.json({
+      success: true,
+      scheduledDeletionAt: scheduledDeletionAt.toISOString(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to deactivate account", { error: message });
+    return c.json(
+      {
         error:
-          firebaseError instanceof Error
-            ? firebaseError.message
-            : String(firebaseError),
-      });
+          "アカウントの退会手続きに失敗しました。しばらくしてからもう一度お試しください。",
+        code: "ACCOUNT_DEACTIVATE_FAILED",
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * GET /api/account/status — Get the account status for the authenticated user.
+ * This endpoint is accessible even when the account is deactivated.
+ */
+accountRoute.get("/api/account/status", async (c: Context) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.firebaseUid, firebaseUid),
+      columns: {
+        accountStatus: true,
+        deactivatedAt: true,
+        scheduledDeletionAt: true,
+      },
+    });
+
+    if (!user) {
+      return c.json(
+        {
+          error: "アカウントが見つかりません",
+          code: "ACCOUNT_NOT_FOUND",
+        },
+        404,
+      );
     }
 
-    logger.info("Account deleted", { userId, firebaseUid, firebaseDeleted });
+    return c.json({
+      accountStatus: user.accountStatus,
+      deactivatedAt: user.deactivatedAt?.toISOString() ?? null,
+      scheduledDeletionAt: user.scheduledDeletionAt?.toISOString() ?? null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error("Failed to get account status", { error: message });
+    return c.json(
+      {
+        error: "アカウント情報の取得に失敗しました。",
+        code: "ACCOUNT_STATUS_FAILED",
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * POST /api/account/reactivate — Reactivate a deactivated account.
+ * This endpoint is accessible even when the account is deactivated.
+ * Cancels the scheduled deletion and restores the account to active status.
+ */
+accountRoute.post("/api/account/reactivate", async (c: Context) => {
+  try {
+    const firebaseUid = getFirebaseUid(c);
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.firebaseUid, firebaseUid),
+      columns: { id: true, accountStatus: true },
+    });
+
+    if (!user) {
+      return c.json(
+        {
+          error: "アカウントが見つかりません",
+          code: "ACCOUNT_NOT_FOUND",
+        },
+        404,
+      );
+    }
+
+    if (user.accountStatus !== "deactivated") {
+      return c.json(
+        {
+          error: "このアカウントは退会手続き中ではありません。",
+          code: "ACCOUNT_NOT_DEACTIVATED",
+        },
+        409,
+      );
+    }
+
+    const now = new Date();
+    await db
+      .update(users)
+      .set({
+        accountStatus: "active",
+        deactivatedAt: null,
+        scheduledDeletionAt: null,
+        deletionReason: null,
+        updatedAt: now,
+      })
+      .where(eq(users.id, user.id));
+
+    // Notify family members (best-effort)
+    const members = await getActiveFamilyMembers(user.id);
+    if (members.length > 0) {
+      try {
+        const creatorName = await getCreatorName(user.id);
+        const memberUserIds = members.map((m) => m.memberId);
+        const recipients = await getAccountFamilyNotificationRecipients(
+          memberUserIds,
+          "creator_account_reactivated",
+          user.id,
+        );
+        if (recipients.length > 0) {
+          await notifyFamilyMembers(
+            recipients,
+            "creator_account_reactivated",
+            "アカウント復元のお知らせ",
+            `${creatorName}さんがアカウントを復元しました。`,
+            user.id,
+          );
+        }
+      } catch (notifyError: unknown) {
+        const msg =
+          notifyError instanceof Error ? notifyError.message : "Unknown error";
+        logger.error(
+          "Failed to notify family members during account reactivation",
+          { userId: user.id, error: msg },
+        );
+      }
+    }
+
+    logger.info("Account reactivated", {
+      userId: user.id,
+      firebaseUid,
+    });
 
     return c.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    logger.error("Failed to delete account", { error: message });
+    logger.error("Failed to reactivate account", { error: message });
     return c.json(
       {
         error:
-          "アカウントの削除に失敗しました。しばらくしてからもう一度お試しください。",
-        code: "ACCOUNT_DELETE_FAILED",
+          "アカウントの復元に失敗しました。しばらくしてからもう一度お試しください。",
+        code: "ACCOUNT_REACTIVATE_FAILED",
       },
       500,
     );

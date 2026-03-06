@@ -24,9 +24,34 @@ export const users = pgTable("users", {
   speakingSpeed: text("speaking_speed").notNull().default("normal"),
   silenceDuration: text("silence_duration").notNull().default("normal"),
   confirmationLevel: text("confirmation_level").notNull().default("normal"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", tz),
+  accountStatus: text("account_status").notNull().default("active"),
+  deactivatedAt: timestamp("deactivated_at", tz),
+  scheduledDeletionAt: timestamp("scheduled_deletion_at", tz),
+  deletionReason: text("deletion_reason"),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
 });
+
+// --- Deleted Auth Identities ---
+
+export const deletedAuthIdentities = pgTable(
+  "deleted_auth_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    identityHash: text("identity_hash").notNull(),
+    deletionReason: text("deletion_reason"),
+    deletedAt: timestamp("deleted_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("uq_deleted_auth_identities_provider_hash").on(
+      table.provider,
+      table.identityHash,
+    ),
+    index("idx_deleted_auth_identities_deleted_at").on(table.deletedAt),
+  ],
+);
 
 // --- Conversations ---
 
@@ -360,6 +385,65 @@ export const activityLog = pgTable(
   (table) => [
     index("idx_activity_log_creator_date").on(table.creatorId, table.createdAt),
     index("idx_activity_log_actor").on(table.actorId),
+  ],
+);
+
+// --- Deletion Audit Log ---
+
+export const deletionAuditLog = pgTable(
+  "deletion_audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    deletedUserId: uuid("deleted_user_id"),
+    firebaseUidHash: text("firebase_uid_hash"),
+    deletionReason: text("deletion_reason"),
+    deletedAt: timestamp("deleted_at", tz).notNull().defaultNow(),
+    metadata: jsonb("metadata"),
+  },
+  (table) => [index("idx_deletion_audit_log_deleted_at").on(table.deletedAt)],
+);
+
+// --- Pending R2 Deletions ---
+
+export const pendingR2Deletions = pgTable(
+  "pending_r2_deletions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storageKey: text("storage_key").notNull(),
+    reason: text("reason"),
+    firstFailedAt: timestamp("first_failed_at", tz).notNull().defaultNow(),
+    lastFailedAt: timestamp("last_failed_at", tz).notNull().defaultNow(),
+    retryCount: integer("retry_count").notNull().default(0),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("uq_pending_r2_deletions_storage_key").on(table.storageKey),
+    index("idx_pending_r2_deletions_last_failed_at").on(table.lastFailedAt),
+  ],
+);
+
+// --- Pending Auth Deletions ---
+
+export const pendingAuthDeletions = pgTable(
+  "pending_auth_deletions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    externalId: text("external_id").notNull(),
+    reason: text("reason"),
+    firstFailedAt: timestamp("first_failed_at", tz).notNull().defaultNow(),
+    lastFailedAt: timestamp("last_failed_at", tz).notNull().defaultNow(),
+    retryCount: integer("retry_count").notNull().default(0),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("uq_pending_auth_deletions_provider_external").on(
+      table.provider,
+      table.externalId,
+    ),
+    index("idx_pending_auth_deletions_last_failed_at").on(table.lastFailedAt),
   ],
 );
 

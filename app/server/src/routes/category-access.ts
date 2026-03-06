@@ -11,7 +11,7 @@ import {
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
-import { getUserRole } from "../middleware/role.js";
+import { creatorDeleted, getUserRoleOrDeleted } from "../middleware/role.js";
 import { logger } from "../lib/logger.js";
 import {
   getCreatorName,
@@ -285,7 +285,8 @@ categoryAccessRoute.get(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (
         role !== "creator" &&
@@ -366,7 +367,8 @@ categoryAccessRoute.post("/api/access/:creatorId/grant", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative") {
       return c.json(
@@ -525,7 +527,8 @@ categoryAccessRoute.delete(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (role !== "representative") {
         return c.json(
@@ -665,7 +668,8 @@ categoryAccessRoute.get(
       const creatorId = c.req.param("creatorId");
       const categoryId = c.req.param("categoryId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (
         role !== "creator" &&
@@ -780,7 +784,8 @@ categoryAccessRoute.get(
       const userId = await resolveUserId(firebaseUid);
       const creatorId = c.req.param("creatorId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (
         role !== "creator" &&
@@ -926,7 +931,8 @@ categoryAccessRoute.get(
       const creatorId = c.req.param("creatorId");
       const conversationId = c.req.param("conversationId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (
         role !== "creator" &&
@@ -1052,7 +1058,8 @@ categoryAccessRoute.get(
       const creatorId = c.req.param("creatorId");
       const conversationId = c.req.param("conversationId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (
         role !== "creator" &&
@@ -1186,7 +1193,8 @@ categoryAccessRoute.get("/api/access/:creatorId/matrix", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative") {
       return c.json(

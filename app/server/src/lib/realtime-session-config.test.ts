@@ -40,6 +40,7 @@ describe("validateRealtimeSessionConfig", () => {
       "update_user_name",
       "update_assistant_name",
       "update_speaking_preferences",
+      "complete_onboarding",
       "end_conversation",
     ]);
   });

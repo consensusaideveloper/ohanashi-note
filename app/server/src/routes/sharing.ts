@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
-import { shares, conversations } from "../db/schema.js";
+import { shares, conversations, users } from "../db/schema.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
@@ -112,6 +112,18 @@ sharingRoute.get("/api/shares/:id", async (c: Context) => {
     });
 
     if (!share) {
+      return c.json(
+        { error: "共有リンクが見つかりません", code: "NOT_FOUND" },
+        404,
+      );
+    }
+
+    const owner = await db.query.users.findFirst({
+      where: eq(users.id, share.userId),
+      columns: { accountStatus: true },
+    });
+
+    if (!owner || owner.accountStatus !== "active") {
       return c.json(
         { error: "共有リンクが見つかりません", code: "NOT_FOUND" },
         404,

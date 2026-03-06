@@ -1,7 +1,7 @@
 import { eq, and } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
-import { familyMembers } from "../db/schema.js";
+import { familyMembers, users } from "../db/schema.js";
 import { getFirebaseUid } from "./auth.js";
 import { resolveUserId } from "../lib/users.js";
 import { logger } from "../lib/logger.js";
@@ -11,6 +11,7 @@ import type { Context, Next } from "hono";
 // --- Types ---
 
 type FamilyRole = "creator" | "representative" | "member" | "none";
+export type FamilyRoleOrDeleted = FamilyRole | "deleted";
 
 // --- Helpers ---
 
@@ -69,6 +70,33 @@ export async function getUserRole(
   }
 
   return "member";
+}
+
+export async function getUserRoleOrDeleted(
+  userId: string,
+  creatorId: string,
+): Promise<FamilyRoleOrDeleted> {
+  const role = await getUserRole(userId, creatorId);
+  if (role !== "none") {
+    return role;
+  }
+
+  const creator = await db.query.users.findFirst({
+    where: eq(users.id, creatorId),
+    columns: { id: true },
+  });
+
+  return creator ? "none" : "deleted";
+}
+
+export function creatorDeleted(c: Context): Response {
+  return c.json(
+    {
+      error: "このアカウントはすでに削除されています",
+      code: "CREATOR_ACCOUNT_DELETED",
+    },
+    410,
+  );
 }
 
 /** Standard 403 response for unauthorized access. */

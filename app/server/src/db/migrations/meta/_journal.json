@@ -113,6 +113,13 @@
       "when": 1772766000000,
       "tag": "0015_kind_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1772790262511,
+      "tag": "0016_red_fat_cobra",
+      "breakpoints": true
     }
   ]
 }

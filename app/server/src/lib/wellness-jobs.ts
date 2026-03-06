@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/connection.js";
 import {
   notifications,
+  users,
   wellnessCheckins,
   wellnessNotificationLog,
   wellnessSettings,
@@ -181,11 +182,17 @@ async function upsertCheckinForCreator(
 export async function runDailyEvaluation(): Promise<void> {
   try {
     const rows = await db
-      .select()
+      .select({ settingsRow: wellnessSettings })
       .from(wellnessSettings)
-      .where(eq(wellnessSettings.enabled, true));
+      .innerJoin(users, eq(users.id, wellnessSettings.creatorId))
+      .where(
+        and(
+          eq(wellnessSettings.enabled, true),
+          eq(users.accountStatus, "active"),
+        ),
+      );
 
-    for (const settingsRow of rows) {
+    for (const { settingsRow } of rows) {
       const hour = getCurrentHourInTimeZone(settingsRow.timezone);
       if (hour < WELLNESS_DAILY_HOUR_JST) {
         continue;
@@ -202,11 +209,17 @@ export async function runDailyEvaluation(): Promise<void> {
 export async function runWeeklySummaryDispatch(): Promise<void> {
   try {
     const rows = await db
-      .select()
+      .select({ settingsRow: wellnessSettings })
       .from(wellnessSettings)
-      .where(eq(wellnessSettings.enabled, true));
+      .innerJoin(users, eq(users.id, wellnessSettings.creatorId))
+      .where(
+        and(
+          eq(wellnessSettings.enabled, true),
+          eq(users.accountStatus, "active"),
+        ),
+      );
 
-    for (const settingsRow of rows) {
+    for (const { settingsRow } of rows) {
       const now = new Date();
       const todayKey = toDateKey(now, settingsRow.timezone);
       const weekdayIndex = getWeekdayIndex(todayKey);

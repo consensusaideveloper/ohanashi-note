@@ -1,8 +1,8 @@
 /** Current active version of the Terms of Service (must match server). */
-export const CURRENT_TERMS_VERSION = "1.0.0";
+export const CURRENT_TERMS_VERSION = "1.1.0";
 
 /** Current active version of the Privacy Policy (must match server). */
-export const CURRENT_PRIVACY_VERSION = "1.0.0";
+export const CURRENT_PRIVACY_VERSION = "1.1.0";
 
 /** A section in a legal document. */
 export interface LegalSection {
@@ -74,8 +74,9 @@ export const TERMS_OF_SERVICE_CONTENT: LegalSection[] = [
   {
     heading: "第8条（退会について）",
     paragraphs: [
-      "ご利用者さまは、設定画面からいつでも退会できます。",
-      "退会すると、すべての会話記録、エンディングノートの内容、家族の登録情報が削除されます。この操作は取り消せません。",
+      "ご利用者さまは、設定画面からいつでも退会を申請できます。",
+      "退会を申請すると、アカウントは30日間の猶予期間に入ります。この期間中にログインすることで、退会を取り消すことができます。",
+      "猶予期間（30日）が経過すると、すべての会話記録、エンディングノートの内容、音声データ、家族の登録情報が完全に削除されます。この削除は取り消せません。",
       "ただし、ノートの開封手続きが進行中の場合は、手続きが完了するまで退会できないことがあります。",
     ],
   },
@@ -151,6 +152,7 @@ export const PRIVACY_POLICY_CONTENT: LegalSection[] = [
     heading: "第5条（データの保持期間）",
     paragraphs: [
       "会話の記録と音声データは、ご利用者さまが削除するまで、またはアカウントを退会するまで保持します。",
+      "退会申請後30日間は復元のためにデータを保持し、その後完全に削除します。",
       "操作記録（監査証跡）は、サービスの安全性確保のため、アカウント削除まで保持します。",
       "ご家族の招待リンクは、発行から7日間で自動的に失効します。",
     ],
@@ -227,5 +229,5 @@ export const CONSENT_SUMMARY_POINTS: string[] = [
   "AIがお話を理解するためにOpenAIへ音声を送信します（AIの学習には使用されません）",
   "ご家族と記録を共有する機能があります",
   "エンディングノートの記録に法的な効力はありません",
-  "設定画面からいつでも退会・データ削除ができます",
+  "設定画面からいつでも退会・データ削除ができます（退会後30日間は復元可能）",
 ];

@@ -5,7 +5,6 @@ import {
   accessPresets,
   categoryAccess,
   consentRecords,
-  conversations,
   deletionConsentRecords,
   familyMembers,
   lifecycleActionLog,
@@ -13,7 +12,10 @@ import {
   notifications,
   users,
 } from "../db/schema.js";
-import { deleteUserAudioFiles } from "./r2-cleanup.js";
+import {
+  completeDeletedUserCleanup,
+  listUserAudioKeys,
+} from "./permanent-account-deletion.js";
 import { logger } from "./logger.js";
 
 // --- Creator name lookup ---
@@ -188,6 +190,7 @@ export async function isDeceasedUser(userId: string): Promise<boolean> {
 interface ConsentEligibleResult {
   eligible: Array<{ memberId: string; familyMemberId: string }>;
   deceased: Array<{ memberId: string; familyMemberId: string }>;
+  deactivated: Array<{ memberId: string; familyMemberId: string }>;
 }
 
 /**
@@ -202,8 +205,19 @@ export async function getConsentEligibleMembers(
 
   const eligible: Array<{ memberId: string; familyMemberId: string }> = [];
   const deceased: Array<{ memberId: string; familyMemberId: string }> = [];
+  const deactivated: Array<{ memberId: string; familyMemberId: string }> = [];
 
   for (const member of allActive) {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, member.memberId),
+      columns: { accountStatus: true },
+    });
+
+    if (user?.accountStatus === "deactivated") {
+      deactivated.push(member);
+      continue;
+    }
+
     const dead = await isDeceasedUser(member.memberId);
     if (dead) {
       deceased.push(member);
@@ -212,7 +226,7 @@ export async function getConsentEligibleMembers(
     }
   }
 
-  return { eligible, deceased };
+  return { eligible, deceased, deactivated };
 }
 
 /**
@@ -446,6 +460,10 @@ async function autoResolveDeletionConsent(
   const livingMemberIds = members
     .filter((m) => m.memberId !== deceasedUserId)
     .map((m) => m.memberId);
+  const creator = await db.query.users.findFirst({
+    where: eq(users.id, creatorId),
+    columns: { firebaseUid: true },
+  });
 
   await notifyFamilyMembers(
     livingMemberIds,
@@ -455,18 +473,20 @@ async function autoResolveDeletionConsent(
     creatorId,
   );
 
-  // Clean up R2 audio files (best-effort)
-  await deleteUserAudioFiles(creatorId);
-
-  // Delete conversations and lifecycle records
-  await db.delete(conversations).where(eq(conversations.userId, creatorId));
-  await db
-    .delete(deletionConsentRecords)
-    .where(eq(deletionConsentRecords.lifecycleId, lifecycleId));
-  await db
-    .delete(consentRecords)
-    .where(eq(consentRecords.lifecycleId, lifecycleId));
-  await db.delete(noteLifecycle).where(eq(noteLifecycle.id, lifecycleId));
+  if (creator) {
+    const audioKeys = await listUserAudioKeys(creatorId);
+    await db.delete(users).where(eq(users.id, creatorId));
+    await completeDeletedUserCleanup({
+      userId: creatorId,
+      firebaseUid: creator.firebaseUid,
+      deletionReason: "post_mortem_family_consented",
+      audioKeys,
+      auditMetadata: {
+        source: "deceased_member_auto_resolved",
+        lifecycleId,
+      },
+    });
+  }
 }
 
 /**

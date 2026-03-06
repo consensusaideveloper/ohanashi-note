@@ -17,7 +17,11 @@ import {
   CONFIRMATION_LEVEL_LABELS,
 } from "./lib/constants";
 import { QUESTION_CATEGORIES } from "./lib/questions";
-import { getUserProfile, saveUserProfile } from "./lib/storage";
+import {
+  getUserProfile,
+  saveUserProfile,
+  getAccountStatus,
+} from "./lib/storage";
 import {
   createInvitation,
   getLifecycleState,
@@ -55,6 +59,7 @@ import { TodoDetailScreen } from "./components/TodoDetailScreen";
 import { FamilyConversationDetail } from "./components/FamilyConversationDetail";
 import { ParticipantAccessScreen } from "./components/ParticipantAccessScreen";
 import { TermsConsentScreen } from "./components/TermsConsentScreen";
+import { ReactivationScreen } from "./components/ReactivationScreen";
 import { checkTermsConsentStatus } from "./lib/legal-api";
 
 import type { ReactNode, ErrorInfo } from "react";
@@ -135,6 +140,12 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 type OnboardingPhase = "none" | "conversation" | "complete";
 type NavigationWarningKind = "summarizing" | "todo-generating" | null;
 
+function needsOnboarding(
+  profile: { onboardingCompletedAt?: number | null } | null,
+): boolean {
+  return profile !== null && profile.onboardingCompletedAt == null;
+}
+
 function AuthGate(): ReactNode {
   const { user, loading } = useAuthContext();
   const userUid = user?.uid ?? null;
@@ -144,6 +155,11 @@ function AuthGate(): ReactNode {
   const [onboardingPhase, setOnboardingPhase] =
     useState<OnboardingPhase>("none");
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [accountStatusChecked, setAccountStatusChecked] = useState(false);
+  const [isDeactivated, setIsDeactivated] = useState(false);
+  const [scheduledDeletionAt, setScheduledDeletionAt] = useState<string | null>(
+    null,
+  );
   const [consentStatus, setConsentStatus] = useState<ConsentStatus | null>(
     null,
   );
@@ -153,6 +169,9 @@ function AuthGate(): ReactNode {
   // Without this, checks from a previous session can carry over and skip
   // consent/onboarding for the next user.
   useEffect(() => {
+    setAccountStatusChecked(false);
+    setIsDeactivated(false);
+    setScheduledDeletionAt(null);
     setConsentStatus(null);
     setConsentChecked(false);
     setOnboardingPhase("none");
@@ -165,6 +184,31 @@ function AuthGate(): ReactNode {
       savePendingInviteToken(inviteToken);
     }
   }, [inviteToken, user]);
+
+  // Check account status (deactivated accounts show the reactivation screen)
+  useEffect(() => {
+    if (user !== null && inviteToken === null && !accountStatusChecked) {
+      let cancelled = false;
+      void getAccountStatus()
+        .then((status) => {
+          if (cancelled) return;
+          if (status.accountStatus === "deactivated") {
+            setIsDeactivated(true);
+            setScheduledDeletionAt(status.scheduledDeletionAt);
+          }
+          setAccountStatusChecked(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Fail-open: if status check fails, allow through
+          setAccountStatusChecked(true);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [user, inviteToken, accountStatusChecked]);
 
   // Check if authenticated user has consented to current terms
   useEffect(() => {
@@ -188,7 +232,7 @@ function AuthGate(): ReactNode {
     }
   }, [user, inviteToken, consentChecked]);
 
-  // Check if authenticated user needs onboarding (new user with empty name)
+  // Check if authenticated user needs onboarding.
   useEffect(() => {
     if (
       user !== null &&
@@ -201,14 +245,13 @@ function AuthGate(): ReactNode {
       void getUserProfile()
         .then((profile) => {
           if (cancelled) return;
-          if (profile !== null && profile.name === "") {
+          if (needsOnboarding(profile)) {
             setOnboardingPhase("conversation");
           }
           setOnboardingChecked(true);
         })
         .catch(() => {
           if (cancelled) return;
-          // Skip onboarding if profile check fails — user can set name in Settings
           setOnboardingChecked(true);
         });
 
@@ -225,7 +268,7 @@ function AuthGate(): ReactNode {
     // Check if the user who just accepted needs onboarding
     void getUserProfile()
       .then((profile) => {
-        if (profile !== null && profile.name === "") {
+        if (needsOnboarding(profile)) {
           setOnboardingPhase("conversation");
         }
         setOnboardingChecked(true);
@@ -233,6 +276,13 @@ function AuthGate(): ReactNode {
       .catch(() => {
         setOnboardingChecked(true);
       });
+  }, []);
+
+  const handleReactivated = useCallback((): void => {
+    setIsDeactivated(false);
+    setScheduledDeletionAt(null);
+    setConsentStatus(null);
+    setConsentChecked(false);
   }, []);
 
   const handleConsentComplete = useCallback((): void => {
@@ -269,6 +319,25 @@ function AuthGate(): ReactNode {
       <InvitationAcceptScreen
         token={inviteToken}
         onComplete={handleInviteComplete}
+      />
+    );
+  }
+
+  // Show loading spinner while checking account status
+  if (!accountStatusChecked) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-bg-primary">
+        <div className="w-10 h-10 border-4 border-accent-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show reactivation screen for deactivated accounts
+  if (isDeactivated) {
+    return (
+      <ReactivationScreen
+        scheduledDeletionAt={scheduledDeletionAt}
+        onReactivated={handleReactivated}
       />
     );
   }

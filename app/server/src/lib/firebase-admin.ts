@@ -33,3 +33,19 @@ export async function verifyIdToken(idToken: string): Promise<DecodedIdToken> {
 export async function deleteFirebaseUser(uid: string): Promise<void> {
   await adminAuth.deleteUser(uid);
 }
+
+/**
+ * Disable a Firebase Auth user by their UID.
+ * Used for soft-delete: the user cannot sign in but the account is not deleted.
+ */
+export async function disableFirebaseUser(uid: string): Promise<void> {
+  await adminAuth.updateUser(uid, { disabled: true });
+}
+
+/**
+ * Re-enable a previously disabled Firebase Auth user.
+ * Used for account reactivation after soft-delete.
+ */
+export async function enableFirebaseUser(uid: string): Promise<void> {
+  await adminAuth.updateUser(uid, { disabled: false });
+}

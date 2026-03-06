@@ -384,6 +384,16 @@ export const REALTIME_TOOLS = [
   // --- Lifecycle tools ---
   {
     type: "function" as const,
+    name: "complete_onboarding",
+    description:
+      "オンボーディング設定がすべて確認できたときにだけ呼び出します。最後の振り返りに入る直前に使用してください。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function" as const,
     name: "end_conversation",
     description:
       "会話を終了してデータを保存します。ユーザーが終わりたい意思を直接示した場合（「終わりにしよう」「また今度」「もういいかな」「さようなら」等）はすぐに呼び出してください。間接的なシグナル（「疲れちゃった」「ありがとうございました」「もうそろそろ」等）の場合は、まず「今日はここまでにしましょうか？」と確認し、同意を得てから呼び出してください。",
@@ -932,6 +942,7 @@ const ONBOARDING_TOOL_NAMES: ReadonlySet<string> = new Set([
   "change_character",
   "change_font_size",
   "update_speaking_preferences",
+  "complete_onboarding",
   "end_conversation",
 ]);
 
@@ -1038,11 +1049,27 @@ export const SETTINGS_MESSAGES = {
   },
   accountDeletion: {
     description:
-      "このアプリの利用をやめます。すべての記録、家族登録、ノートが消えます。",
+      "このアプリの利用をやめます。30日間は記録がそのまま保管され、ログインすればいつでも復元できます。30日を過ぎるとすべての記録が完全に消えます。",
     firstConfirm:
-      "退会すると、以下のすべてが消えます：\n\n・会話の記録とノート\n・家族の登録情報\n・お名前の設定\n\n消えた記録は元に戻すことができません。",
-    secondConfirm: "最後の確認です。本当に退会してよろしいですか？",
+      "退会すると、30日間の猶予期間に入ります。\n\n猶予期間中にログインすれば、ボタンひとつで退会を取り消せます。記録はすべてそのまま保管されます。\n\nただし、退会と同時に共有リンクは無効になります。\n\n30日が経過すると、以下のすべてが完全に削除されます：\n\n・会話の記録とノート\n・家族の登録情報\n・共有リンク\n・お名前の設定",
+    secondConfirm:
+      "最後の確認です。退会してよろしいですか？\n\n30日以内にログインすれば、ボタンひとつで元どおりにできます。",
     blocked: "ノートが保護されている状態では退会できません。",
+    deactivated: "退会手続き中です。",
+  },
+  reactivation: {
+    title: "退会手続き中です",
+    description:
+      "記録はすべて安全に保管されています。下のボタンを押すだけで、退会を取り消してすべての記録を元どおりにできます。",
+    scheduledDeletionLabel: "この日を過ぎると復元できなくなります",
+    reactivateButton: "アカウントを復元する",
+    reactivating: "復元しています...",
+    reactivated: "アカウントを復元しました。すべての記録が元どおりになりました",
+    reactivateFailed:
+      "復元に失敗しました。しばらくしてからもう一度お試しください。",
+    logoutButton: "ログアウト",
+    shareLinkNote:
+      "退会手続き中のため、共有リンクは無効になっています。復元後に新しく作成できます。",
   },
 } as const;
 

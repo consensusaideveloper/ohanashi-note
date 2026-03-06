@@ -127,28 +127,30 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
             speakingSpeed: true,
             silenceDuration: true,
             confirmationLevel: true,
+            onboardingCompletedAt: true,
           },
         });
         if (userRow !== undefined) {
           const normalizedProfile = normalizeStoredProfile(userRow);
-          const priorSession = await db.query.activityLog.findFirst({
-            where: and(
-              eq(activityLog.creatorId, userId),
-              eq(activityLog.actorId, userId),
-              eq(activityLog.resourceType, REALTIME_SESSION_RESOURCE_TYPE),
-              or(
-                eq(activityLog.action, REALTIME_SESSION_STARTED_ACTION),
-                eq(
-                  activityLog.action,
-                  REALTIME_ONBOARDING_SESSION_STARTED_ACTION,
-                ),
-              ),
-            ),
-            columns: { id: true },
-          });
-          isOnboarding =
-            normalizedProfile.name === "" && priorSession === undefined;
+          isOnboarding = normalizedProfile.onboardingCompletedAt === null;
         }
+      }
+
+      const onboardingStatusRow = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { onboardingCompletedAt: true },
+      });
+      const onboardingComplete =
+        onboardingStatusRow?.onboardingCompletedAt instanceof Date;
+
+      if (!isOnboarding && !onboardingComplete) {
+        return c.json(
+          {
+            error: "初回設定が完了するまで通常の会話は開始できません",
+            code: "ONBOARDING_REQUIRED",
+          },
+          403,
+        );
       }
 
       // Quota check (skip for onboarding)

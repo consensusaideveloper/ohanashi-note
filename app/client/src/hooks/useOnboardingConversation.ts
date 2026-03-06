@@ -380,6 +380,7 @@ export function useOnboardingConversation({
   const ignoreUserTranscriptsUntilRef = useRef(0);
   const ignoredInputItemIdsRef = useRef<Set<string>>(new Set());
   const pendingProfileSavesRef = useRef<Set<Promise<void>>>(new Set());
+  const onboardingCompletedRef = useRef(false);
 
   // Stable ref for stop
   const stopRef = useRef<() => void>(() => {});
@@ -531,6 +532,7 @@ export function useOnboardingConversation({
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
     assistantNameRef.current = null;
     onboardingUserIdRef.current = null;
+    onboardingCompletedRef.current = false;
     webrtc.disconnect();
 
     const key = sessionKeyRef.current;
@@ -655,6 +657,28 @@ export function useOnboardingConversation({
               message: "会話を終了します。短い別れの挨拶をしてください。",
             }),
           );
+          return;
+        }
+
+        if (functionName === "complete_onboarding") {
+          void enqueueProfileSave({
+            onboardingCompletedAt: Date.now(),
+          })
+            .then(() => {
+              onboardingCompletedRef.current = true;
+              sendResult(
+                JSON.stringify({
+                  success: true,
+                  message: "オンボーディング完了を記録しました",
+                }),
+              );
+            })
+            .catch(() => {
+              onboardingCompletedRef.current = false;
+              sendResult(
+                JSON.stringify({ error: "操作中にエラーが発生しました" }),
+              );
+            });
           return;
         }
 
@@ -1117,6 +1141,7 @@ export function useOnboardingConversation({
   const start = useCallback((): void => {
     resetMicGuard();
     clearOnboardingDeferredTopic();
+    onboardingCompletedRef.current = false;
     dispatch({ type: "CONNECT" });
 
     // Step 1: Request mic access first (must be in user gesture context for iOS)
@@ -1203,11 +1228,15 @@ export function useOnboardingConversation({
     speakingPrefsRef.current = DEFAULT_SPEAKING_PREFERENCES;
     assistantNameRef.current = null;
     onboardingUserIdRef.current = null;
+    const completed = onboardingCompletedRef.current;
+    onboardingCompletedRef.current = false;
 
     // Wait briefly for any in-flight profile saves so completion screen
     // reflects the selected values reliably.
     void waitForPendingProfileSaves().finally(() => {
-      onCompleteRef.current();
+      if (completed) {
+        onCompleteRef.current();
+      }
     });
   }, [
     webrtc,

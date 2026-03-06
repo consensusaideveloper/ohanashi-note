@@ -13,6 +13,9 @@ vi.mock("../db/connection.js", () => ({
       noteLifecycle: {
         findFirst: vi.fn(),
       },
+      users: {
+        findFirst: vi.fn(),
+      },
     },
     select: vi.fn(),
     insert: vi.fn(),
@@ -123,17 +126,20 @@ describe("getConsentEligibleMembers", () => {
     });
     vi.mocked(db.select).mockImplementation(mockSelect);
 
-    // Mock isDeceasedUser via noteLifecycle.findFirst
-    // Called once for each member to check their deceased status
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never);
     vi.mocked(db.query.noteLifecycle.findFirst)
-      .mockResolvedValueOnce(undefined) // living-user: no lifecycle = alive
-      .mockResolvedValueOnce({ status: "opened" } as never) // deceased-user: opened = dead
-      .mockResolvedValueOnce({ status: "active" } as never); // another-living: active = alive
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ status: "opened" } as never)
+      .mockResolvedValueOnce({ status: "active" } as never);
 
     const result = await getConsentEligibleMembers("creator-1");
 
     expect(result.eligible).toHaveLength(2);
     expect(result.deceased).toHaveLength(1);
+    expect(result.deactivated).toHaveLength(0);
     expect(result.eligible[0]?.memberId).toBe("living-user");
     expect(result.eligible[1]?.memberId).toBe("another-living");
     expect(result.deceased[0]?.memberId).toBe("deceased-user");
@@ -150,6 +156,9 @@ describe("getConsentEligibleMembers", () => {
     });
     vi.mocked(db.select).mockImplementation(mockSelect);
 
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never);
     vi.mocked(db.query.noteLifecycle.findFirst)
       .mockResolvedValueOnce(undefined) // user-1: no lifecycle
       .mockResolvedValueOnce(undefined); // user-2: no lifecycle
@@ -158,6 +167,7 @@ describe("getConsentEligibleMembers", () => {
 
     expect(result.eligible).toHaveLength(2);
     expect(result.deceased).toHaveLength(0);
+    expect(result.deactivated).toHaveLength(0);
   });
 
   it("returns all members as deceased when all are deceased", async () => {
@@ -171,6 +181,9 @@ describe("getConsentEligibleMembers", () => {
     });
     vi.mocked(db.select).mockImplementation(mockSelect);
 
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never);
     vi.mocked(db.query.noteLifecycle.findFirst)
       .mockResolvedValueOnce({ status: "death_reported" } as never)
       .mockResolvedValueOnce({ status: "opened" } as never);
@@ -179,6 +192,7 @@ describe("getConsentEligibleMembers", () => {
 
     expect(result.eligible).toHaveLength(0);
     expect(result.deceased).toHaveLength(2);
+    expect(result.deactivated).toHaveLength(0);
   });
 
   it("returns empty arrays when no active members exist", async () => {
@@ -193,5 +207,31 @@ describe("getConsentEligibleMembers", () => {
 
     expect(result.eligible).toHaveLength(0);
     expect(result.deceased).toHaveLength(0);
+    expect(result.deactivated).toHaveLength(0);
+  });
+
+  it("separates deactivated family members from eligible members", async () => {
+    const mockSelect = vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([
+          { memberId: "active-user", familyMemberId: "fm-1" },
+          { memberId: "deactivated-user", familyMemberId: "fm-2" },
+        ]),
+      }),
+    });
+    vi.mocked(db.select).mockImplementation(mockSelect);
+
+    vi.mocked(db.query.users.findFirst)
+      .mockResolvedValueOnce({ accountStatus: "active" } as never)
+      .mockResolvedValueOnce({ accountStatus: "deactivated" } as never);
+    vi.mocked(db.query.noteLifecycle.findFirst).mockResolvedValueOnce(undefined);
+
+    const result = await getConsentEligibleMembers("creator-1");
+
+    expect(result.eligible).toHaveLength(1);
+    expect(result.eligible[0]?.memberId).toBe("active-user");
+    expect(result.deceased).toHaveLength(0);
+    expect(result.deactivated).toHaveLength(1);
+    expect(result.deactivated[0]?.memberId).toBe("deactivated-user");
   });
 });

@@ -16,6 +16,7 @@ import { audioUploadRoute } from "./routes/audio-upload.js";
 import { enhancedSummarizeRoute } from "./routes/enhanced-summarize.js";
 import { sessionQuotaRoute } from "./routes/session-quota.js";
 import { accessPresetsRoute } from "./routes/access-presets.js";
+import { sharingRoute } from "./routes/sharing.js";
 import { accountRoute } from "./routes/account.js";
 import { termsConsentRoute } from "./routes/terms-consent.js";
 import { todoRoute } from "./routes/todos.js";
@@ -30,7 +31,9 @@ import { logger } from "./lib/logger.js";
 import "./lib/pending-summary-recovery.js";
 import "./lib/data-retention.js";
 import "./lib/wellness-jobs.js";
+import "./lib/scheduled-deletion.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { accountStatusMiddleware } from "./middleware/account-status.js";
 
 // --- Configuration ---
 
@@ -53,6 +56,7 @@ app.use("/api/access/*", authMiddleware);
 app.use("/api/access-presets/*", authMiddleware);
 app.use("/api/access-presets", authMiddleware);
 app.use("/api/account", authMiddleware);
+app.use("/api/account/*", authMiddleware);
 app.use("/api/todos/*", authMiddleware);
 app.use("/api/todos", authMiddleware);
 app.use("/api/activity/*", authMiddleware);
@@ -62,6 +66,11 @@ app.use("/api/realtime/*", authMiddleware);
 app.use("/api/data-export", authMiddleware);
 app.use("/api/wellness/*", authMiddleware);
 app.use("/api/wellness", authMiddleware);
+
+// Account status check — blocks deactivated users from all API endpoints
+// except /api/account/status and /api/account/reactivate.
+// Must run AFTER authMiddleware (needs authenticated Firebase UID).
+app.use("/api/*", accountStatusMiddleware);
 
 // --- Routes ---
 
@@ -77,6 +86,7 @@ app.route("/", audioUploadRoute);
 app.route("/", enhancedSummarizeRoute);
 app.route("/", sessionQuotaRoute);
 app.route("/", accessPresetsRoute);
+app.route("/", sharingRoute);
 app.route("/", accountRoute);
 app.route("/", todoRoute);
 app.route("/", activityRoute);

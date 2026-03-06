@@ -15,7 +15,7 @@ import {
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
-import { getUserRole } from "../middleware/role.js";
+import { creatorDeleted, getUserRoleOrDeleted } from "../middleware/role.js";
 import { logger } from "../lib/logger.js";
 import { generateTodosFromNotes } from "../lib/todo-generator.js";
 import {
@@ -341,7 +341,8 @@ todoRoute.get("/api/todos/:creatorId", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative" && role !== "member") {
       return c.json(
@@ -454,7 +455,8 @@ todoRoute.get("/api/todos/:creatorId/members", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative") {
       return c.json(
@@ -507,7 +509,8 @@ todoRoute.post("/api/todos/:creatorId", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative") {
       return c.json(
@@ -641,7 +644,8 @@ todoRoute.patch("/api/todos/:creatorId/:todoId", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
     const todoId = c.req.param("todoId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative" && role !== "member") {
       return c.json(
@@ -898,7 +902,8 @@ todoRoute.delete("/api/todos/:creatorId/:todoId", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
     const todoId = c.req.param("todoId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative") {
       return c.json(
@@ -976,7 +981,8 @@ todoRoute.get("/api/todos/:creatorId/:todoId", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
     const todoId = c.req.param("todoId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative" && role !== "member") {
       return c.json(
@@ -1157,7 +1163,8 @@ todoRoute.post("/api/todos/:creatorId/:todoId/comments", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
     const todoId = c.req.param("todoId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
 
     if (role !== "representative" && role !== "member") {
       return c.json(
@@ -1319,7 +1326,8 @@ todoRoute.post(
       const creatorId = c.req.param("creatorId");
       const todoId = c.req.param("todoId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (role !== "representative" && role !== "member") {
         return c.json(
@@ -1490,7 +1498,8 @@ todoRoute.post(
       const creatorId = c.req.param("creatorId");
       const todoId = c.req.param("todoId");
 
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") return creatorDeleted(c);
 
       if (role !== "representative") {
         return c.json(
@@ -1611,7 +1620,8 @@ todoRoute.post("/api/todos/:creatorId/generate", async (c: Context) => {
     const userId = await resolveUserId(firebaseUid);
     const creatorId = c.req.param("creatorId");
 
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") return creatorDeleted(c);
     if (role !== "representative") {
       return c.json(
         { error: "この操作を行う権限がありません", code: "FORBIDDEN" },

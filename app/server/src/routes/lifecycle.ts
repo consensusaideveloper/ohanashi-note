@@ -8,13 +8,12 @@ import {
   consentRecords,
   deletionConsentRecords,
   users,
-  conversations,
   accessPresets,
   categoryAccess,
 } from "../db/schema.js";
 import { getFirebaseUid } from "../middleware/auth.js";
 import { resolveUserId } from "../lib/users.js";
-import { getUserRole } from "../middleware/role.js";
+import { creatorDeleted, getUserRoleOrDeleted } from "../middleware/role.js";
 import { logger } from "../lib/logger.js";
 import {
   getCreatorName,
@@ -26,7 +25,10 @@ import {
   autoResolveDeceasedMemberConsent,
   revertAutoResolvedConsent,
 } from "../lib/lifecycle-helpers.js";
-import { deleteUserAudioFiles } from "../lib/r2-cleanup.js";
+import {
+  completeDeletedUserCleanup,
+  listUserAudioKeys,
+} from "../lib/permanent-account-deletion.js";
 
 import type { Context } from "hono";
 
@@ -42,7 +44,11 @@ lifecycleRoute.get("/api/lifecycle/:creatorId", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
 
     // Check caller is the creator or a registered family member
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+
+    if (role === "deleted") {
+      return creatorDeleted(c);
+    }
 
     if (role === "none") {
       return c.json(
@@ -92,7 +98,11 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
 
       if (role !== "representative") {
         if (role !== "member") {
@@ -146,6 +156,21 @@ lifecycleRoute.post(
       }
 
       const now = new Date();
+
+      // Protect ending-note access: a death report cancels any pending account deletion.
+      await db
+        .update(users)
+        .set({
+          accountStatus: "active",
+          deactivatedAt: null,
+          scheduledDeletionAt: null,
+          deletionReason: null,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(users.id, creatorId), eq(users.accountStatus, "deactivated")),
+        );
+
       let record;
 
       if (existing) {
@@ -250,7 +275,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
 
       if (role !== "representative") {
         if (role !== "member") {
@@ -379,7 +407,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
 
       if (role !== "representative") {
         if (role !== "member") {
@@ -427,7 +458,19 @@ lifecycleRoute.post(
       }
 
       // Check for consent-eligible (living) family members
-      const { eligible, deceased } = await getConsentEligibleMembers(creatorId);
+      const { eligible, deceased, deactivated } =
+        await getConsentEligibleMembers(creatorId);
+
+      if (deactivated.length > 0) {
+        return c.json(
+          {
+            error:
+              "退会手続き中のご家族がいるため、同意収集を開始できません。ご本人の復元または完全削除後にお試しください。",
+            code: "DEACTIVATED_FAMILY_MEMBERS_PRESENT",
+          },
+          409,
+        );
+      }
 
       if (eligible.length === 0) {
         if (deceased.length > 0) {
@@ -558,7 +601,10 @@ lifecycleRoute.post("/api/lifecycle/:creatorId/consent", async (c: Context) => {
     const creatorId = c.req.param("creatorId");
 
     // Auth: any family member
-    const role = await getUserRole(userId, creatorId);
+    const role = await getUserRoleOrDeleted(userId, creatorId);
+    if (role === "deleted") {
+      return creatorDeleted(c);
+    }
 
     if (role !== "representative" && role !== "member") {
       return c.json(
@@ -762,7 +808,10 @@ lifecycleRoute.get(
       const creatorId = c.req.param("creatorId");
 
       // Auth: any family member
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
 
       if (role !== "representative" && role !== "member") {
         return c.json(
@@ -921,7 +970,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
 
       if (role !== "representative") {
         if (role !== "member") {
@@ -1040,7 +1092,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
       if (role !== "representative") {
         if (role !== "member") {
           return c.json(
@@ -1087,7 +1142,19 @@ lifecycleRoute.post(
       }
 
       // Get consent-eligible (living) family members
-      const { eligible, deceased } = await getConsentEligibleMembers(creatorId);
+      const { eligible, deceased, deactivated } =
+        await getConsentEligibleMembers(creatorId);
+
+      if (deactivated.length > 0) {
+        return c.json(
+          {
+            error:
+              "退会手続き中のご家族がいるため、データ削除の同意収集を開始できません。ご本人の復元または完全削除後にお試しください。",
+            code: "DEACTIVATED_FAMILY_MEMBERS_PRESENT",
+          },
+          409,
+        );
+      }
 
       if (eligible.length === 0) {
         if (deceased.length > 0) {
@@ -1102,16 +1169,25 @@ lifecycleRoute.post(
             },
           );
 
-          await deleteUserAudioFiles(creatorId);
-          await db
-            .delete(conversations)
-            .where(eq(conversations.userId, creatorId));
-          await db
-            .delete(consentRecords)
-            .where(eq(consentRecords.lifecycleId, lifecycle.id));
-          await db
-            .delete(noteLifecycle)
-            .where(eq(noteLifecycle.id, lifecycle.id));
+          const creator = await db.query.users.findFirst({
+            where: eq(users.id, creatorId),
+            columns: { firebaseUid: true },
+          });
+
+          if (creator) {
+            const audioKeys = await listUserAudioKeys(creatorId);
+            await db.delete(users).where(eq(users.id, creatorId));
+            await completeDeletedUserCleanup({
+              userId: creatorId,
+              firebaseUid: creator.firebaseUid,
+              deletionReason: "post_mortem_all_family_deceased",
+              audioKeys,
+              auditMetadata: {
+                source: "initiate_data_deletion_auto",
+                lifecycleId: lifecycle.id,
+              },
+            });
+          }
 
           return c.json({
             success: true,
@@ -1199,7 +1275,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: any family member
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
       if (role !== "representative" && role !== "member") {
         return c.json(
           { error: "この操作を行う権限がありません", code: "FORBIDDEN" },
@@ -1362,6 +1441,10 @@ lifecycleRoute.post(
         const creatorName = await getCreatorName(creatorId);
         const members = await getActiveFamilyMembers(creatorId);
         const memberUserIds = members.map((m) => m.memberId);
+        const creator = await db.query.users.findFirst({
+          where: eq(users.id, creatorId),
+          columns: { firebaseUid: true },
+        });
         await notifyFamilyMembers(
           memberUserIds,
           "data_deleted",
@@ -1370,26 +1453,20 @@ lifecycleRoute.post(
           creatorId,
         );
 
-        // Clean up R2 audio files (best-effort)
-        await deleteUserAudioFiles(creatorId);
-
-        // Delete all conversations for the creator
-        await db
-          .delete(conversations)
-          .where(eq(conversations.userId, creatorId));
-
-        // Clean up lifecycle-related records and reset
-        await db
-          .delete(deletionConsentRecords)
-          .where(eq(deletionConsentRecords.lifecycleId, lifecycle.id));
-
-        await db
-          .delete(consentRecords)
-          .where(eq(consentRecords.lifecycleId, lifecycle.id));
-
-        await db
-          .delete(noteLifecycle)
-          .where(eq(noteLifecycle.id, lifecycle.id));
+        if (creator) {
+          const audioKeys = await listUserAudioKeys(creatorId);
+          await db.delete(users).where(eq(users.id, creatorId));
+          await completeDeletedUserCleanup({
+            userId: creatorId,
+            firebaseUid: creator.firebaseUid,
+            deletionReason: "post_mortem_family_consented",
+            audioKeys,
+            auditMetadata: {
+              source: "deletion_consent",
+              lifecycleId: lifecycle.id,
+            },
+          });
+        }
 
         return c.json({ consented: true, deletionExecuted: true });
       }
@@ -1422,7 +1499,10 @@ lifecycleRoute.post(
       const creatorId = c.req.param("creatorId");
 
       // Auth: representative required, fallback to member when no representative exists
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
       if (role !== "representative") {
         if (role !== "member") {
           return c.json(
@@ -1513,7 +1593,10 @@ lifecycleRoute.get(
       const creatorId = c.req.param("creatorId");
 
       // Auth: any family member
-      const role = await getUserRole(userId, creatorId);
+      const role = await getUserRoleOrDeleted(userId, creatorId);
+      if (role === "deleted") {
+        return creatorDeleted(c);
+      }
       if (role !== "representative" && role !== "member") {
         return c.json(
           { error: "この操作を行う権限がありません", code: "FORBIDDEN" },

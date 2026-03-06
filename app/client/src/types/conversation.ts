@@ -203,5 +203,6 @@ export interface UserProfile {
   speakingSpeed?: SpeakingSpeed;
   silenceDuration?: SilenceDuration;
   confirmationLevel?: ConfirmationLevel;
+  onboardingCompletedAt?: number | null;
   updatedAt: number;
 }

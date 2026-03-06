@@ -1,8 +1,16 @@
-import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+
+import { and, eq } from "drizzle-orm";
 
 import { db } from "../db/connection.js";
-import { users } from "../db/schema.js";
+import { deletedAuthIdentities, users } from "../db/schema.js";
 import { logger } from "./logger.js";
+
+const FIREBASE_PROVIDER = "firebase";
+
+function hashIdentity(identity: string): string {
+  return createHash("sha256").update(identity).digest("hex");
+}
 
 /**
  * Resolve a Firebase UID to the internal users table row.
@@ -20,6 +28,18 @@ export async function resolveUserId(firebaseUid: string): Promise<string> {
       return existing.id;
     }
 
+    const deletedIdentity = await db.query.deletedAuthIdentities.findFirst({
+      where: and(
+        eq(deletedAuthIdentities.provider, FIREBASE_PROVIDER),
+        eq(deletedAuthIdentities.identityHash, hashIdentity(firebaseUid)),
+      ),
+      columns: { id: true },
+    });
+
+    if (deletedIdentity) {
+      throw new Error("DELETED_ACCOUNT");
+    }
+
     const [created] = await db
       .insert(users)
       .values({ firebaseUid })
@@ -31,6 +51,13 @@ export async function resolveUserId(firebaseUid: string): Promise<string> {
 
     return created.id;
   } catch (error) {
+    if (error instanceof Error && error.message === "DELETED_ACCOUNT") {
+      logger.warn("Rejected automatic recreation of deleted account", {
+        firebaseUid,
+      });
+      throw new Error("このアカウントは削除済みです");
+    }
+
     logger.error("Failed to resolve user ID", {
       firebaseUid,
       error: error instanceof Error ? error.message : String(error),

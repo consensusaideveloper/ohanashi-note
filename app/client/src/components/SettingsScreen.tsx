@@ -450,7 +450,7 @@ export function SettingsScreen({
         void handleSignOut();
       })
       .catch((error: unknown) => {
-        console.error("Failed to delete account:", { error });
+        console.error("Failed to deactivate account:", { error });
         showToast(UI_MESSAGES.error.saveFailed, "error");
       });
   }, [handleSignOut, showToast]);

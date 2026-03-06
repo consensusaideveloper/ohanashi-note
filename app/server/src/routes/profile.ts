@@ -23,6 +23,7 @@ interface ClientProfile {
   speakingSpeed: string;
   silenceDuration: string;
   confirmationLevel: string;
+  onboardingCompletedAt: number | null;
   updatedAt: number;
 }
 
@@ -56,6 +57,7 @@ profileRoute.get("/api/profile", async (c: Context) => {
       speakingSpeed: normalized.speakingSpeed,
       silenceDuration: normalized.silenceDuration,
       confirmationLevel: normalized.confirmationLevel,
+      onboardingCompletedAt: normalized.onboardingCompletedAt,
       updatedAt: row.updatedAt.getTime(),
     };
 
@@ -89,6 +91,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
       "speakingSpeed",
       "silenceDuration",
       "confirmationLevel",
+      "onboardingCompletedAt",
     ] as const) {
       if (!(field in body)) continue;
       const validation = validateProfileUpdateValue(field, body[field]);
@@ -98,7 +101,14 @@ profileRoute.put("/api/profile", async (c: Context) => {
           400,
         );
       }
-      updates[field] = validation.normalized;
+      if (field === "onboardingCompletedAt") {
+        updates[field] =
+          validation.normalized === null
+            ? null
+            : new Date(Number(validation.normalized));
+      } else {
+        updates[field] = validation.normalized;
+      }
     }
 
     await db.update(users).set(updates).where(eq(users.id, userId));
@@ -126,6 +136,7 @@ profileRoute.put("/api/profile", async (c: Context) => {
       speakingSpeed: normalized.speakingSpeed,
       silenceDuration: normalized.silenceDuration,
       confirmationLevel: normalized.confirmationLevel,
+      onboardingCompletedAt: normalized.onboardingCompletedAt,
       updatedAt: row.updatedAt.getTime(),
     };
 

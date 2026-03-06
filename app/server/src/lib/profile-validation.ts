@@ -23,6 +23,7 @@ export interface ProfileRecordLike {
   speakingSpeed: string;
   silenceDuration: string;
   confirmationLevel: string;
+  onboardingCompletedAt?: Date | null;
 }
 
 export interface NormalizedProfile {
@@ -33,6 +34,7 @@ export interface NormalizedProfile {
   speakingSpeed: string;
   silenceDuration: string;
   confirmationLevel: string;
+  onboardingCompletedAt: number | null;
 }
 
 export interface ProfileValidationError {
@@ -51,6 +53,10 @@ export function normalizeStoredProfile(
     speakingSpeed: normalizeSpeakingSpeed(profile.speakingSpeed),
     silenceDuration: normalizeSilenceDuration(profile.silenceDuration),
     confirmationLevel: normalizeConfirmationLevel(profile.confirmationLevel),
+    onboardingCompletedAt:
+      profile.onboardingCompletedAt instanceof Date
+        ? profile.onboardingCompletedAt.getTime()
+        : null,
   };
 }
 
@@ -135,6 +141,19 @@ export function validateProfileUpdateValue(
         };
       }
       return { normalized: value };
+    case "onboardingCompletedAt":
+      if (value === null) {
+        return { normalized: null };
+      }
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return {
+          error: {
+            code: "INVALID_ONBOARDING_COMPLETED_AT",
+            message: "onboardingCompletedAt が不正です",
+          },
+        };
+      }
+      return { normalized: String(value) };
     default:
       return {
         error: {

@@ -37,6 +37,10 @@ vi.mock("../lib/config.js", () => ({
   loadConfig: vi.fn(() => ({
     openaiApiKey: "test-openai-key",
     nodeEnv: "production",
+    openaiModels: {
+      realtime: "gpt-realtime-test",
+      realtimeTranscription: "gpt-4o-mini-transcribe",
+    },
   })),
 }));
 
@@ -103,17 +107,15 @@ beforeEach(async () => {
 });
 
 describe("realtimeRoute", () => {
-  it("does not allow onboarding flag to bypass quota after prior usage", async () => {
+  it("does not allow onboarding flag to bypass quota after onboarding is complete", async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValue({
-      name: "",
+      name: "太郎",
       characterId: null,
       fontSize: "standard",
       speakingSpeed: "normal",
       silenceDuration: "normal",
       confirmationLevel: "normal",
-    } as never);
-    vi.mocked(db.query.activityLog.findFirst).mockResolvedValue({
-      id: "existing-session",
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
     } as never);
     vi.mocked(getSessionQuota).mockResolvedValue({
       maxDaily: 3,
@@ -146,6 +148,9 @@ describe("realtimeRoute", () => {
   });
 
   it("returns monthly quota exceeded when monthly limit is reached", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    } as never);
     vi.mocked(getSessionQuota).mockResolvedValue({
       maxDaily: 3,
       usedToday: 1,
@@ -176,6 +181,9 @@ describe("realtimeRoute", () => {
   });
 
   it("accepts onboarding session-end using onboarding activity records", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    } as never);
     vi.mocked(db.query.activityLog.findFirst).mockResolvedValue({
       id: "log-1",
       action: "realtime_onboarding_started",
@@ -201,6 +209,9 @@ describe("realtimeRoute", () => {
   });
 
   it("counts quota only after session activation", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    } as never);
     vi.mocked(db.query.activityLog.findFirst)
       .mockResolvedValueOnce({
         id: "start-1",
@@ -230,6 +241,9 @@ describe("realtimeRoute", () => {
   });
 
   it("does not count onboarding sessions on activation", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    } as never);
     vi.mocked(db.query.activityLog.findFirst).mockResolvedValue({
       id: "start-1",
       action: "realtime_onboarding_started",
@@ -249,5 +263,63 @@ describe("realtimeRoute", () => {
       counted: false,
     });
     expect(insertValuesMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks normal sessions until onboarding is complete", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: null,
+    } as never);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionConfig: validSessionConfig,
+          sdp: "v=0\r\n",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "ONBOARDING_REQUIRED",
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("allows repeated onboarding sessions while onboarding is incomplete", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      name: "",
+      characterId: null,
+      fontSize: "standard",
+      speakingSpeed: "normal",
+      silenceDuration: "normal",
+      confirmationLevel: "normal",
+      onboardingCompletedAt: null,
+    } as never);
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      text: vi.fn().mockResolvedValue("v=0\r\n"),
+      headers: new Headers(),
+    } as never);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionConfig: validSessionConfig,
+          sdp: "v=0\r\n",
+          onboarding: true,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      sessionKey: "session-key-1",
+      answerSdp: "v=0\r\n",
+    });
   });
 });

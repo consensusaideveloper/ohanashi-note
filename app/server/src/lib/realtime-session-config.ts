@@ -28,6 +28,23 @@ const VALID_TOOL_NAMES = new Set([
   "start_focused_conversation",
   "create_family_invitation",
   "update_access_preset",
+  "complete_onboarding",
+  "end_conversation",
+]);
+const NORMAL_TOOL_NAMES = new Set([
+  "search_past_conversations",
+  "get_note_entries",
+  "navigate_to_screen",
+  "view_note_category",
+  "filter_conversation_history",
+  "change_font_size",
+  "change_character",
+  "update_user_name",
+  "update_assistant_name",
+  "update_speaking_preferences",
+  "start_focused_conversation",
+  "create_family_invitation",
+  "update_access_preset",
   "end_conversation",
 ]);
 const ONBOARDING_TOOL_NAMES = new Set([
@@ -36,6 +53,7 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "change_character",
   "change_font_size",
   "update_speaking_preferences",
+  "complete_onboarding",
   "end_conversation",
 ]);
 
@@ -244,6 +262,15 @@ const ALL_REALTIME_TOOLS: readonly ToolDefinition[] = [
   },
   {
     type: "function",
+    name: "complete_onboarding",
+    description: "オンボーディング設定の完了を確定します。",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function",
     name: "end_conversation",
     description: "会話を終了して保存します。",
     parameters: {
@@ -290,10 +317,12 @@ export function validateRealtimeSessionConfig(
   }
 
   const approvedTools = ALL_REALTIME_TOOLS.filter((tool) =>
-    onboarding ? ONBOARDING_TOOL_NAMES.has(tool.name) : true,
+    onboarding
+      ? ONBOARDING_TOOL_NAMES.has(tool.name)
+      : NORMAL_TOOL_NAMES.has(tool.name),
   );
 
-  const requiredTools = onboarding ? ONBOARDING_TOOL_NAMES : VALID_TOOL_NAMES;
+  const requiredTools = onboarding ? ONBOARDING_TOOL_NAMES : NORMAL_TOOL_NAMES;
   if (approvedTools.length !== requiredTools.size) {
     return null;
   }

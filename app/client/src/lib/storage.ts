@@ -391,7 +391,32 @@ export async function clearAllData(): Promise<void> {
   }
 }
 
-/** Delete the authenticated user's account and all associated data. */
-export async function deleteAccount(): Promise<void> {
-  await fetchWithAuth("/api/account", { method: "DELETE" });
+/**
+ * Deactivate the authenticated user's account (soft-delete).
+ * The account enters a 30-day grace period before permanent deletion.
+ * Returns the scheduled deletion date.
+ */
+export async function deleteAccount(): Promise<{
+  scheduledDeletionAt: string;
+}> {
+  const res = await fetchWithAuth("/api/account", { method: "DELETE" });
+  return (await res.json()) as { scheduledDeletionAt: string };
+}
+
+/** Account status as returned by the server. */
+export interface AccountStatus {
+  accountStatus: string;
+  deactivatedAt: string | null;
+  scheduledDeletionAt: string | null;
+}
+
+/** Fetch the account status for the authenticated user. */
+export async function getAccountStatus(): Promise<AccountStatus> {
+  const res = await fetchWithAuth("/api/account/status");
+  return (await res.json()) as AccountStatus;
+}
+
+/** Reactivate a deactivated account, cancelling the scheduled deletion. */
+export async function reactivateAccount(): Promise<void> {
+  await fetchWithAuth("/api/account/reactivate", { method: "POST" });
 }

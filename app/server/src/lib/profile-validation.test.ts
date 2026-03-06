@@ -16,6 +16,7 @@ describe("normalizeStoredProfile", () => {
         speakingSpeed: "warp",
         silenceDuration: "zero",
         confirmationLevel: "always",
+        onboardingCompletedAt: null,
       }),
     ).toEqual({
       name: "",
@@ -25,6 +26,7 @@ describe("normalizeStoredProfile", () => {
       speakingSpeed: "normal",
       silenceDuration: "normal",
       confirmationLevel: "normal",
+      onboardingCompletedAt: null,
     });
   });
 });
@@ -51,6 +53,14 @@ describe("validateProfileUpdateValue", () => {
   it("accepts clearing assistantName with blank string", () => {
     expect(validateProfileUpdateValue("assistantName", "   ")).toEqual({
       normalized: null,
+    });
+  });
+
+  it("accepts onboarding completion timestamps", () => {
+    expect(
+      validateProfileUpdateValue("onboardingCompletedAt", 1741222923000),
+    ).toEqual({
+      normalized: "1741222923000",
     });
   });
 });
