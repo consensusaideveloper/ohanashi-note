@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { loadConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { sanitizeText } from "./sanitizer.js";
+import { TRANSCRIPTION_DOMAIN_TERMS } from "./transcriber.js";
 import { getAllQuestionsListJson, getQuestionById } from "../lib/questions.js";
 import type { QuestionCategory } from "../types/conversation.js";
 
@@ -156,6 +157,27 @@ const NON_SUBSTANTIVE_DECISION_PATTERNS = [
   "文字の大きさ",
   "話し相手",
   "キャラクター",
+] as const;
+const ASR_CORRECTION_MARKER = "音声認識補正候補";
+const ASSISTANT_CONFIRMATION_PATTERNS = [
+  "ですね",
+  "なんですね",
+  "とのこと",
+  "ということ",
+  "についてですね",
+  "をご利用",
+  "を利用",
+  "をお持ち",
+  "を使って",
+  "を使われて",
+] as const;
+const ASSISTANT_QUESTION_PATTERNS = [
+  "ですか",
+  "ますか",
+  "でしょうか",
+  "ありますか",
+  "いますか",
+  "されますか",
 ] as const;
 
 const RESPONSE_JSON_SCHEMA = {
@@ -363,6 +385,8 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 14. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
 15. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 16. 質問リストの各項目には type が含まれます。type: "accumulative" の質問（思い出、大事な人、連絡先リストなど）は複数の回答が並立できます。この種の質問では、ユーザーが以前の回答と明らかに同一の項目について話していない限り、常に新しいnoteEntryとして追加してください。以前の回答を上書き・統合しないでください。
+17. この会話は音声認識で文字起こしされたものです。ユーザー発話に「（音声認識補正候補: XXX）」という注記が含まれる場合、XXX は直後のアシスタント応答とも整合する高信頼の補正候補です。noteEntries.answer、keyPoints、sourceEvidence では XXX を優先して扱ってください。
+18. ただし、ユーザー発話や上記の補正候補に根拠がない内容を、アシスタント発話だけを根拠にユーザーの事実として追加しないでください。
 
 【カテゴリ別の分析ガイド】
 - legal（相続・遺言）: 相続の希望、遺言書の有無や内容、遺産分割の意向、生前贈与の計画など、相続・遺言に関する具体的な希望や状況を重点的に抽出してください。
@@ -454,6 +478,8 @@ ${allQuestionsJson}${buildPreviousEntriesBlock(previousNoteEntries)}
 15. ユーザーの返答が短くても、直前までの会話文脈（質問内容）を踏まえてquestionIdを判断して構いません。ただしanswerは必ずユーザーの発言内容に基づいてください。
 16. 会話内容が legal（相続・遺言）、trust（信託・委任）、support（支援制度）のカテゴリに関連する場合、summaryの末尾に「※この記録は参考情報であり、法的効力はありません。正式な手続きには専門家にご相談ください。」と付記してください。
 17. 質問リストの各項目には type が含まれます。type: "accumulative" の質問（思い出、大事な人、連絡先リストなど）は複数の回答が並立できます。この種の質問では、ユーザーが以前の回答と明らかに同一の項目について話していない限り、常に新しいnoteEntryとして追加してください。以前の回答を上書き・統合しないでください。
+18. この会話は音声認識で文字起こしされたものです。ユーザー発話に「（音声認識補正候補: XXX）」という注記が含まれる場合、XXX は直後のアシスタント応答とも整合する高信頼の補正候補です。noteEntries.answer、keyPoints、sourceEvidence では XXX を優先して扱ってください。
+19. ただし、ユーザー発話や上記の補正候補に根拠がない内容を、アシスタント発話だけを根拠にユーザーの事実として追加しないでください。
 
 【追加タスク - ユーザー名の検出】
 会話の中でユーザーが自分の名前や呼び名を言っている場合、"extractedUserName" フィールドに記録してください。
@@ -573,6 +599,162 @@ function normalizeForGrounding(text: string): string {
     .replace(/[「」『』"'`.,!?！？。、…・〜ー～()［］[\]{}]/g, "");
 }
 
+function extractDistinctDomainTerms(text: string): string[] {
+  const normalizedText = normalizeForGrounding(text);
+  if (normalizedText.length === 0) {
+    return [];
+  }
+
+  const sortedTerms = [...TRANSCRIPTION_DOMAIN_TERMS].sort(
+    (a, b) => normalizeForGrounding(b).length - normalizeForGrounding(a).length,
+  );
+  const found: Array<{ term: string; normalized: string }> = [];
+
+  for (const term of sortedTerms) {
+    const normalizedTerm = normalizeForGrounding(term);
+    if (
+      normalizedTerm.length === 0 ||
+      !normalizedText.includes(normalizedTerm)
+    ) {
+      continue;
+    }
+
+    const overlapsExisting = found.some(({ normalized }) =>
+      normalized.includes(normalizedTerm),
+    );
+    if (overlapsExisting) {
+      continue;
+    }
+
+    found.push({ term, normalized: normalizedTerm });
+  }
+
+  return found.map(({ term }) => term);
+}
+
+function looksLikeAssistantQuestion(text: string): boolean {
+  const trimmed = text.trim();
+  const leadingClause = trimmed.split(/[。！？!?]/, 1)[0] ?? trimmed;
+  if (leadingClause.includes("?") || leadingClause.includes("？")) {
+    return true;
+  }
+
+  return ASSISTANT_QUESTION_PATTERNS.some((pattern) =>
+    leadingClause.includes(pattern),
+  );
+}
+
+function looksLikeAssistantConfirmation(text: string): boolean {
+  const trimmed = text.trim();
+  const leadingClause = trimmed.split(/[。！？!?]/, 1)[0] ?? trimmed;
+  if (
+    leadingClause.length === 0 ||
+    looksLikeAssistantQuestion(leadingClause)
+  ) {
+    return false;
+  }
+
+  return ASSISTANT_CONFIRMATION_PATTERNS.some((pattern) =>
+    leadingClause.includes(pattern),
+  );
+}
+
+function looksLikeSuspiciousAsrUtterance(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  if (extractDistinctDomainTerms(trimmed).length > 0) {
+    return false;
+  }
+
+  if (/[0-9A-Za-z]/.test(trimmed)) {
+    return true;
+  }
+
+  const totalChars = Array.from(trimmed).length;
+  if (totalChars === 0) {
+    return false;
+  }
+
+  const japaneseChars = Array.from(trimmed).filter((char) =>
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々〆ヵヶー]/u.test(
+      char,
+    ),
+  ).length;
+
+  return japaneseChars / totalChars < 0.7;
+}
+
+function findAssistantConfirmedCorrection(
+  userText: string,
+  assistantText: string,
+): string | null {
+  if (!looksLikeSuspiciousAsrUtterance(userText)) {
+    return null;
+  }
+  if (!looksLikeAssistantConfirmation(assistantText)) {
+    return null;
+  }
+
+  const userTerms = new Set(
+    extractDistinctDomainTerms(userText).map((term) =>
+      normalizeForGrounding(term),
+    ),
+  );
+  const novelAssistantTerms = extractDistinctDomainTerms(assistantText).filter(
+    (term) => !userTerms.has(normalizeForGrounding(term)),
+  );
+
+  if (novelAssistantTerms.length !== 1) {
+    return null;
+  }
+
+  return novelAssistantTerms[0] ?? null;
+}
+
+function appendAsrCorrectionHint(userText: string, correction: string): string {
+  const trimmed = userText.trim();
+  if (
+    trimmed.length === 0 ||
+    trimmed.includes(ASR_CORRECTION_MARKER) ||
+    normalizeForGrounding(trimmed).includes(normalizeForGrounding(correction))
+  ) {
+    return trimmed;
+  }
+
+  return `${trimmed}（${ASR_CORRECTION_MARKER}: ${correction}）`;
+}
+
+export function buildAnalysisTranscript(
+  sanitizedTranscript: Array<{ role: "user" | "assistant"; text: string }>,
+): Array<{ role: "user" | "assistant"; text: string }> {
+  return sanitizedTranscript.map((entry, index, transcript) => {
+    if (entry.role !== "user") {
+      return entry;
+    }
+
+    const nextEntry = transcript[index + 1];
+    if (nextEntry?.role !== "assistant") {
+      return entry;
+    }
+
+    const correction = findAssistantConfirmedCorrection(
+      entry.text,
+      nextEntry.text,
+    );
+    if (correction === null) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      text: appendAsrCorrectionHint(entry.text, correction),
+    };
+  });
+}
+
 export function filterSubstantiveDecisions(decisions: string[]): string[] {
   const filtered: string[] = [];
   const seen = new Set<string>();
@@ -616,7 +798,7 @@ export function filterMeaningfulImportantStatements(
   return filtered;
 }
 
-function filterGroundedNoteEntries(
+export function filterGroundedNoteEntries(
   noteEntries: NoteEntry[],
   userTranscript: Array<{ role: "user" | "assistant"; text: string }>,
 ): NoteEntry[] {
@@ -955,11 +1137,19 @@ export async function summarizeConversation(
     role: entry.role,
     text: sanitizeText(entry.text),
   }));
-  const userOnlyTranscript = sanitizedTranscript.filter(
+  const analysisTranscript = buildAnalysisTranscript(sanitizedTranscript);
+  const repairedUserTurnCount = analysisTranscript.reduce(
+    (count, entry, index) =>
+      entry.role === "user" &&
+      entry.text !== sanitizedTranscript[index]?.text
+        ? count + 1
+        : count,
+    0,
+  );
+  const userOnlyTranscript = analysisTranscript.filter(
     (entry) => entry.role === "user" && entry.text.trim().length > 0,
   );
-  const transcriptForAnalysis =
-    selectTranscriptForAnalysis(sanitizedTranscript);
+  const transcriptForAnalysis = selectTranscriptForAnalysis(analysisTranscript);
 
   let systemPrompt: string;
   if (request.category !== null) {
@@ -993,6 +1183,7 @@ export async function summarizeConversation(
     temperature: effectiveTemperature ?? "default",
     transcriptLength: request.transcript.length,
     userTranscriptLength: userOnlyTranscript.length,
+    repairedUserTurnCount,
     inputChars,
     truncatedChars: userMessage.length,
     wasTruncated: userMessage.length < inputChars,

@@ -80,11 +80,11 @@ export function loadConfig(): Config {
       realtime: getOptionalEnv("OPENAI_REALTIME_MODEL", "gpt-realtime-mini"),
       realtimeTranscription: getOptionalEnv(
         "OPENAI_REALTIME_TRANSCRIPTION_MODEL",
-        "gpt-4o-mini-transcribe",
+        "gpt-4o-transcribe",
       ),
       retranscription: getOptionalEnv(
         "OPENAI_RETRANSCRIPTION_MODEL",
-        "gpt-4o-mini-transcribe",
+        "gpt-4o-transcribe",
       ),
       summarizer: getOptionalEnv("OPENAI_SUMMARIZER_MODEL", "gpt-5-mini"),
       summarizerTemperature: getOptionalNumberEnv(

@@ -54,6 +54,10 @@ vi.mock("../lib/session-tracker.js", () => ({
   trackSessionEnd: vi.fn(),
 }));
 
+vi.mock("../services/transcriber.js", () => ({
+  TRANSCRIPTION_DOMAIN_PROMPT: "test domain prompt",
+}));
+
 import { realtimeRoute } from "./realtime.js";
 
 let db: typeof import("../db/connection.js").db;

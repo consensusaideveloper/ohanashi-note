@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  buildAnalysisTranscript,
   buildNoteUpdateProposals,
+  filterGroundedNoteEntries,
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
   normalizeDiscussedCategories,
@@ -36,6 +38,66 @@ describe("selectTranscriptForAnalysis", () => {
     expect(selectTranscriptForAnalysis(transcript)).toEqual([
       { role: "user", text: "（ユーザー発話なし）" },
     ]);
+  });
+});
+
+describe("buildAnalysisTranscript", () => {
+  it("annotates suspicious user utterances with assistant-confirmed domain terms", () => {
+    const transcript = [
+      {
+        role: "assistant" as const,
+        text: "使っている証券会社を教えてください",
+      },
+      { role: "user" as const, text: "6.0制限" },
+      {
+        role: "assistant" as const,
+        text: "楽天証券ですね。ほかにも使っているところはありますか",
+      },
+    ];
+
+    expect(buildAnalysisTranscript(transcript)[1]).toEqual({
+      role: "user",
+      text: "6.0制限（音声認識補正候補: 楽天証券）",
+    });
+  });
+
+  it("does not annotate when the assistant is still asking a question", () => {
+    const transcript = [
+      {
+        role: "assistant" as const,
+        text: "使っている証券会社を教えてください",
+      },
+      { role: "user" as const, text: "6.0制限" },
+      { role: "assistant" as const, text: "楽天証券ですか？" },
+    ];
+
+    expect(buildAnalysisTranscript(transcript)[1]).toEqual({
+      role: "user",
+      text: "6.0制限",
+    });
+  });
+});
+
+describe("filterGroundedNoteEntries", () => {
+  it("accepts evidence from assistant-confirmed correction hints in user turns", () => {
+    const noteEntries = [
+      {
+        questionId: "money-03",
+        questionTitle: "利用中の証券会社",
+        answer: "楽天証券を利用している",
+        sourceEvidence: "楽天証券",
+      },
+    ];
+    const transcript = [
+      {
+        role: "user" as const,
+        text: "6.0制限（音声認識補正候補: 楽天証券）",
+      },
+    ];
+
+    expect(filterGroundedNoteEntries(noteEntries, transcript)).toEqual(
+      noteEntries,
+    );
   });
 });
 

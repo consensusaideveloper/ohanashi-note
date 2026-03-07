@@ -44,7 +44,7 @@ export const SESSION_CONFIG = {
 const REALTIME_TRANSCRIPTION_MODEL =
   (import.meta.env["VITE_REALTIME_TRANSCRIPTION_MODEL"] as
     | string
-    | undefined) ?? "gpt-4o-mini-transcribe";
+    | undefined) ?? "gpt-4o-transcribe";
 
 /** Keep client-side session.update payloads aligned with server realtime config. */
 export const SESSION_AUDIO_INPUT_CONFIG = {

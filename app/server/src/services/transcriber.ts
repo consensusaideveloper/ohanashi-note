@@ -14,6 +14,56 @@ import { r2 } from "../lib/r2.js";
 const TRANSCRIPTION_LANGUAGE = "ja";
 const TRANSCRIPTION_TIMEOUT_MS = 120_000;
 
+/**
+ * Domain vocabulary prompt for transcription models.
+ * Providing domain-specific terms as a prompt hint improves recognition accuracy
+ * for specialized vocabulary that ASR models may otherwise misrecognize.
+ *
+ * Whisper effective limit: ~224 tokens. Realtime API limit: 1024 tokens.
+ * Keep this concise and prioritize the most frequently misrecognized terms.
+ */
+export const TRANSCRIPTION_DOMAIN_TERMS = [
+  "エンディングノート",
+  "終活",
+  "遺言書",
+  "公正証書遺言",
+  "楽天証券",
+  "SBI証券",
+  "野村證券",
+  "積立NISA",
+  "iDeCo",
+  "確定拠出年金",
+  "定期預金",
+  "生命保険",
+  "投資信託",
+  "相続",
+  "遺産分割",
+  "生前贈与",
+  "家族信託",
+  "任意後見",
+  "成年後見",
+  "死後事務委任",
+  "延命治療",
+  "尊厳死",
+  "リビングウィル",
+  "かかりつけ医",
+  "介護保険",
+  "要介護",
+  "お墓",
+  "納骨堂",
+  "永代供養",
+  "葬儀",
+  "仏壇",
+  "戒名",
+  "菩提寺",
+  "リバースモーゲージ",
+  "生活保護",
+  "成年後見制度",
+] as const;
+
+export const TRANSCRIPTION_DOMAIN_PROMPT =
+  TRANSCRIPTION_DOMAIN_TERMS.join(" ");
+
 // --- Types ---
 
 interface TranscriptionSegment {
@@ -113,6 +163,7 @@ export async function transcribeFromR2(
       file,
       language: TRANSCRIPTION_LANGUAGE,
       response_format: "json",
+      prompt: TRANSCRIPTION_DOMAIN_PROMPT,
     });
 
     const responseRecord = response as unknown as Record<string, unknown>;

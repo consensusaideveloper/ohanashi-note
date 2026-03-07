@@ -14,6 +14,7 @@ import { resolveUserId } from "../lib/users.js";
 import { trackSessionStart, trackSessionEnd } from "../lib/session-tracker.js";
 import { getSessionQuota } from "../lib/session-quota.js";
 import { sanitizeText } from "../services/sanitizer.js";
+import { TRANSCRIPTION_DOMAIN_PROMPT } from "../services/transcriber.js";
 import {
   MAX_SESSION_DURATION_MS,
   SESSION_GRACE_PERIOD_MS,
@@ -250,7 +251,10 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
       tool_choice: "auto",
       audio: {
         input: {
-          transcription: { model: config.openaiModels.realtimeTranscription },
+          transcription: {
+            model: config.openaiModels.realtimeTranscription,
+            prompt: TRANSCRIPTION_DOMAIN_PROMPT,
+          },
           turn_detection: approvedSessionConfig.turnDetection,
           noise_reduction: { type: "far_field" },
         },
