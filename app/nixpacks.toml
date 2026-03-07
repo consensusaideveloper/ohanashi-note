@@ -1,0 +1,8 @@
+[phases.install]
+cmds = ["npm ci --include=optional"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
