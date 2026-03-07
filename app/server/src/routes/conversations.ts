@@ -559,12 +559,15 @@ conversationsRoute.post(
                   .map((proposal) =>
                     typeof proposal === "object" &&
                     proposal !== null &&
-                    typeof (proposal as Record<string, unknown>)["questionId"] ===
-                      "string"
+                    typeof (proposal as Record<string, unknown>)[
+                      "questionId"
+                    ] === "string"
                       ? (proposal as Record<string, unknown>)["questionId"]
                       : null,
                   )
-                  .filter((questionId): questionId is string => questionId !== null),
+                  .filter(
+                    (questionId): questionId is string => questionId !== null,
+                  ),
             )
           : null;
 

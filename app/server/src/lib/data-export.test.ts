@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatTranscript,
-  buildConversationSummaryText,
-  buildEndingNoteText,
   buildConversationFolderName,
-  buildReadmeText,
   getCategoryLabel,
   formatDate,
+  aggregateNotesByCategory,
 } from "./data-export-formatters.js";
+
+import type { ConversationRow } from "./data-export-formatters.js";
 
 describe("getCategoryLabel", () => {
   it("returns Japanese label for known category", () => {
@@ -60,8 +60,8 @@ describe("formatTranscript", () => {
   });
 });
 
-describe("buildConversationSummaryText", () => {
-  const baseConv = {
+describe("buildConversationFolderName", () => {
+  const baseConv: ConversationRow = {
     id: "test-id",
     category: "memories",
     startedAt: new Date("2026-02-15T10:00:00Z"),
@@ -79,99 +79,161 @@ describe("buildConversationSummaryText", () => {
     coveredQuestionIds: null,
   };
 
-  it("returns placeholder when no summary data exists", () => {
-    const result = buildConversationSummaryText(baseConv);
-    expect(result).toContain("（要約はまだありません）");
+  it("generates correct folder name", () => {
+    expect(buildConversationFolderName(1, baseConv)).toBe(
+      "01_思い出_2026-02-15",
+    );
+    expect(buildConversationFolderName(12, baseConv)).toBe(
+      "12_思い出_2026-02-15",
+    );
   });
 
-  it("includes one-liner summary", () => {
-    const conv = { ...baseConv, oneLinerSummary: "思い出を語りました" };
-    const result = buildConversationSummaryText(conv);
-    expect(result).toContain("思い出を語りました");
-  });
-
-  it("includes key points", () => {
+  it("uses その他 for null category", () => {
     const conv = {
       ...baseConv,
-      keyPoints: {
-        importantStatements: ["北海道で生まれた"],
-        decisions: ["お墓は地元に"],
-        undecidedItems: ["保険の見直し"],
-      },
+      category: null,
+      startedAt: new Date("2026-03-01T10:00:00Z"),
     };
-    const result = buildConversationSummaryText(conv);
-    expect(result).toContain("北海道で生まれた");
-    expect(result).toContain("お墓は地元に");
-    expect(result).toContain("保険の見直し");
-  });
-
-  it("includes note entries", () => {
-    const conv = {
-      ...baseConv,
-      noteEntries: [
-        {
-          questionId: "q1",
-          questionTitle: "生まれた場所は？",
-          answer: "北海道旭川市",
-        },
-      ],
-    };
-    const result = buildConversationSummaryText(conv);
-    expect(result).toContain("生まれた場所は？");
-    expect(result).toContain("北海道旭川市");
+    expect(buildConversationFolderName(3, conv)).toBe("03_その他_2026-03-01");
   });
 });
 
-describe("buildEndingNoteText", () => {
-  it("returns placeholder for empty conversations", () => {
-    const result = buildEndingNoteText([], "テスト太郎");
-    expect(result).toContain("わたしのエンディングノート");
-    expect(result).toContain("テスト太郎");
-    expect(result).toContain("（まだ記録はありません）");
+describe("aggregateNotesByCategory", () => {
+  const baseConv: ConversationRow = {
+    id: "conv1",
+    category: "memories",
+    startedAt: new Date("2026-02-15"),
+    endedAt: null,
+    transcript: [],
+    summary: null,
+    summaryStatus: "completed",
+    noteEntries: [],
+    discussedCategories: null,
+    keyPoints: null,
+    oneLinerSummary: null,
+    audioAvailable: false,
+    audioStorageKey: null,
+    audioMimeType: null,
+    coveredQuestionIds: null,
+  };
+
+  it("returns all 11 categories even with no data", () => {
+    const result = aggregateNotesByCategory([]);
+    expect(result).toHaveLength(11);
+    expect(result[0]?.category).toBe("memories");
+    expect(result[0]?.answeredCount).toBe(0);
+    expect(result[0]?.noteEntries).toHaveLength(0);
   });
 
   it("aggregates note entries by category", () => {
-    const rows = [
+    const rows: ConversationRow[] = [
       {
-        id: "conv1",
-        category: "memories",
-        startedAt: new Date("2026-02-15"),
-        endedAt: null,
-        transcript: [],
-        summary: null,
-        summaryStatus: "completed",
+        ...baseConv,
         noteEntries: [
           {
-            questionId: "q1",
-            questionTitle: "生まれた場所は？",
-            answer: "北海道",
+            questionId: "memories-08",
+            questionTitle: "自分史・趣味・好きなもの",
+            answer: "釣りが好き",
           },
         ],
-        discussedCategories: ["memories"],
-        keyPoints: null,
-        oneLinerSummary: null,
-        audioAvailable: false,
-        audioStorageKey: null,
-        audioMimeType: null,
-        coveredQuestionIds: null,
+        coveredQuestionIds: ["memories-08"],
       },
     ];
-    const result = buildEndingNoteText(rows, "");
-    expect(result).toContain("【思い出】");
-    expect(result).toContain("生まれた場所は？");
-    expect(result).toContain("北海道");
+    const result = aggregateNotesByCategory(rows);
+    const memoriesCat = result.find((c) => c.category === "memories");
+    expect(memoriesCat).toBeDefined();
+    expect(memoriesCat?.answeredCount).toBe(1);
+    expect(memoriesCat?.noteEntries).toHaveLength(1);
+    expect(memoriesCat?.noteEntries[0]?.answer).toBe("釣りが好き");
+  });
+
+  it("keeps latest answer for single-type questions", () => {
+    const rows: ConversationRow[] = [
+      {
+        ...baseConv,
+        id: "conv-new",
+        startedAt: new Date("2026-03-01"),
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "メインの銀行",
+            answer: "ゆうちょ銀行",
+          },
+        ],
+        coveredQuestionIds: ["money-01"],
+      },
+      {
+        ...baseConv,
+        id: "conv-old",
+        startedAt: new Date("2026-02-01"),
+        noteEntries: [
+          {
+            questionId: "money-01",
+            questionTitle: "メインの銀行",
+            answer: "地方銀行",
+          },
+        ],
+        coveredQuestionIds: ["money-01"],
+      },
+    ];
+    const result = aggregateNotesByCategory(rows);
+    const moneyCat = result.find((c) => c.category === "money");
+    const entry = moneyCat?.noteEntries.find(
+      (e) => e.questionId === "money-01",
+    );
+    expect(entry?.answer).toBe("ゆうちょ銀行");
+    expect(entry?.hasHistory).toBe(true);
+    expect(entry?.previousVersions).toHaveLength(1);
+    expect(entry?.previousVersions[0]?.answer).toBe("地方銀行");
+  });
+
+  it("collects all entries for accumulative-type questions", () => {
+    const rows: ConversationRow[] = [
+      {
+        ...baseConv,
+        id: "conv-new",
+        startedAt: new Date("2026-03-01"),
+        noteEntries: [
+          {
+            questionId: "memories-08",
+            questionTitle: "自分史・趣味・好きなもの",
+            answer: "読書",
+          },
+        ],
+        coveredQuestionIds: ["memories-08"],
+      },
+      {
+        ...baseConv,
+        id: "conv-old",
+        startedAt: new Date("2026-02-01"),
+        noteEntries: [
+          {
+            questionId: "memories-08",
+            questionTitle: "自分史・趣味・好きなもの",
+            answer: "釣り",
+          },
+        ],
+        coveredQuestionIds: ["memories-08"],
+      },
+    ];
+    const result = aggregateNotesByCategory(rows);
+    const memoriesCat = result.find((c) => c.category === "memories");
+    const entry = memoriesCat?.noteEntries.find(
+      (e) => e.questionId === "memories-08",
+    );
+    expect(entry?.questionType).toBe("accumulative");
+    expect(entry?.allEntries).toHaveLength(2);
+    // Newest first
+    expect(entry?.allEntries[0]?.answer).toBe("読書");
+    expect(entry?.allEntries[1]?.answer).toBe("釣り");
   });
 
   it("categorizes entries by questionId even when conversation category differs", () => {
-    const rows = [
+    const rows: ConversationRow[] = [
       {
+        ...baseConv,
         id: "conv-mixed",
         category: "memories",
-        startedAt: new Date("2026-02-20"),
-        endedAt: null,
-        transcript: [],
-        summary: null,
-        summaryStatus: "completed",
         noteEntries: [
           {
             questionId: "money-01",
@@ -179,76 +241,22 @@ describe("buildEndingNoteText", () => {
             answer: "地方銀行に1口座",
           },
         ],
+        coveredQuestionIds: ["money-01"],
         discussedCategories: ["memories", "money"],
-        keyPoints: null,
-        oneLinerSummary: null,
-        audioAvailable: false,
-        audioStorageKey: null,
-        audioMimeType: null,
-        coveredQuestionIds: null,
       },
     ];
-    const result = buildEndingNoteText(rows, "");
-    expect(result).toContain("【お金・資産】");
-    expect(result).toContain("メインの銀行");
-    expect(result).toContain("地方銀行に1口座");
-  });
-});
-
-describe("buildConversationFolderName", () => {
-  it("generates correct folder name", () => {
-    const conv = {
-      id: "test-id",
-      category: "memories",
-      startedAt: new Date("2026-02-15T10:00:00Z"),
-      endedAt: null,
-      transcript: [],
-      summary: null,
-      summaryStatus: "pending",
-      noteEntries: [],
-      discussedCategories: null,
-      keyPoints: null,
-      oneLinerSummary: null,
-      audioAvailable: false,
-      audioStorageKey: null,
-      audioMimeType: null,
-      coveredQuestionIds: null,
-    };
-    expect(buildConversationFolderName(1, conv)).toBe("01_思い出_2026-02-15");
-    expect(buildConversationFolderName(12, conv)).toBe("12_思い出_2026-02-15");
+    const result = aggregateNotesByCategory(rows);
+    const moneyCat = result.find((c) => c.category === "money");
+    expect(moneyCat?.noteEntries).toHaveLength(1);
+    // Uses canonical question title from QUESTIONS, not the row's
+    expect(moneyCat?.noteEntries[0]?.questionTitle).toBe("メインの銀行");
+    expect(moneyCat?.noteEntries[0]?.answer).toBe("地方銀行に1口座");
   });
 
-  it("uses その他 for null category", () => {
-    const conv = {
-      id: "test-id",
-      category: null,
-      startedAt: new Date("2026-03-01T10:00:00Z"),
-      endedAt: null,
-      transcript: [],
-      summary: null,
-      summaryStatus: "pending",
-      noteEntries: [],
-      discussedCategories: null,
-      keyPoints: null,
-      oneLinerSummary: null,
-      audioAvailable: false,
-      audioStorageKey: null,
-      audioMimeType: null,
-      coveredQuestionIds: null,
-    };
-    expect(buildConversationFolderName(3, conv)).toBe("03_その他_2026-03-01");
-  });
-});
-
-describe("buildReadmeText", () => {
-  it("mentions audio is excluded when includeAudio is false", () => {
-    const result = buildReadmeText([], {
-      includesPdf: true,
-      includesAudioLinkage: false,
-      includesAudio: false,
-    });
-    expect(result).toContain("このZIPには含めていません（容量対策）");
-    expect(result).toContain("履歴画面から個別にダウンロード");
-    expect(result).not.toContain("音源対応表.csv");
+  it("tracks unanswered questions", () => {
+    const result = aggregateNotesByCategory([]);
+    const memoriesCat = result.find((c) => c.category === "memories");
+    expect(memoriesCat?.unansweredQuestions.length).toBeGreaterThan(0);
+    expect(memoriesCat?.unansweredQuestions[0]?.title).toBeDefined();
   });
 });

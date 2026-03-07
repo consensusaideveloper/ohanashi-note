@@ -3,25 +3,28 @@
 
 import { QUESTIONS } from "./questions.js";
 
+import type { InsightStatement } from "../types/conversation.js";
+
 // --- Types ---
 
-interface TranscriptEntry {
+export interface TranscriptEntry {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
 }
 
-interface NoteEntry {
+export interface NoteEntry {
   questionId: string;
   questionTitle: string;
   answer: string;
+  sourceEvidence?: string;
 }
 
 interface ImportantStatementItem {
   text: string;
 }
 
-interface KeyPoints {
+export interface KeyPoints {
   importantStatements: Array<string | ImportantStatementItem>;
   decisions: string[];
   undecidedItems: string[];
@@ -45,21 +48,85 @@ export interface ConversationRow {
   coveredQuestionIds: string[] | null;
 }
 
+// --- Structured types for PDF generation ---
+
+export interface NoteEntryVersion {
+  answer: string;
+  conversationId: string;
+  recordedAt: Date;
+}
+
+export interface AccumulativeEntry {
+  answer: string;
+  conversationId: string;
+  recordedAt: Date;
+}
+
+export type QuestionType = "single" | "accumulative";
+
+export interface NoteEntryWithSource extends NoteEntry {
+  conversationId: string;
+  questionType: QuestionType;
+  /** Past versions in chronological order (oldest first); excludes current. Single type only. */
+  previousVersions: NoteEntryVersion[];
+  hasHistory: boolean;
+  /** All entries as equal peers (newest first). Accumulative type only. */
+  allEntries: AccumulativeEntry[];
+}
+
+export interface UnansweredQuestion {
+  id: string;
+  title: string;
+}
+
+export interface CategoryNoteData {
+  category: string;
+  label: string;
+  totalQuestions: number;
+  answeredCount: number;
+  noteEntries: NoteEntryWithSource[];
+  unansweredQuestions: UnansweredQuestion[];
+  disclaimer?: string;
+}
+
 // --- Constants ---
 
-const CATEGORY_LABEL_MAP: Record<string, string> = {
-  memories: "思い出",
-  people: "大事な人・ペット",
-  house: "生活",
-  medical: "医療・介護",
-  funeral: "葬儀・供養",
-  money: "お金・資産",
-  work: "仕事・事業",
-  digital: "スマホ・ネット",
-  legal: "財産と遺言",
-  trust: "将来の備え",
-  support: "使える制度",
-};
+interface CategoryMeta {
+  id: string;
+  label: string;
+  disclaimer?: string;
+}
+
+export const CATEGORY_META: readonly CategoryMeta[] = [
+  { id: "memories", label: "思い出" },
+  { id: "people", label: "大事な人・ペット" },
+  { id: "house", label: "生活" },
+  { id: "medical", label: "医療・介護" },
+  { id: "funeral", label: "葬儀・供養" },
+  { id: "money", label: "お金・資産" },
+  { id: "work", label: "仕事・事業" },
+  { id: "digital", label: "スマホ・ネット" },
+  {
+    id: "legal",
+    label: "財産と遺言",
+    disclaimer:
+      "このアプリはお気持ちや希望を記録するためのものです。法律の手続きには使えませんので、くわしいことは専門家（弁護士や司法書士など）にご相談ください。",
+  },
+  {
+    id: "trust",
+    label: "将来の備え",
+    disclaimer:
+      "このアプリはお気持ちや希望を記録するためのものです。法律の手続きには使えませんので、くわしいことは専門家（弁護士や司法書士など）にご相談ください。",
+  },
+  {
+    id: "support",
+    label: "使える制度",
+    disclaimer:
+      "制度の詳細や申請方法は、お住まいの市区町村窓口や社会福祉協議会にご確認ください。",
+  },
+];
+
+const CATEGORY_LABEL_MAP = new Map(CATEGORY_META.map((c) => [c.id, c.label]));
 
 const MIME_EXT_MAP: Record<string, string> = {
   "audio/webm": ".webm",
@@ -77,7 +144,7 @@ const QUESTION_META_BY_ID = new Map(QUESTIONS.map((q) => [q.id, q] as const));
 
 export function getCategoryLabel(categoryId: string | null): string {
   if (categoryId === null) return "その他";
-  return CATEGORY_LABEL_MAP[categoryId] ?? "その他";
+  return CATEGORY_LABEL_MAP.get(categoryId) ?? "その他";
 }
 
 export function formatDate(date: Date): string {
@@ -87,15 +154,20 @@ export function formatDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function formatDateTime(date: Date): string {
-  const dateStr = formatDate(date);
+export function formatDateJapanese(date: Date): string {
+  const y = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
   const h = String(date.getHours()).padStart(2, "0");
   const min = String(date.getMinutes()).padStart(2, "0");
-  return `${dateStr} ${h}:${min}`;
+  return `${y}年${month}月${day}日 ${h}:${min}`;
 }
 
-function formatTimestamp(ms: number): string {
-  return formatDateTime(new Date(ms));
+export function formatDateJapaneseShort(date: Date): string {
+  const y = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  return `${y}年${month}月${day}日`;
 }
 
 export function parseTranscript(raw: unknown): TranscriptEntry[] {
@@ -121,14 +193,14 @@ export function parseNoteEntries(raw: unknown): NoteEntry[] {
   );
 }
 
-function getImportantStatementText(
+export function getImportantStatementText(
   item: string | ImportantStatementItem,
 ): string {
   if (typeof item === "string") return item;
   return item.text;
 }
 
-function parseKeyPoints(raw: unknown): KeyPoints | null {
+export function parseKeyPoints(raw: unknown): KeyPoints | null {
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
   return {
@@ -147,176 +219,11 @@ export function formatTranscript(transcript: TranscriptEntry[]): string {
 
   return transcript
     .map((entry) => {
-      const time = formatTimestamp(entry.timestamp);
+      const time = formatDateJapanese(new Date(entry.timestamp));
       const speaker = entry.role === "user" ? "あなた" : "話し相手";
       return `[${time}] ${speaker}:\n${entry.text}`;
     })
     .join("\n\n");
-}
-
-export function buildConversationSummaryText(conv: ConversationRow): string {
-  const lines: string[] = [];
-  const entries = parseNoteEntries(conv.noteEntries);
-  const keyPoints = parseKeyPoints(conv.keyPoints);
-
-  if (conv.oneLinerSummary !== null) {
-    lines.push(`■ ひとこと: ${conv.oneLinerSummary}`);
-    lines.push("");
-  }
-
-  if (conv.summary !== null) {
-    lines.push("■ 会話のまとめ");
-    lines.push(conv.summary);
-    lines.push("");
-  }
-
-  if (keyPoints !== null) {
-    if (keyPoints.importantStatements.length > 0) {
-      lines.push("■ 重要な発言");
-      for (const s of keyPoints.importantStatements) {
-        lines.push(`  - ${getImportantStatementText(s)}`);
-      }
-      lines.push("");
-    }
-    if (keyPoints.decisions.length > 0) {
-      lines.push("■ 決定事項");
-      for (const s of keyPoints.decisions) {
-        lines.push(`  - ${s}`);
-      }
-      lines.push("");
-    }
-    if (keyPoints.undecidedItems.length > 0) {
-      lines.push("■ 未確定の事項");
-      for (const s of keyPoints.undecidedItems) {
-        lines.push(`  - ${s}`);
-      }
-      lines.push("");
-    }
-  }
-
-  if (entries.length > 0) {
-    lines.push("■ 記録された内容");
-    for (const entry of entries) {
-      lines.push(`  Q: ${entry.questionTitle}`);
-      lines.push(`  A: ${entry.answer}`);
-      lines.push("");
-    }
-  }
-
-  if (lines.length === 0) {
-    lines.push("（要約はまだありません）");
-  }
-
-  return lines.join("\n");
-}
-
-function isAccumulativeQuestion(questionId: string): boolean {
-  const q = QUESTION_META_BY_ID.get(questionId);
-  return q?.questionType === "accumulative";
-}
-
-function inferCategoryFromQuestionId(questionId: string): string | null {
-  const idx = questionId.lastIndexOf("-");
-  if (idx <= 0) {
-    return null;
-  }
-  return questionId.slice(0, idx);
-}
-
-export function buildEndingNoteText(
-  rows: ConversationRow[],
-  userName: string,
-): string {
-  // For single questions: keep only the latest entry per questionId.
-  // For accumulative questions: collect all entries.
-  const noteMap = new Map<string, Map<string, NoteEntry[]>>();
-
-  for (const row of rows) {
-    const entries = parseNoteEntries(row.noteEntries);
-
-    for (const entry of entries) {
-      const questionMeta = QUESTION_META_BY_ID.get(entry.questionId);
-      const category =
-        questionMeta?.category ??
-        inferCategoryFromQuestionId(entry.questionId) ??
-        row.category ??
-        "other";
-      const normalizedEntry =
-        questionMeta !== undefined
-          ? { ...entry, questionTitle: questionMeta.title }
-          : entry;
-
-      let catMap = noteMap.get(category);
-      if (catMap === undefined) {
-        catMap = new Map();
-        noteMap.set(category, catMap);
-      }
-
-      const existing = catMap.get(entry.questionId);
-      if (isAccumulativeQuestion(entry.questionId)) {
-        if (existing !== undefined) {
-          existing.push(normalizedEntry);
-        } else {
-          catMap.set(entry.questionId, [normalizedEntry]);
-        }
-      } else {
-        // Rows are newest-first, so keep the first seen single entry.
-        if (existing === undefined) {
-          catMap.set(entry.questionId, [normalizedEntry]);
-        }
-      }
-    }
-  }
-
-  const lines: string[] = [];
-  lines.push("=".repeat(50));
-  lines.push("わたしのエンディングノート");
-  lines.push("=".repeat(50));
-  if (userName !== "") {
-    lines.push(`作成者: ${userName}`);
-  }
-  lines.push(`作成日: ${formatDate(new Date())}`);
-  lines.push("");
-
-  const categoryOrder = Object.keys(CATEGORY_LABEL_MAP);
-  const allCategories = new Set([...categoryOrder, ...noteMap.keys()]);
-
-  for (const catId of allCategories) {
-    const catEntries = noteMap.get(catId);
-    if (catEntries === undefined || catEntries.size === 0) continue;
-
-    const label = getCategoryLabel(catId);
-    lines.push("-".repeat(40));
-    lines.push(`【${label}】`);
-    lines.push("-".repeat(40));
-    lines.push("");
-
-    for (const entryList of catEntries.values()) {
-      const firstEntry = entryList[0];
-      if (firstEntry === undefined) continue;
-      if (entryList.length === 1) {
-        lines.push(`Q: ${firstEntry.questionTitle}`);
-        lines.push(`A: ${firstEntry.answer}`);
-        lines.push("");
-      } else {
-        lines.push(`Q: ${firstEntry.questionTitle}（${entryList.length}件）`);
-        for (const entry of entryList) {
-          lines.push(`  - ${entry.answer}`);
-        }
-        lines.push("");
-      }
-    }
-  }
-
-  if (noteMap.size === 0) {
-    lines.push("（まだ記録はありません）");
-  }
-
-  lines.push("");
-  lines.push("※ この文書は「おはなしエンディングノート」で作成されました。");
-  lines.push("※ 法的効力はありません。正式な手続きは専門家にご相談ください。");
-
-  return lines.join("\n");
 }
 
 export function buildConversationFolderName(
@@ -334,101 +241,170 @@ export function getAudioExtension(mimeType: string | null): string {
   return MIME_EXT_MAP[mimeType] ?? DEFAULT_AUDIO_EXT;
 }
 
-export interface AudioLinkageRow {
-  index: number;
-  conversationId: string;
-  folderName: string;
-  categoryLabel: string;
-  startedAt: Date;
-  audioFileName: string | null;
-  conversationPdfFileName: string;
+// --- Structured note aggregation for PDF ---
+
+function getQuestionType(questionId: string): QuestionType {
+  const q = QUESTION_META_BY_ID.get(questionId);
+  return q?.questionType === "accumulative" ? "accumulative" : "single";
 }
 
-export function buildAudioLinkageCsv(rows: readonly AudioLinkageRow[]): string {
-  const header = [
-    "index",
-    "conversation_id",
-    "category",
-    "started_at",
-    "folder",
-    "conversation_pdf",
-    "audio_file",
-  ];
+function getQuestionsByCategory(
+  categoryId: string,
+): Array<{ id: string; title: string; questionType: QuestionType }> {
+  return QUESTIONS.filter((q) => q.category === categoryId).map((q) => ({
+    id: q.id,
+    title: q.title,
+    questionType: q.questionType,
+  }));
+}
 
-  const lines = [header.join(",")];
-  for (const row of rows) {
-    lines.push(
-      [
-        String(row.index),
-        row.conversationId,
-        row.categoryLabel,
-        formatDateTime(row.startedAt),
-        row.folderName,
-        row.conversationPdfFileName,
-        row.audioFileName ?? "",
-      ]
-        .map((field) => `"${field.replaceAll('"', '""')}"`)
-        .join(","),
-    );
+const VALID_INSIGHT_CATEGORIES = new Set([
+  "hobbies",
+  "values",
+  "relationships",
+  "memories",
+  "concerns",
+  "other",
+]);
+
+const VALID_INSIGHT_IMPORTANCES = new Set(["high", "medium", "low"]);
+
+function isInsightStatement(value: unknown): value is InsightStatement {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
-  return lines.join("\n");
-}
-
-export function buildReadmeText(
-  audioFailures: string[],
-  options?: {
-    includesPdf?: boolean;
-    includesAudioLinkage?: boolean;
-    includesAudio?: boolean;
-  },
-): string {
-  const lines: string[] = [];
-  lines.push(
-    "このフォルダには、おはなしエンディングノートのすべてのデータが入っています。",
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj["text"] === "string" &&
+    typeof obj["category"] === "string" &&
+    VALID_INSIGHT_CATEGORIES.has(obj["category"]) &&
+    typeof obj["importance"] === "string" &&
+    VALID_INSIGHT_IMPORTANCES.has(obj["importance"])
   );
-  lines.push("");
-  if (options?.includesPdf === true) {
-    lines.push("■ エンディングノート.pdf");
-    lines.push("  印刷しやすい形式でまとめたエンディングノートです。");
-    lines.push("");
-  }
-  lines.push("■ エンディングノート.txt");
-  lines.push("  会話から記録されたノートの内容です。");
-  lines.push("");
-  lines.push("■ 会話フォルダ");
-  lines.push("  これまでの会話の記録が入っています。");
-  lines.push("  各フォルダには以下のファイルが含まれます：");
-  if (options?.includesPdf === true) {
-    lines.push("  - 会話記録.pdf … 会話内容を見やすくまとめたPDF");
-  }
-  lines.push("  - 会話内容.txt … 会話の書き起こし");
-  lines.push("  - 要約.txt … 会話の要約と記録内容");
-  if (options?.includesAudio !== false) {
-    lines.push("  - 録音（ある場合） … 会話の録音");
-  } else {
-    lines.push("  - 録音 … このZIPには含めていません（容量対策）");
-    lines.push("    必要な録音は履歴画面から個別にダウンロードできます");
-  }
-  lines.push("");
-  if (options?.includesAudioLinkage === true) {
-    lines.push("■ 音源対応表.csv");
-    lines.push("  会話ID・PDF・録音ファイルの対応表です。");
-    lines.push("");
-  }
-  lines.push("■ メタデータ.json");
-  lines.push("  データの詳細情報です（技術的な内容）。");
+}
 
-  if (audioFailures.length > 0) {
-    lines.push("");
-    lines.push("■ ご注意");
-    lines.push("  以下の会話の録音はダウンロードできませんでした：");
-    for (const name of audioFailures) {
-      lines.push(`  - ${name}`);
+export function sanitizeImportantStatements(
+  value: unknown,
+): Array<string | InsightStatement> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (item): item is string | InsightStatement =>
+      typeof item === "string" || isInsightStatement(item),
+  );
+}
+
+/**
+ * Aggregates note entries from conversation rows into structured category data,
+ * replicating the client-side `buildCategoryData()` logic from `useEndingNote.ts`.
+ *
+ * Rows must be ordered newest-first (desc by startedAt).
+ */
+export function aggregateNotesByCategory(
+  rows: ConversationRow[],
+): CategoryNoteData[] {
+  // Process oldest-first for version tracking
+  const oldest = [...rows].reverse();
+
+  return CATEGORY_META.map((cat) => {
+    const questions = getQuestionsByCategory(cat.id);
+    const questionIdSet = new Set(questions.map((q) => q.id));
+
+    // Collect ALL versions of note entries per questionId (oldest-first).
+    const allVersionsMap = new Map<string, NoteEntryVersion[]>();
+    const latestMetaMap = new Map<
+      string,
+      { entry: NoteEntry; convId: string }
+    >();
+
+    for (const record of oldest) {
+      const entries = parseNoteEntries(record.noteEntries);
+      for (const entry of entries) {
+        if (questionIdSet.has(entry.questionId)) {
+          const version: NoteEntryVersion = {
+            answer: entry.answer,
+            conversationId: record.id,
+            recordedAt: record.startedAt,
+          };
+          const existing = allVersionsMap.get(entry.questionId);
+          if (existing !== undefined) {
+            existing.push(version);
+          } else {
+            allVersionsMap.set(entry.questionId, [version]);
+          }
+          latestMetaMap.set(entry.questionId, {
+            entry,
+            convId: record.id,
+          });
+        }
+      }
     }
-  }
 
-  lines.push("");
-  lines.push(`作成日: ${formatDate(new Date())}`);
+    const entryMap = new Map<string, NoteEntryWithSource>();
+    for (const [qId, latest] of latestMetaMap.entries()) {
+      const allVersions = allVersionsMap.get(qId) ?? [];
+      const clientQuestion = questions.find((q) => q.id === qId);
+      const questionTitle = clientQuestion?.title ?? latest.entry.questionTitle;
+      const qType = getQuestionType(qId);
 
-  return lines.join("\n");
+      if (qType === "accumulative") {
+        const allEntries: AccumulativeEntry[] = [...allVersions]
+          .reverse()
+          .map((v) => ({
+            answer: v.answer,
+            conversationId: v.conversationId,
+            recordedAt: v.recordedAt,
+          }));
+        entryMap.set(qId, {
+          ...latest.entry,
+          questionTitle,
+          conversationId: latest.convId,
+          questionType: qType,
+          previousVersions: [],
+          hasHistory: false,
+          allEntries,
+        });
+      } else {
+        const previousVersions = allVersions.slice(0, -1);
+        entryMap.set(qId, {
+          ...latest.entry,
+          questionTitle,
+          conversationId: latest.convId,
+          questionType: qType,
+          previousVersions,
+          hasHistory: previousVersions.length > 0,
+          allEntries: [],
+        });
+      }
+    }
+
+    // Collect all covered question IDs for this category from ALL records
+    const coveredIds = new Set<string>();
+    for (const record of rows) {
+      if (record.coveredQuestionIds !== null) {
+        for (const id of record.coveredQuestionIds) {
+          if (questionIdSet.has(id)) {
+            coveredIds.add(id);
+          }
+        }
+      }
+    }
+
+    const answeredCount = questions.filter((q) => coveredIds.has(q.id)).length;
+
+    const unansweredQuestions: UnansweredQuestion[] = questions
+      .filter((q) => !coveredIds.has(q.id))
+      .map((q) => ({ id: q.id, title: q.title }));
+
+    return {
+      category: cat.id,
+      label: cat.label,
+      totalQuestions: questions.length,
+      answeredCount,
+      noteEntries: Array.from(entryMap.values()),
+      unansweredQuestions,
+      ...(cat.disclaimer !== undefined ? { disclaimer: cat.disclaimer } : {}),
+    };
+  });
 }
