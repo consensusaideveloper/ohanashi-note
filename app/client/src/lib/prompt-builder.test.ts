@@ -141,8 +141,12 @@ describe("buildOnboardingPrompt", () => {
     expect(prompt).toContain("get_current_screen_context");
     expect(prompt).toContain("get_recommended_next_action");
     expect(prompt).toContain("get_family_status");
-    expect(prompt).toContain("読み取り系ツールは、ユーザーが確認したいと言ったときに優先して使う");
-    expect(prompt).toContain("過去会話とノートのどちらにあるか分からない情報を探す時の第一候補");
+    expect(prompt).toContain(
+      "読み取り系ツールは、ユーザーが確認したいと言ったときに優先して使う",
+    );
+    expect(prompt).toContain(
+      "過去会話とノートのどちらにあるか分からない情報を探す時の第一候補",
+    );
     expect(prompt).toContain("次の一歩を案内する");
   });
 });

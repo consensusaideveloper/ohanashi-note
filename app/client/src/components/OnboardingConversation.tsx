@@ -136,10 +136,7 @@ export function OnboardingConversation({
             <div className="mb-2 text-sm text-text-secondary">
               設定内容を確認しています
             </div>
-            <OnboardingSettingsSummaryCard
-              summary={settingsSummary}
-              compact
-            />
+            <OnboardingSettingsSummaryCard summary={settingsSummary} compact />
           </div>
         ) : null}
         {transcript.map((entry, index) => (

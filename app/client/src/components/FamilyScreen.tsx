@@ -20,6 +20,7 @@ import { FamilyMemberCard } from "./FamilyMemberCard";
 import { FamilyInviteDialog } from "./FamilyInviteDialog";
 import { CreatorConnectionCard } from "./CreatorConnectionCard";
 import { FamilyWellnessSummaryCard } from "./FamilyWellnessSummaryCard";
+import { WellnessPromptCard } from "./WellnessPromptCard";
 import { AccessPresetsSection } from "./AccessPresetsSection";
 import { NotificationBell } from "./NotificationBell";
 import { NotificationList } from "./NotificationList";
@@ -468,6 +469,14 @@ export function FamilyScreen({
                   </button>
                 )}
               </section>
+
+              {/* Section: Wellness prompt card */}
+              {!membersLoading && !membersError && (
+                <WellnessPromptCard
+                  hasFamilyMembers={members.length > 0}
+                  onOpenInviteDialog={handleOpenInvite}
+                />
+              )}
 
               {/* Visual separator */}
               <div className="border-t border-border" />

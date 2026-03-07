@@ -836,6 +836,7 @@ export const UI_MESSAGES = {
     relationshipTitle: "続柄を選択",
     assigneeTitle: "担当者を選択",
     categoryTitle: "カテゴリを選択",
+    deliveryDayTitle: "配信日を選択",
   },
   datePicker: {
     title: "期限を選択",
@@ -1232,6 +1233,10 @@ export const WELLNESS_MESSAGES = {
     activateSuccess: "見守り機能を始めました",
     activateFailed: "設定の保存に失敗しました。もう一度お試しください。",
     consentRequired: "同意にチェックを入れてください",
+    prerequisiteTitle: "見守り機能をご利用いただくには",
+    prerequisiteMessage:
+      "先にご家族の登録が必要です。見守り情報の送り先となるご家族を招待してください。",
+    navigateToFamilyButton: "家族画面へ",
   },
   shareLevel: {
     basic: "基本だけ",
@@ -1302,6 +1307,8 @@ export const WELLNESS_MESSAGES = {
     notEnabled: "この方は見守り機能を利用されていません",
     notEnabledDescription:
       "ご本人が見守りを始めると、ここに会話状況が表示されます。",
+    requestHint:
+      "次にお会いになったとき、見守り機能のことをお話しされてみてはいかがでしょうか。ご本人の「家族」画面から簡単に始められます。",
     highlightsLabel: "変化点",
     lastContactLabel: "最終接触",
     missedStreakLabel: "連続未接触",
@@ -1329,3 +1336,23 @@ export const WELLNESS_MESSAGES = {
     oneMonth: "1ヶ月",
   },
 } as const;
+
+export const WELLNESS_PROMPT_MESSAGES = {
+  title: "見守り機能のご案内",
+  descriptionWithFamily:
+    "毎日のおしゃべり状況を、ご登録のご家族にお知らせできます。ご家族も安心です。",
+  descriptionNoFamily:
+    "ご家族を先に登録しておくと、見守り機能をご利用いただけます。",
+  nonSurveillance:
+    "監視する機能ではありません。共有内容はいつでも変更・停止できます。",
+  startButton: "見守りを始める",
+  inviteFamilyButton: "家族を招待する",
+  laterButton: "あとで",
+  settingsHint:
+    "詳しい設定は「設定」画面の「見守り機能」からいつでも変更できます。",
+} as const;
+
+export const WELLNESS_PROMPT_DISMISSED_STORAGE_KEY =
+  "wellness_prompt_dismissed";
+
+export const WELLNESS_PROMPT_DISMISS_DAYS = 7;

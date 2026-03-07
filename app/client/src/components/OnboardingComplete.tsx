@@ -58,7 +58,9 @@ export function OnboardingComplete({
   onStart,
 }: OnboardingCompleteProps): ReactNode {
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<OnboardingSettingsSummary | null>(null);
+  const [summary, setSummary] = useState<OnboardingSettingsSummary | null>(
+    null,
+  );
 
   useEffect(() => {
     void getUserProfileWithRetry()

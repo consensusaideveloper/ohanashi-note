@@ -72,16 +72,13 @@ const SCREEN_CONTEXTS: Record<string, ScreenContextDefinition> = {
       "登録中の家族を確認する",
       "家族ごとの詳細を開く",
       "必要なら招待や管理を進める",
+      "見守り機能を始める",
     ],
   },
   "family-creator-detail": {
     title: "家族の詳細",
     summary: "選んだ家族との関係やノート閲覧状況を確認する画面です。",
-    primaryActions: [
-      "ノートを見る",
-      "やることを見る",
-      "開封設定を確認する",
-    ],
+    primaryActions: ["ノートを見る", "やることを見る", "開封設定を確認する"],
   },
   "family-note": {
     title: "家族ノート",
@@ -95,27 +92,17 @@ const SCREEN_CONTEXTS: Record<string, ScreenContextDefinition> = {
   "family-todos": {
     title: "家族のやること",
     summary: "家族に関するやること一覧を確認する画面です。",
-    primaryActions: [
-      "やることの一覧を見る",
-      "詳細を開く",
-      "前の画面へ戻る",
-    ],
+    primaryActions: ["やることの一覧を見る", "詳細を開く", "前の画面へ戻る"],
   },
   "family-todo-detail": {
     title: "やることの詳細",
     summary: "選んだやることの内容を詳しく確認する画面です。",
-    primaryActions: [
-      "内容を読む",
-      "元のやること一覧へ戻る",
-    ],
+    primaryActions: ["内容を読む", "元のやること一覧へ戻る"],
   },
   "family-conversation-detail": {
     title: "家族の会話詳細",
     summary: "共有された会話の内容を詳しく見る画面です。",
-    primaryActions: [
-      "会話の内容を読む",
-      "前の家族ノートへ戻る",
-    ],
+    primaryActions: ["会話の内容を読む", "前の家族ノートへ戻る"],
   },
   "family-access-management": {
     title: "開封設定",
@@ -144,7 +131,8 @@ function getCategoryLabel(categoryId: string): string {
 }
 
 export function describeCurrentSettings(profile: UserProfile | null): string {
-  const name = profile?.name?.trim() !== "" ? `${profile?.name}さん` : "未設定";
+  const profileName = profile === null ? "" : profile.name.trim();
+  const name = profileName ? `${profileName}さん` : "未設定";
   const assistantName =
     profile?.assistantName !== undefined &&
     profile.assistantName !== null &&
@@ -202,8 +190,7 @@ export function describeCurrentScreenContext(screen: string): string {
   }
 
   const primaryActions = context.primaryActions.join("、");
-  const caution =
-    context.caution !== undefined ? ` ${context.caution}` : "";
+  const caution = context.caution !== undefined ? ` ${context.caution}` : "";
   return `今は${context.title}の画面です。${context.summary} 主にできることは、${primaryActions}です。${caution}`.trim();
 }
 
@@ -239,7 +226,7 @@ export function describeRecommendedNextAction(
       if (activeMembers.length === 0) {
         return "今は家族の画面です。まだご家族が登録されていないので、必要なら最初に招待を作るのがおすすめです。";
       }
-      return `今は家族の画面です。${activeMembers.length}人のご家族がいるので、まずは1人選んで詳細や開封設定を確認するのがおすすめです。`;
+      return `今は家族の画面です。${activeMembers.length}人のご家族がいるので、まずは1人選んで詳細や開封設定を確認するのがおすすめです。見守り機能もこの画面から始められます。`;
     case "family-access-management":
       return "今は開封設定の画面です。まず、どのカテゴリを誰に見せるかを1つずつ確認するのがおすすめです。迷う場合は医療や緊急時に必要な情報から整えると安心です。";
     default:

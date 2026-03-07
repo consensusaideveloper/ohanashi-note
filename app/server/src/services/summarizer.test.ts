@@ -5,6 +5,7 @@ import {
   filterMeaningfulImportantStatements,
   filterSubstantiveDecisions,
   normalizeDiscussedCategories,
+  resolveSummarizerTemperature,
   selectTranscriptForAnalysis,
   shouldFallbackToUngroundedEntries,
 } from "./summarizer";
@@ -35,6 +36,20 @@ describe("selectTranscriptForAnalysis", () => {
     expect(selectTranscriptForAnalysis(transcript)).toEqual([
       { role: "user", text: "（ユーザー発話なし）" },
     ]);
+  });
+});
+
+describe("resolveSummarizerTemperature", () => {
+  it("omits custom temperature for GPT-5 models", () => {
+    expect(resolveSummarizerTemperature("gpt-5-mini", 0.2)).toBeUndefined();
+    expect(resolveSummarizerTemperature("gpt-5-nano", 0.7)).toBeUndefined();
+    expect(
+      resolveSummarizerTemperature(" GPT-5-mini-2026-01-01 ", 0.4),
+    ).toBeUndefined();
+  });
+
+  it("preserves configured temperature for non GPT-5 models", () => {
+    expect(resolveSummarizerTemperature("gpt-4.1-mini", 0.2)).toBe(0.2);
   });
 });
 

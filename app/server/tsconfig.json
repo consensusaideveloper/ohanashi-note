@@ -3,8 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "declaration": true
   },
-  "include": ["src"]
+  "include": ["src", "scripts/**/*.ts"]
 }

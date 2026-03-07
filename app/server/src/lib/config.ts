@@ -89,7 +89,7 @@ export function loadConfig(): Config {
       summarizer: getOptionalEnv("OPENAI_SUMMARIZER_MODEL", "gpt-5-mini"),
       summarizerTemperature: getOptionalNumberEnv(
         "OPENAI_SUMMARIZER_TEMPERATURE",
-        0.2,
+        1,
       ),
       todo: getOptionalEnv("OPENAI_TODO_MODEL", "gpt-5-nano"),
     },

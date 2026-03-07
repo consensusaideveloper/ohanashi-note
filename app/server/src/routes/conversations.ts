@@ -529,7 +529,7 @@ conversationsRoute.post(
       const questionIds =
         Array.isArray(body["questionIds"]) &&
         body["questionIds"].every((value) => typeof value === "string")
-          ? (body["questionIds"] as string[])
+          ? body["questionIds"]
           : null;
 
       const pendingEntries = Array.isArray(existing.pendingNoteEntries)
@@ -555,7 +555,16 @@ conversationsRoute.post(
         targets === null
           ? new Set(
               questionIds ??
-                proposals.map((proposal) => String(proposal["questionId"])),
+                proposals
+                  .map((proposal) =>
+                    typeof proposal === "object" &&
+                    proposal !== null &&
+                    typeof (proposal as Record<string, unknown>)["questionId"] ===
+                      "string"
+                      ? (proposal as Record<string, unknown>)["questionId"]
+                      : null,
+                  )
+                  .filter((questionId): questionId is string => questionId !== null),
             )
           : null;
 
@@ -745,7 +754,7 @@ conversationsRoute.post(
       const questionIds =
         Array.isArray(body["questionIds"]) &&
         body["questionIds"].every((value) => typeof value === "string")
-          ? new Set(body["questionIds"] as string[])
+          ? new Set(body["questionIds"])
           : null;
 
       if (questionIds === null && targets === null) {

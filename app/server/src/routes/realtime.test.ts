@@ -116,6 +116,81 @@ beforeEach(async () => {
 });
 
 describe("realtimeRoute", () => {
+  it("uses the GA realtime calls payload without beta headers", async () => {
+    vi.mocked(db.query.users.findFirst).mockResolvedValue({
+      onboardingCompletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    } as never);
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      text: vi.fn().mockResolvedValue("v=0\r\n"),
+      headers: new Headers(),
+    } as never);
+
+    const response = await realtimeRoute.fetch(
+      new Request("http://localhost/api/realtime/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionConfig: validSessionConfig,
+          sdp: "v=0\r\n",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/realtime/calls",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-openai-key",
+        }),
+      }),
+    );
+
+    const [, requestInit] = vi.mocked(global.fetch).mock.calls[0] ?? [];
+    expect(requestInit).toBeDefined();
+
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.get("OpenAI-Beta")).toBeNull();
+
+    const formData = requestInit?.body;
+    expect(formData).toBeInstanceOf(FormData);
+
+    const submittedFormData = formData as FormData;
+    expect(submittedFormData.get("sdp")).toBe("v=0\r\n");
+
+    const rawSession = submittedFormData.get("session");
+    expect(typeof rawSession).toBe("string");
+
+    const openaiSession = JSON.parse(rawSession as string) as Record<
+      string,
+      unknown
+    >;
+    expect(openaiSession).toMatchObject({
+      type: "realtime",
+      model: "gpt-realtime-test",
+      output_modalities: ["audio"],
+      instructions: "こんにちは",
+      tool_choice: "auto",
+      audio: {
+        input: {
+          transcription: { model: "gpt-4o-mini-transcribe" },
+          turn_detection: {
+            type: "server_vad",
+            silence_duration_ms: 800,
+          },
+          noise_reduction: { type: "far_field" },
+        },
+        output: {
+          voice: "shimmer",
+        },
+      },
+    });
+    expect(openaiSession).not.toHaveProperty("temperature");
+  });
+
   it("does not allow onboarding flag to bypass quota after onboarding is complete", async () => {
     vi.mocked(db.query.users.findFirst).mockResolvedValue({
       name: "太郎",

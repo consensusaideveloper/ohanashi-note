@@ -34,8 +34,10 @@ const SHARE_LEVEL_OPTIONS: readonly {
 interface WellnessActivationDialogProps {
   isOpen: boolean;
   isSaving: boolean;
+  hasFamilyMembers: boolean;
   onActivate: (shareLevel: WellnessShareLevel) => void;
   onCancel: () => void;
+  onNavigateToFamily: () => void;
 }
 
 // --- Component ---
@@ -43,8 +45,10 @@ interface WellnessActivationDialogProps {
 export function WellnessActivationDialog({
   isOpen,
   isSaving,
+  hasFamilyMembers,
   onActivate,
   onCancel,
+  onNavigateToFamily,
 }: WellnessActivationDialogProps): ReactNode {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [selectedLevel, setSelectedLevel] =
@@ -119,96 +123,126 @@ export function WellnessActivationDialog({
       onCancel={handleNativeCancel}
     >
       <div className="bg-bg-surface rounded-card p-6 shadow-lg space-y-5">
-        {/* Title */}
-        <h2 className="text-xl font-semibold text-text-primary">
-          {WELLNESS_MESSAGES.activation.title}
-        </h2>
+        {!hasFamilyMembers ? (
+          <>
+            {/* Prerequisite: no family members */}
+            <h2 className="text-xl font-semibold text-text-primary">
+              {WELLNESS_MESSAGES.activation.prerequisiteTitle}
+            </h2>
+            <p className="text-lg text-text-primary leading-relaxed">
+              {WELLNESS_MESSAGES.activation.prerequisiteMessage}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary hover:bg-bg-surface-hover active:bg-border-light transition-colors"
+                onClick={onCancel}
+              >
+                {WELLNESS_MESSAGES.activation.laterButton}
+              </button>
+              <button
+                type="button"
+                className="flex-1 min-h-11 rounded-full bg-accent-primary text-text-on-accent text-lg transition-colors"
+                onClick={onNavigateToFamily}
+              >
+                {WELLNESS_MESSAGES.activation.navigateToFamilyButton}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Title */}
+            <h2 className="text-xl font-semibold text-text-primary">
+              {WELLNESS_MESSAGES.activation.title}
+            </h2>
 
-        {/* Description */}
-        <div className="space-y-2">
-          <p className="text-lg text-text-primary leading-relaxed">
-            {WELLNESS_MESSAGES.activation.description}
-          </p>
-          <p className="text-base text-text-secondary leading-relaxed">
-            {WELLNESS_MESSAGES.activation.nonSurveillance}
-          </p>
-        </div>
+            {/* Description */}
+            <div className="space-y-2">
+              <p className="text-lg text-text-primary leading-relaxed">
+                {WELLNESS_MESSAGES.activation.description}
+              </p>
+              <p className="text-base text-text-secondary leading-relaxed">
+                {WELLNESS_MESSAGES.activation.nonSurveillance}
+              </p>
+            </div>
 
-        {/* Share level selection */}
-        <div className="space-y-2">
-          <p className="text-lg font-medium text-text-primary">
-            {WELLNESS_MESSAGES.settings.shareLevelLabel}
-          </p>
-          <div
-            role="radiogroup"
-            aria-label={WELLNESS_MESSAGES.settings.shareLevelLabel}
-            className="space-y-2"
-          >
-            {SHARE_LEVEL_OPTIONS.map((option) => {
-              const isSelected = selectedLevel === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  className={`w-full text-left rounded-card px-4 py-3 border transition-colors ${
-                    isSelected
-                      ? "border-accent-primary bg-accent-primary-light"
-                      : "border-border-light bg-bg-surface hover:bg-bg-surface-hover"
-                  }`}
-                  onClick={shareLevelHandlers[option.value]}
-                >
-                  <span className="text-lg font-medium text-text-primary">
-                    {option.label}
-                  </span>
-                  <span className="block text-base text-text-secondary mt-0.5">
-                    {option.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+            {/* Share level selection */}
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-text-primary">
+                {WELLNESS_MESSAGES.settings.shareLevelLabel}
+              </p>
+              <div
+                role="radiogroup"
+                aria-label={WELLNESS_MESSAGES.settings.shareLevelLabel}
+                className="space-y-2"
+              >
+                {SHARE_LEVEL_OPTIONS.map((option) => {
+                  const isSelected = selectedLevel === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      className={`w-full text-left rounded-card px-4 py-3 border transition-colors ${
+                        isSelected
+                          ? "border-accent-primary bg-accent-primary-light"
+                          : "border-border-light bg-bg-surface hover:bg-bg-surface-hover"
+                      }`}
+                      onClick={shareLevelHandlers[option.value]}
+                    >
+                      <span className="text-lg font-medium text-text-primary">
+                        {option.label}
+                      </span>
+                      <span className="block text-base text-text-secondary mt-0.5">
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Consent checkbox */}
-        <label className="flex items-start gap-3 cursor-pointer min-h-11">
-          <input
-            type="checkbox"
-            checked={hasConsented}
-            onChange={handleConsentChange}
-            className="mt-1 w-5 h-5 accent-accent-primary flex-none"
-          />
-          <span className="text-lg text-text-primary leading-relaxed">
-            {WELLNESS_MESSAGES.activation.consentLabel}
-          </span>
-        </label>
+            {/* Consent checkbox */}
+            <label className="flex items-start gap-3 cursor-pointer min-h-11">
+              <input
+                type="checkbox"
+                checked={hasConsented}
+                onChange={handleConsentChange}
+                className="mt-1 w-5 h-5 accent-accent-primary flex-none"
+              />
+              <span className="text-lg text-text-primary leading-relaxed">
+                {WELLNESS_MESSAGES.activation.consentLabel}
+              </span>
+            </label>
 
-        {/* Buttons */}
-        <div className="flex gap-3">
-          <button
-            type="button"
-            className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary hover:bg-bg-surface-hover active:bg-border-light transition-colors"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
-            {WELLNESS_MESSAGES.activation.laterButton}
-          </button>
-          <button
-            type="button"
-            className={`flex-1 min-h-11 rounded-full text-lg transition-colors ${
-              hasConsented && !isSaving
-                ? "bg-accent-primary text-text-on-accent"
-                : "bg-bg-surface text-text-secondary border border-border cursor-default"
-            }`}
-            onClick={handleActivate}
-            disabled={!hasConsented || isSaving}
-          >
-            {isSaving
-              ? WELLNESS_MESSAGES.activation.saving
-              : WELLNESS_MESSAGES.activation.startButton}
-          </button>
-        </div>
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="flex-1 min-h-11 rounded-full border border-border-light bg-bg-surface text-lg text-text-primary hover:bg-bg-surface-hover active:bg-border-light transition-colors"
+                onClick={onCancel}
+                disabled={isSaving}
+              >
+                {WELLNESS_MESSAGES.activation.laterButton}
+              </button>
+              <button
+                type="button"
+                className={`flex-1 min-h-11 rounded-full text-lg transition-colors ${
+                  hasConsented && !isSaving
+                    ? "bg-accent-primary text-text-on-accent"
+                    : "bg-bg-surface text-text-secondary border border-border cursor-default"
+                }`}
+                onClick={handleActivate}
+                disabled={!hasConsented || isSaving}
+              >
+                {isSaving
+                  ? WELLNESS_MESSAGES.activation.saving
+                  : WELLNESS_MESSAGES.activation.startButton}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </dialog>
   );

@@ -37,7 +37,9 @@ export function OnboardingSettingsSummaryCard({
       aria-live="polite"
     >
       <div className={`flex items-center ${gapClass}`}>
-        <span className={labelClass}>{ONBOARDING_COMPLETE_MESSAGES.nameLabel}</span>
+        <span className={labelClass}>
+          {ONBOARDING_COMPLETE_MESSAGES.nameLabel}
+        </span>
         <span className={valueClass}>
           {summary.userName !== "" ? `${summary.userName}さん` : "―"}
         </span>

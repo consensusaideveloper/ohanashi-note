@@ -17,6 +17,7 @@ export default tseslint.config(
       "e2e/**",
       "client/vite.config.ts",
       "server/drizzle.config.ts",
+      "server/scripts/**/*.mjs",
     ],
   },
 

@@ -224,7 +224,9 @@ describe("getConsentEligibleMembers", () => {
     vi.mocked(db.query.users.findFirst)
       .mockResolvedValueOnce({ accountStatus: "active" } as never)
       .mockResolvedValueOnce({ accountStatus: "deactivated" } as never);
-    vi.mocked(db.query.noteLifecycle.findFirst).mockResolvedValueOnce(undefined);
+    vi.mocked(db.query.noteLifecycle.findFirst).mockResolvedValueOnce(
+      undefined,
+    );
 
     const result = await getConsentEligibleMembers("creator-1");
 

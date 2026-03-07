@@ -11,7 +11,9 @@
     "start": "node dist/index.js",
     "db:migrate": "node scripts/migrations.mjs apply",
     "db:migrate:status": "node scripts/migrations.mjs status",
-    "db:migrate:baseline": "node scripts/migrations.mjs baseline"
+    "db:migrate:baseline": "node scripts/migrations.mjs baseline",
+    "summaries:requeue-failed": "node scripts/requeue-failed-summaries.mjs",
+    "summaries:repair-one": "tsx scripts/repair-conversation-summary.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.998.0",

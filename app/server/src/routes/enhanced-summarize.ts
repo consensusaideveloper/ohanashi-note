@@ -191,15 +191,46 @@ enhancedSummarizeRoute.post(
         );
       }
 
-      // Run summarization
-      const result = await summarizeConversation({
-        category: validatedCategory,
-        transcript: transcriptForSummary.map((t) => ({
-          role: t.role,
-          text: t.text,
-        })),
-        previousNoteEntries: validatedPreviousEntries,
-      });
+      // Run summarization. If the re-transcribed variant fails, fall back to
+      // the original transcript instead of failing the whole save flow.
+      let summaryTranscript = transcriptForSummary;
+      let summaryTranscriptionModel = usedModel;
+      let result;
+      try {
+        result = await summarizeConversation({
+          category: validatedCategory,
+          transcript: summaryTranscript.map((t) => ({
+            role: t.role,
+            text: t.text,
+          })),
+          previousNoteEntries: validatedPreviousEntries,
+        });
+      } catch (error: unknown) {
+        if (usedModel === null) {
+          throw error;
+        }
+
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.warn(
+          "Enhanced summarization failed with re-transcribed transcript; retrying with original transcript",
+          {
+            conversationId,
+            error: message,
+          },
+        );
+
+        summaryTranscript = originalTranscript;
+        summaryTranscriptionModel = null;
+        result = await summarizeConversation({
+          category: validatedCategory,
+          transcript: summaryTranscript.map((t) => ({
+            role: t.role,
+            text: t.text,
+          })),
+          previousNoteEntries: validatedPreviousEntries,
+        });
+      }
 
       // Update conversation with summary results and improved transcript
       const shouldKeepAsPending =
@@ -222,9 +253,9 @@ enhancedSummarizeRoute.post(
         offTopicSummary: result.offTopicSummary,
       };
 
-      if (usedModel !== null) {
-        updateData["improvedTranscript"] = transcriptForSummary;
-        updateData["transcriptionModel"] = usedModel;
+      if (summaryTranscriptionModel !== null) {
+        updateData["improvedTranscript"] = summaryTranscript;
+        updateData["transcriptionModel"] = summaryTranscriptionModel;
       }
 
       await db
@@ -234,7 +265,7 @@ enhancedSummarizeRoute.post(
 
       logger.info("Enhanced summarization completed", {
         conversationId,
-        transcriptionModel: usedModel ?? "original transcript",
+        transcriptionModel: summaryTranscriptionModel ?? "original transcript",
         coveredQuestions: result.coveredQuestionIds.length,
         noteEntries: result.noteEntries.length,
       });

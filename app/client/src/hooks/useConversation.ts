@@ -93,6 +93,10 @@ const RECORDER_MIME_CANDIDATES = [
 ] as const;
 const ENHANCED_SUMMARIZE_MAX_ATTEMPTS = 3;
 const ENHANCED_SUMMARIZE_RETRY_BASE_DELAY_MS = 1500;
+const STANDARD_SUMMARIZE_MAX_ATTEMPTS = 2;
+const STANDARD_SUMMARIZE_RETRY_BASE_DELAY_MS = 800;
+const PENDING_SUMMARY_POLL_INTERVAL_MS = 3000;
+const PENDING_SUMMARY_POLL_TIMEOUT_MS = 3 * 60 * 1000;
 const RETRYABLE_SUMMARIZE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const QUOTA_EXCEEDED_CODES = new Set([
   "DAILY_QUOTA_EXCEEDED",
@@ -485,6 +489,37 @@ async function requestEnhancedSummarizeWithRetry(
     : new Error("Enhanced summarize failed");
 }
 
+async function requestStandardSummarizeWithRetry(
+  category: QuestionCategory | null,
+  transcript: TranscriptEntry[],
+  previousEntries: NoteEntry[],
+): Promise<SummarizeResult> {
+  let lastError: unknown = null;
+
+  for (
+    let attempt = 1;
+    attempt <= STANDARD_SUMMARIZE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await requestSummarize(category, transcript, previousEntries);
+    } catch (error: unknown) {
+      lastError = error;
+      const canRetry =
+        attempt < STANDARD_SUMMARIZE_MAX_ATTEMPTS &&
+        isRetryableSummarizeError(error);
+      if (!canRetry) {
+        throw error;
+      }
+      await sleep(STANDARD_SUMMARIZE_RETRY_BASE_DELAY_MS * attempt);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Standard summarize failed");
+}
+
 function buildOnboardingHandoffInstruction(topic: string): string {
   const safeTopic = topic.replace(/[\r\n]+/g, " ").slice(0, 120);
   return `
@@ -505,6 +540,8 @@ export function useConversation(): UseConversationReturn {
   const [lastConversationId, setLastConversationId] = useState<string | null>(
     null,
   );
+  const [pendingSummaryConversationId, setPendingSummaryConversationId] =
+    useState<string | null>(null);
   const [pendingProposals, setPendingProposals] = useState<
     NoteUpdateProposal[]
   >([]);
@@ -607,6 +644,80 @@ export function useConversation(): UseConversationReturn {
   useEffect(() => {
     transcriptRef.current = state.transcript;
   }, [state.transcript]);
+
+  useEffect(() => {
+    if (
+      state.summaryStatus !== "pending" ||
+      pendingSummaryConversationId === null
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    let timerId: number | null = null;
+    const startedAt = Date.now();
+
+    const scheduleNextPoll = (): void => {
+      if (stopped) {
+        return;
+      }
+      if (Date.now() - startedAt >= PENDING_SUMMARY_POLL_TIMEOUT_MS) {
+        return;
+      }
+      timerId = window.setTimeout(() => {
+        void poll();
+      }, PENDING_SUMMARY_POLL_INTERVAL_MS);
+    };
+
+    const poll = async (): Promise<void> => {
+      try {
+        const record = await getConversation(pendingSummaryConversationId);
+        if (stopped || record === null) {
+          return;
+        }
+
+        if (record.summaryStatus === "completed") {
+          setPendingSummaryConversationId(null);
+          setLastConversationId(record.id);
+          if (
+            record.category === null &&
+            Array.isArray(record.noteUpdateProposals) &&
+            record.noteUpdateProposals.length > 0
+          ) {
+            setPendingProposals(record.noteUpdateProposals);
+          }
+          dispatch({ type: "SUMMARY_COMPLETED" });
+          return;
+        }
+
+        if (record.summaryStatus === "failed") {
+          setPendingSummaryConversationId(null);
+          dispatch({ type: "SUMMARY_FAILED" });
+          return;
+        }
+
+        scheduleNextPoll();
+      } catch (error: unknown) {
+        if (stopped) {
+          return;
+        }
+        console.error("Failed to poll pending summary status:", {
+          error,
+          conversationId: pendingSummaryConversationId,
+        });
+        scheduleNextPoll();
+      }
+    };
+
+    void poll();
+
+    return () => {
+      stopped = true;
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [pendingSummaryConversationId, state.summaryStatus]);
 
   const clearSessionTimer = useCallback((): void => {
     if (sessionTimerRef.current !== null) {
@@ -1422,6 +1533,7 @@ export function useConversation(): UseConversationReturn {
       resetMicGuard();
       setPendingProposals([]);
       setLastConversationId(null);
+      setPendingSummaryConversationId(null);
       conversationIdRef.current = crypto.randomUUID();
       characterIdRef.current = characterId;
       categoryRef.current = category;
@@ -1730,6 +1842,7 @@ export function useConversation(): UseConversationReturn {
 
       // Save immediately with pending status
       dispatch({ type: "SUMMARY_PENDING" });
+      setPendingSummaryConversationId(convId);
 
       // Gather previous note entries for change-aware summarization
       const previousEntries = collectCurrentNoteEntries(
@@ -1737,8 +1850,11 @@ export function useConversation(): UseConversationReturn {
         category,
       );
 
+      let conversationSaved = false;
+
       saveConversation(record)
         .then(async () => {
+          conversationSaved = true;
           let hasUploadedAudio = false;
 
           // Upload audio first so enhanced summarization can use re-transcription.
@@ -1768,6 +1884,7 @@ export function useConversation(): UseConversationReturn {
           }
 
           let result: SummarizeResult;
+          let summaryAlreadyPersistedOnServer = false;
           if (hasUploadedAudio) {
             try {
               result = await requestEnhancedSummarizeWithRetry(
@@ -1775,22 +1892,55 @@ export function useConversation(): UseConversationReturn {
                 category,
                 previousEntries,
               );
+              summaryAlreadyPersistedOnServer = true;
             } catch (enhancedError: unknown) {
-              if (!isRetryableSummarizeError(enhancedError)) {
-                throw enhancedError;
+              console.error(
+                "Enhanced summarization failed; falling back to standard summarize:",
+                { error: enhancedError },
+              );
+              try {
+                result = await requestStandardSummarizeWithRetry(
+                  category,
+                  record.transcript,
+                  previousEntries,
+                );
+              } catch (fallbackError: unknown) {
+                const shouldDeferToRecovery =
+                  isRetryableSummarizeError(enhancedError) ||
+                  isRetryableSummarizeError(fallbackError);
+                if (!shouldDeferToRecovery) {
+                  throw fallbackError;
+                }
+                // Keep summaryStatus=pending so server-side recovery can retry.
+                console.error(
+                  "All summarization paths failed; deferring to recovery:",
+                  {
+                    enhancedError,
+                    fallbackError,
+                  },
+                );
+                return;
               }
-              // Keep summaryStatus=pending so server-side recovery can retry with audio.
-              console.error("Enhanced summarization deferred to recovery:", {
-                error: enhancedError,
-              });
-              return;
             }
           } else {
-            result = await requestSummarize(
-              category,
-              record.transcript,
-              previousEntries,
-            );
+            try {
+              result = await requestStandardSummarizeWithRetry(
+                category,
+                record.transcript,
+                previousEntries,
+              );
+            } catch (standardError: unknown) {
+              if (!isRetryableSummarizeError(standardError)) {
+                throw standardError;
+              }
+              console.error(
+                "Standard summarization failed; deferring to recovery:",
+                {
+                  error: standardError,
+                },
+              );
+              return;
+            }
           }
 
           if (
@@ -1809,45 +1959,55 @@ export function useConversation(): UseConversationReturn {
               .catch(() => {});
           }
 
-          await updateConversation(convId, {
-            summary: result.summary,
-            coveredQuestionIds:
-              category === null && result.noteUpdateProposals.length > 0
-                ? []
-                : result.coveredQuestionIds,
-            noteEntries:
-              category === null && result.noteUpdateProposals.length > 0
-                ? []
-                : result.noteEntries,
-            pendingNoteEntries:
-              category === null && result.noteUpdateProposals.length > 0
-                ? result.noteEntries
-                : [],
-            noteUpdateProposals:
-              category === null && result.noteUpdateProposals.length > 0
-                ? result.noteUpdateProposals
-                : [],
-            summaryStatus: "completed",
-            oneLinerSummary: result.oneLinerSummary,
-            discussedCategories:
-              result.discussedCategories as QuestionCategory[],
-            keyPoints: result.keyPoints,
-            topicAdherence: result.topicAdherence,
-            offTopicSummary: result.offTopicSummary,
-          });
-
-          const fullRecord = await getConversation(convId);
-          if (fullRecord !== null) {
-            const integrityHash = await computeContentHash(fullRecord);
+          if (!summaryAlreadyPersistedOnServer) {
             await updateConversation(convId, {
-              integrityHash,
-              integrityHashedAt: Date.now(),
+              summary: result.summary,
+              coveredQuestionIds:
+                category === null && result.noteUpdateProposals.length > 0
+                  ? []
+                  : result.coveredQuestionIds,
+              noteEntries:
+                category === null && result.noteUpdateProposals.length > 0
+                  ? []
+                  : result.noteEntries,
+              pendingNoteEntries:
+                category === null && result.noteUpdateProposals.length > 0
+                  ? result.noteEntries
+                  : [],
+              noteUpdateProposals:
+                category === null && result.noteUpdateProposals.length > 0
+                  ? result.noteUpdateProposals
+                  : [],
+              summaryStatus: "completed",
+              oneLinerSummary: result.oneLinerSummary,
+              discussedCategories:
+                result.discussedCategories as QuestionCategory[],
+              keyPoints: result.keyPoints,
+              topicAdherence: result.topicAdherence,
+              offTopicSummary: result.offTopicSummary,
+            });
+          }
+          setPendingSummaryConversationId(null);
+          setLastConversationId(convId);
+
+          try {
+            const fullRecord = await getConversation(convId);
+            if (fullRecord !== null) {
+              const integrityHash = await computeContentHash(fullRecord);
+              await updateConversation(convId, {
+                integrityHash,
+                integrityHashedAt: Date.now(),
+              });
+            }
+          } catch (integrityError: unknown) {
+            console.error("Failed to finalize conversation integrity hash:", {
+              error: integrityError,
+              conversationId: convId,
             });
           }
 
           // Expose proposals to the UI for user review
           if (category === null && result.noteUpdateProposals.length > 0) {
-            setLastConversationId(convId);
             setPendingProposals(result.noteUpdateProposals);
           }
 
@@ -1855,9 +2015,12 @@ export function useConversation(): UseConversationReturn {
         })
         .catch((error: unknown) => {
           console.error("Failed to save/summarize conversation:", error);
-          updateConversation(convId, { summaryStatus: "failed" }).catch(
-            () => {},
-          );
+          setPendingSummaryConversationId(null);
+          if (conversationSaved) {
+            updateConversation(convId, { summaryStatus: "failed" }).catch(
+              () => {},
+            );
+          }
           dispatch({ type: "SUMMARY_FAILED" });
         });
     }

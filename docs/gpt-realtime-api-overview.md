@@ -226,11 +226,14 @@ Realtime API
 
 代表的制御項目：
 • voice（プリセット）
-• temperature
-• max_tokens
+• session type（音声会話は `type: "realtime"`、文字起こし専用は `type: "transcription"`）
+• output modalities
 • system instructions
 • interruption handling
 • response style
+
+注記：
+• GA版Realtime APIでは `temperature` は利用しない
 
 ⸻
 

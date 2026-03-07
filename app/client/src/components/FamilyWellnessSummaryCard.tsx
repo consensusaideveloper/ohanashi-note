@@ -77,6 +77,9 @@ export function FamilyWellnessSummaryCard({
         <p className="text-lg text-text-secondary leading-relaxed">
           {WELLNESS_MESSAGES.familySummary.notEnabledDescription}
         </p>
+        <p className="text-base text-text-secondary leading-relaxed">
+          {WELLNESS_MESSAGES.familySummary.requestHint}
+        </p>
       </div>
     );
   }

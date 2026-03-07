@@ -285,7 +285,10 @@ function collectLatestNoteMatches(
       ) {
         continue;
       }
-      versionCounts.set(entry.questionId, (versionCounts.get(entry.questionId) ?? 0) + 1);
+      versionCounts.set(
+        entry.questionId,
+        (versionCounts.get(entry.questionId) ?? 0) + 1,
+      );
       latestByQuestionId.set(entry.questionId, {
         entry,
         category: entryCategory as QuestionCategory | null,
@@ -312,11 +315,17 @@ function collectLatestNoteMatches(
       if (b.score !== a.score) return b.score - a.score;
       return b.startedAt - a.startedAt;
     })
-    .slice(0, Math.min(params.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_LIMIT))
+    .slice(
+      0,
+      Math.min(params.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_LIMIT),
+    )
     .map((item) => ({
       category: getCategoryLabel(item.category),
       questionTitle: item.entry.questionTitle,
-      answer: truncateText(sanitize(item.entry.answer), NOTE_MATCH_ANSWER_MAX_LENGTH),
+      answer: truncateText(
+        sanitize(item.entry.answer),
+        NOTE_MATCH_ANSWER_MAX_LENGTH,
+      ),
       updateCount: item.updateCount,
     }));
 

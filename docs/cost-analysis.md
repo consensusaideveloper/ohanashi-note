@@ -311,10 +311,11 @@ OpenAI Realtime APIの音声トークン変換レート:
 
 #### 即時対応（優先度: 高）
 
-**要約モデルを精度重視へ（gpt-5-mini）+ 低温度化**
+**要約モデルを精度重視へ（gpt-5-mini）**
 
 - 対応済み: `app/server/src/services/summarizer.ts`
-- 変更: `gpt-5-nano` → `gpt-5-mini`, `temperature=1` → `0.2`
+- 変更: `gpt-5-nano` → `gpt-5-mini`
+- 補足: GPT-5 系は chat completions でカスタム temperature を受け付けないため、要約ではデフォルト温度を利用する
 - 理由: エンディングノートの記録精度を優先しつつ、増分コストは1セッションあたり約¥0.28に留まる
 
 #### 中期対応（優先度: 中）
@@ -765,7 +766,7 @@ LTV:CAC = 3:1 目標:
 |--------|----------|----------|------|------|
 | ~~**P0**~~ | ~~improvedTranscript自動クリーンアップ~~ | ~~低~~ | ~~DB中間データ削減~~ | **実装済み** `data-retention.ts` |
 | ~~**P0**~~ | ~~gpt-4o-mini → gpt-5-nano移行（TODO生成）~~ | ~~極低（1行変更）~~ | ~~TODO生成コスト65%削減 + 廃止リスク回避~~ | **実装済み** `todo-generator.ts` |
-| ~~**P0**~~ | ~~要約モデルを gpt-5-mini に変更 + 低温度化~~ | ~~低~~ | ~~抽出精度向上（+¥0.28/セッション）~~ | **実装済み** `summarizer.ts` |
+| ~~**P0**~~ | ~~要約モデルを gpt-5-mini に変更~~ | ~~低~~ | ~~抽出精度向上（+¥0.28/セッション）~~ | **実装済み** `summarizer.ts` |
 | ~~**P0**~~ | ~~モデルIDの環境変数化~~ | ~~低~~ | ~~廃止時の即時切替（再デプロイ不要）~~ | **実装済み** `config.ts` |
 | **P0** | 会話一覧APIのカラム制限 | 低（1ファイル） | DB I/O 98%削減 | `conversations.ts` L95-99 |
 | **P1** | プラン別ストレージ上限の実装 | 中 | コスト予測性向上 | プラン確定後に実装 |
@@ -827,7 +828,7 @@ LTV:CAC = 3:1 目標:
 
 1. ~~improvedTranscript自動クリーンアップ~~ — **実装済み**（`data-retention.ts`）
 2. ~~gpt-4o-mini → gpt-5-nano移行（TODO生成）~~ — **実装済み**（`todo-generator.ts`）
-3. ~~要約モデルを gpt-5-mini へ変更（temperature 0.2）~~ — **実装済み**（`summarizer.ts`）
+3. ~~要約モデルを gpt-5-mini へ変更~~ — **実装済み**（`summarizer.ts`）
 4. ~~モデルIDを環境変数化~~ — **実装済み**（`config.ts`, `.env.example`）
 5. 会話一覧APIのカラム制限 — パフォーマンス改善
 6. 料金プランの最終決定（行政書士と議論）

@@ -1,14 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
-import { WELLNESS_MESSAGES } from "../lib/constants";
+import { WELLNESS_MESSAGES, UI_MESSAGES } from "../lib/constants";
+import { listFamilyMembers } from "../lib/family-api";
 import { useWellnessSettings } from "../hooks/useWellnessSettings";
 import { useToast } from "../hooks/useToast";
 import { WellnessActivationDialog } from "./WellnessActivationDialog";
 import { WellnessShareLevelBadge } from "./WellnessStatusBadge";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { WheelPicker } from "./WheelPicker";
+import { WheelPickerTrigger } from "./WheelPickerTrigger";
 import { Toast } from "./Toast";
 
 import type { ReactNode } from "react";
+import type { WheelPickerOption } from "./WheelPicker";
 import type { WellnessShareLevel } from "../lib/wellness-api";
 
 // --- Constants ---
@@ -37,11 +41,25 @@ const PAUSE_DURATION_OPTIONS: readonly {
   { label: WELLNESS_MESSAGES.pauseDurations.oneMonth, days: 30 },
 ];
 
+const WEEKDAY_OPTIONS: readonly WheelPickerOption[] =
+  WELLNESS_MESSAGES.weekdays.map((label, index) => ({
+    value: String(index),
+    label,
+  }));
+
 const DEFAULT_PAUSE_INDEX = 0;
+
+// --- Props ---
+
+interface WellnessSettingsSectionProps {
+  onNavigateToFamily: () => void;
+}
 
 // --- Component ---
 
-export function WellnessSettingsSection(): ReactNode {
+export function WellnessSettingsSection({
+  onNavigateToFamily,
+}: WellnessSettingsSectionProps): ReactNode {
   const {
     settings,
     ownerStatus,
@@ -60,6 +78,20 @@ export function WellnessSettingsSection(): ReactNode {
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
     useToast();
 
+  const [hasFamilyMembers, setHasFamilyMembers] = useState(false);
+
+  useEffect(() => {
+    void listFamilyMembers()
+      .then((data) => {
+        setHasFamilyMembers(data.members.length > 0);
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to check family members for wellness:", {
+          error: err,
+        });
+      });
+  }, []);
+
   const [isActivationOpen, setIsActivationOpen] = useState(false);
   const [isShareLevelConfirmOpen, setIsShareLevelConfirmOpen] = useState(false);
   const [pendingShareLevel, setPendingShareLevel] =
@@ -69,6 +101,7 @@ export function WellnessSettingsSection(): ReactNode {
     useState(DEFAULT_PAUSE_INDEX);
   const [isDisableConfirmOpen, setIsDisableConfirmOpen] = useState(false);
   const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
+  const [isDeliveryDayPickerOpen, setIsDeliveryDayPickerOpen] = useState(false);
 
   // --- Handlers ---
 
@@ -125,9 +158,18 @@ export function WellnessSettingsSection(): ReactNode {
     setPendingShareLevel(null);
   }, []);
 
-  const handleDeliveryDayChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>): void => {
-      const day = Number(e.target.value);
+  const handleOpenDeliveryDayPicker = useCallback((): void => {
+    setIsDeliveryDayPickerOpen(true);
+  }, []);
+
+  const handleCloseDeliveryDayPicker = useCallback((): void => {
+    setIsDeliveryDayPickerOpen(false);
+  }, []);
+
+  const handleDeliveryDayConfirm = useCallback(
+    (value: string): void => {
+      setIsDeliveryDayPickerOpen(false);
+      const day = Number(value);
       updateDeliveryDay(day)
         .then(() => {
           showToast(WELLNESS_MESSAGES.settings.saveSuccess, "success");
@@ -185,12 +227,9 @@ export function WellnessSettingsSection(): ReactNode {
     setIsResumeConfirmOpen(false);
   }, []);
 
-  const handlePauseDurationChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>): void => {
-      setSelectedPauseIndex(Number(e.target.value));
-    },
-    [],
-  );
+  const handlePauseDurationChange = useCallback((index: number): void => {
+    setSelectedPauseIndex(index);
+  }, []);
 
   const handleOpenDisable = useCallback((): void => {
     setIsDisableConfirmOpen(true);
@@ -379,49 +418,49 @@ export function WellnessSettingsSection(): ReactNode {
           </div>
         </div>
 
-        {/* Delivery day select */}
+        {/* Delivery day picker */}
         <div className="space-y-2">
-          <label
-            htmlFor="wellness-delivery-day"
-            className="text-lg font-medium text-text-primary"
-          >
+          <p className="text-lg font-medium text-text-primary">
             {WELLNESS_MESSAGES.settings.deliveryDayLabel}
-          </label>
-          <select
-            id="wellness-delivery-day"
-            value={settings.weeklySummaryDay}
-            onChange={handleDeliveryDayChange}
-            disabled={isSaving}
-            className="w-full min-h-11 rounded-card border border-border-light bg-bg-surface px-4 py-2 text-lg"
-          >
-            {WELLNESS_MESSAGES.weekdays.map((dayLabel, index) => (
-              <option key={index} value={index}>
-                {dayLabel}
-              </option>
-            ))}
-          </select>
+          </p>
+          <WheelPickerTrigger
+            displayValue={
+              WELLNESS_MESSAGES.weekdays[settings.weeklySummaryDay] ?? ""
+            }
+            onClick={handleOpenDeliveryDayPicker}
+          />
         </div>
 
         <div className="space-y-2">
-          <label
-            htmlFor="wellness-pause-duration"
-            className="text-lg font-medium text-text-primary"
-          >
+          <p className="text-lg font-medium text-text-primary">
             {WELLNESS_MESSAGES.settings.pauseDurationLabel}
-          </label>
-          <select
-            id="wellness-pause-duration"
-            value={selectedPauseIndex}
-            onChange={handlePauseDurationChange}
-            disabled={isSaving}
-            className="w-full min-h-11 rounded-card border border-border-light bg-bg-surface px-4 py-2 text-lg"
+          </p>
+          <div
+            role="radiogroup"
+            aria-label={WELLNESS_MESSAGES.settings.pauseDurationLabel}
+            className="flex gap-2"
           >
-            {PAUSE_DURATION_OPTIONS.map((option, index) => (
-              <option key={option.days} value={index}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            {PAUSE_DURATION_OPTIONS.map((option, index) => {
+              const isSelected = selectedPauseIndex === index;
+              return (
+                <button
+                  key={option.days}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={isSaving}
+                  className={`flex-1 min-h-11 rounded-full text-lg font-medium text-center py-2 transition-colors ${
+                    isSelected
+                      ? "bg-accent-primary text-text-on-accent shadow-sm"
+                      : "bg-bg-surface border border-border text-text-secondary active:bg-bg-surface-hover"
+                  }`}
+                  onClick={(): void => handlePauseDurationChange(index)}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Owner status card */}
@@ -499,12 +538,26 @@ export function WellnessSettingsSection(): ReactNode {
 
       {renderContent()}
 
+      {/* Delivery day wheel picker */}
+      <WheelPicker
+        isOpen={isDeliveryDayPickerOpen}
+        options={WEEKDAY_OPTIONS}
+        selectedValue={
+          settings !== null ? String(settings.weeklySummaryDay) : "0"
+        }
+        title={UI_MESSAGES.wheelPicker.deliveryDayTitle}
+        onConfirm={handleDeliveryDayConfirm}
+        onCancel={handleCloseDeliveryDayPicker}
+      />
+
       {/* Activation dialog */}
       <WellnessActivationDialog
         isOpen={isActivationOpen}
         isSaving={isSaving}
+        hasFamilyMembers={hasFamilyMembers}
         onActivate={handleActivate}
         onCancel={handleCloseActivation}
+        onNavigateToFamily={onNavigateToFamily}
       />
 
       {/* Share level change confirm */}

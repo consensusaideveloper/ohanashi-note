@@ -1,9 +1,6 @@
 export type AiCapabilityType = "reference" | "navigation" | "mutation";
 export type AiCapabilityRiskTier = 0 | 1 | 2 | 3;
-export type AiCapabilityAvailability =
-  | "onboarding"
-  | "conversation"
-  | "family";
+export type AiCapabilityAvailability = "onboarding" | "conversation" | "family";
 
 export interface AiCapabilityDefinition {
   id: string;
@@ -23,7 +20,10 @@ export const AI_CAPABILITIES: readonly AiCapabilityDefinition[] = [
     availableIn: ["conversation"],
     toolName: "search_my_information",
     description: "過去の会話とノートを横断して必要な情報を探す",
-    userExamples: ["前に保険の話をしたっけ？", "もう記録されている内容を探して"],
+    userExamples: [
+      "前に保険の話をしたっけ？",
+      "もう記録されている内容を探して",
+    ],
   },
   {
     id: "conversation-search-legacy",

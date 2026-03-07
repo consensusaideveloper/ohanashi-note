@@ -653,6 +653,10 @@ function AppContent({ onRequireOnboarding }: AppContentProps): ReactNode {
     setScreen("family-dashboard");
   }, []);
 
+  const handleNavigateToFamilyFromSettings = useCallback((): void => {
+    setScreen("family-dashboard");
+  }, []);
+
   const handleLeaveFamily = useCallback((): void => {
     setSelectedConnection(null);
     setScreen("family-dashboard");
@@ -777,7 +781,10 @@ function AppContent({ onRequireOnboarding }: AppContentProps): ReactNode {
         try {
           const [profile, familyResult] = await Promise.all([
             getUserProfile(),
-            listFamilyMembers().catch(() => ({ members: [], lifecycleStatus: "active" })),
+            listFamilyMembers().catch(() => ({
+              members: [],
+              lifecycleStatus: "active",
+            })),
           ]);
           return {
             success: true,
@@ -1185,7 +1192,12 @@ function AppContent({ onRequireOnboarding }: AppContentProps): ReactNode {
           />
         );
       case "settings":
-        return <SettingsScreen lifecycleStatus={myLifecycleStatus} />;
+        return (
+          <SettingsScreen
+            lifecycleStatus={myLifecycleStatus}
+            onNavigateToFamily={handleNavigateToFamilyFromSettings}
+          />
+        );
       case "family-dashboard":
         return <FamilyScreen onSelectCreator={handleSelectCreatorDetail} />;
       case "family-creator-detail":

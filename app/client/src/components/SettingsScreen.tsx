@@ -43,6 +43,7 @@ import type { ReactNode } from "react";
 
 interface SettingsScreenProps {
   lifecycleStatus: string;
+  onNavigateToFamily: () => void;
 }
 
 type DataExportRange = "all" | "last90d" | "last365d";
@@ -137,6 +138,7 @@ function CharacterMiniAvatar({
 
 export function SettingsScreen({
   lifecycleStatus,
+  onNavigateToFamily,
 }: SettingsScreenProps): ReactNode {
   const { user, handleSignOut } = useAuthContext();
   const { toastMessage, toastVariant, isToastVisible, showToast, hideToast } =
@@ -801,7 +803,7 @@ export function SettingsScreen({
         </section>
 
         {/* Section: Wellness monitoring */}
-        <WellnessSettingsSection />
+        <WellnessSettingsSection onNavigateToFamily={onNavigateToFamily} />
 
         {/* Section: Legal Documents */}
         <section className="space-y-3">
@@ -884,25 +886,49 @@ export function SettingsScreen({
           <p className="text-lg text-text-secondary">
             {SETTINGS_MESSAGES.dataExport.sectionDescription}
           </p>
-          <label className="block text-lg text-text-secondary">
+          <p className="text-lg text-text-secondary">
             {SETTINGS_MESSAGES.dataExport.rangeLabel}
-          </label>
-          <select
-            value={dataExportRange}
-            onChange={(e) => {
-              setDataExportRange(e.target.value as DataExportRange);
-            }}
-            className="w-full min-h-11 rounded-card border border-border-light bg-bg-surface px-4 py-2 text-lg text-text-primary"
-            disabled={isExporting}
+          </p>
+          <div
+            role="radiogroup"
+            aria-label={SETTINGS_MESSAGES.dataExport.rangeLabel}
+            className="flex gap-2"
           >
-            <option value="all">{SETTINGS_MESSAGES.dataExport.rangeAll}</option>
-            <option value="last90d">
-              {SETTINGS_MESSAGES.dataExport.rangeLast90Days}
-            </option>
-            <option value="last365d">
-              {SETTINGS_MESSAGES.dataExport.rangeLast365Days}
-            </option>
-          </select>
+            {(
+              [
+                { value: "all", label: SETTINGS_MESSAGES.dataExport.rangeAll },
+                {
+                  value: "last90d",
+                  label: SETTINGS_MESSAGES.dataExport.rangeLast90Days,
+                },
+                {
+                  value: "last365d",
+                  label: SETTINGS_MESSAGES.dataExport.rangeLast365Days,
+                },
+              ] as const
+            ).map((option) => {
+              const isActive = dataExportRange === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  disabled={isExporting}
+                  className={`flex-1 min-h-11 rounded-full text-lg font-medium text-center py-2 transition-colors ${
+                    isActive
+                      ? "bg-accent-primary text-text-on-accent shadow-sm"
+                      : "bg-bg-surface border border-border text-text-secondary active:bg-bg-surface-hover"
+                  }`}
+                  onClick={(): void => {
+                    setDataExportRange(option.value);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
           <label className="flex items-start gap-3 cursor-pointer min-h-11">
             <input
               type="checkbox"

@@ -38,7 +38,9 @@ const STARTUP_DELAY_MS = 60_000; // 60 seconds
 /** Maximum accounts to delete per sweep. */
 const MAX_DELETION_BATCH = 10;
 
-async function hasPendingConsentParticipation(userId: string): Promise<boolean> {
+async function hasPendingConsentParticipation(
+  userId: string,
+): Promise<boolean> {
   const memberships = await db
     .select({
       familyMemberId: familyMembers.id,
@@ -94,9 +96,12 @@ async function hardDeleteUser(user: {
   firebaseUid: string;
 }): Promise<void> {
   if (await hasPendingConsentParticipation(user.id)) {
-    logger.warn("Scheduled deletion postponed due to active family consent flow", {
-      userId: user.id,
-    });
+    logger.warn(
+      "Scheduled deletion postponed due to active family consent flow",
+      {
+        userId: user.id,
+      },
+    );
     return;
   }
 
@@ -128,9 +133,12 @@ async function hardDeleteUser(user: {
     .returning({ id: users.id });
 
   if (deleted.length === 0) {
-    logger.info("Scheduled deletion skipped for reactivated or changed account", {
-      userId: user.id,
-    });
+    logger.info(
+      "Scheduled deletion skipped for reactivated or changed account",
+      {
+        userId: user.id,
+      },
+    );
     return;
   }
 

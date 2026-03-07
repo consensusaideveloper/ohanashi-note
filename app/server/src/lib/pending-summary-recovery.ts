@@ -22,11 +22,11 @@ import type { QuestionCategory } from "../types/conversation.js";
 // --- Constants ---
 
 /** How often to check for stuck pending summaries. */
-const RECOVERY_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+const RECOVERY_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 /** Minimum age before a pending record is considered stale.
  *  Prevents racing with a still-running client Promise chain. */
-const PENDING_STALENESS_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+const PENDING_STALENESS_THRESHOLD_MS = 60 * 1000; // 1 minute
 
 /** Maximum records to process per sweep (avoid overloading the OpenAI API). */
 const MAX_RECOVERY_BATCH_SIZE = 3;
@@ -105,13 +105,39 @@ async function recoverPendingSummaries(): Promise<void> {
           }
         }
 
-        const result = await summarizeConversation({
-          category,
-          transcript: typedTranscript,
-          // previousNoteEntries omitted: recovery context is limited,
-          // but having a summary without prior context is far better
-          // than no summary at all.
-        });
+        let summaryTranscript = typedTranscript;
+        let summaryTranscriptionModel = transcriptionModel;
+        let result;
+        try {
+          result = await summarizeConversation({
+            category,
+            transcript: summaryTranscript,
+            // previousNoteEntries omitted: recovery context is limited,
+            // but having a summary without prior context is far better
+            // than no summary at all.
+          });
+        } catch (error: unknown) {
+          if (transcriptionModel === null) {
+            throw error;
+          }
+
+          const message =
+            error instanceof Error ? error.message : "Unknown error";
+          logger.warn(
+            "Recovery summarization failed with re-transcribed transcript; retrying with original transcript",
+            {
+              conversationId: row.id,
+              error: message,
+            },
+          );
+
+          summaryTranscript = transcript as TranscriptEntry[];
+          summaryTranscriptionModel = null;
+          result = await summarizeConversation({
+            category,
+            transcript: summaryTranscript,
+          });
+        }
 
         // Only update if still pending (avoid overwriting a concurrent client update)
         const shouldKeepAsPending =
@@ -134,9 +160,9 @@ async function recoverPendingSummaries(): Promise<void> {
           offTopicSummary: result.offTopicSummary,
         };
 
-        if (transcriptionModel !== null) {
-          updateData["improvedTranscript"] = typedTranscript;
-          updateData["transcriptionModel"] = transcriptionModel;
+        if (summaryTranscriptionModel !== null) {
+          updateData["improvedTranscript"] = summaryTranscript;
+          updateData["transcriptionModel"] = summaryTranscriptionModel;
         }
 
         await db
@@ -151,7 +177,8 @@ async function recoverPendingSummaries(): Promise<void> {
 
         logger.info("Recovered pending summary", {
           conversationId: row.id,
-          transcriptionModel: transcriptionModel ?? "original transcript",
+          transcriptionModel:
+            summaryTranscriptionModel ?? "original transcript",
         });
       } catch (error: unknown) {
         const message =

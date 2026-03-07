@@ -239,6 +239,8 @@ realtimeRoute.post("/api/realtime/connect", async (c) => {
     }
 
     // --- Build session config for OpenAI ---
+    // GA WebRTC speech-to-speech sessions use `type: "realtime"`.
+    // The separate realtime transcription interface uses `type: "transcription"`.
     const openaiSession = {
       type: "realtime",
       model: config.openaiModels.realtime,

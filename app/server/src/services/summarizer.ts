@@ -76,6 +76,7 @@ export interface SummarizeResponse {
 // --- Constants ---
 
 const MAX_TRANSCRIPT_CHARS = 30_000;
+const SUMMARIZER_OUTPUT_ATTEMPTS = 2;
 const DISCUSSED_CATEGORY_ENUM = [
   "memories",
   "people",
@@ -478,6 +479,91 @@ function truncateTranscript(
     result += line;
   }
   return result;
+}
+
+export function resolveSummarizerTemperature(
+  model: string,
+  configuredTemperature: number,
+): number | undefined {
+  const normalizedModel = model.trim().toLowerCase();
+
+  // GPT-5 chat completions currently accept only the default temperature.
+  if (normalizedModel.startsWith("gpt-5")) {
+    return undefined;
+  }
+
+  return configuredTemperature;
+}
+
+function isUnsupportedTemperatureError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return (
+    message.includes("Unsupported value: 'temperature'") &&
+    message.includes("Only the default (1) value is supported")
+  );
+}
+
+async function createSummaryCompletion(
+  openai: OpenAI,
+  model: string,
+  systemPrompt: string,
+  userMessage: string,
+  temperature: number | undefined,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const request = async (
+    requestedTemperature: number | undefined,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> =>
+    openai.chat.completions.create({
+      model,
+      ...(requestedTemperature === undefined
+        ? {}
+        : { temperature: requestedTemperature }),
+      response_format: {
+        type: "json_schema",
+        json_schema: RESPONSE_JSON_SCHEMA,
+      },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    });
+
+  try {
+    return await request(temperature);
+  } catch (error: unknown) {
+    if (temperature !== undefined && isUnsupportedTemperatureError(error)) {
+      logger.warn(
+        "Summarizer rejected custom temperature; retrying with default",
+        {
+          model,
+          configuredTemperature: temperature,
+        },
+      );
+      return request(undefined);
+    }
+    throw error;
+  }
+}
+
+function parseSummaryResponse(content: string): SummarizeResponse {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    logger.error("Failed to parse OpenAI response as JSON", {
+      content: content.slice(0, 500),
+    });
+    throw new Error("Invalid JSON response from OpenAI");
+  }
+
+  if (!validateResponse(parsed)) {
+    logger.error("OpenAI response does not match expected structure", {
+      content: content.slice(0, 500),
+    });
+    throw new Error("Invalid response structure from OpenAI");
+  }
+
+  return parsed;
 }
 
 function normalizeForGrounding(text: string): string {
@@ -891,46 +977,64 @@ export async function summarizeConversation(
     );
   }
   const userMessage = truncateTranscript(transcriptForAnalysis);
+  const inputChars = transcriptForAnalysis.reduce((sum, entry) => {
+    const roleLabel = entry.role === "user" ? "ユーザー" : "アシスタント";
+    return sum + roleLabel.length + entry.text.length + 3;
+  }, 0);
+  const effectiveTemperature = resolveSummarizerTemperature(
+    config.openaiModels.summarizer,
+    config.openaiModels.summarizerTemperature,
+  );
 
   logger.info("Summarization request", {
     category: request.category,
     model: config.openaiModels.summarizer,
-    temperature: config.openaiModels.summarizerTemperature,
+    configuredTemperature: config.openaiModels.summarizerTemperature,
+    temperature: effectiveTemperature ?? "default",
     transcriptLength: request.transcript.length,
     userTranscriptLength: userOnlyTranscript.length,
+    inputChars,
     truncatedChars: userMessage.length,
+    wasTruncated: userMessage.length < inputChars,
   });
 
-  const completion = await openai.chat.completions.create({
-    model: config.openaiModels.summarizer,
-    temperature: config.openaiModels.summarizerTemperature,
-    response_format: { type: "json_schema", json_schema: RESPONSE_JSON_SCHEMA },
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-  });
+  let parsed: SummarizeResponse | null = null;
+  let lastOutputError: Error | null = null;
 
-  const content = completion.choices[0]?.message.content;
-  if (!content) {
-    throw new Error("Empty response from OpenAI");
+  for (let attempt = 1; attempt <= SUMMARIZER_OUTPUT_ATTEMPTS; attempt += 1) {
+    const completion = await createSummaryCompletion(
+      openai,
+      config.openaiModels.summarizer,
+      systemPrompt,
+      userMessage,
+      effectiveTemperature,
+    );
+    const content = completion.choices[0]?.message.content;
+
+    if (!content) {
+      lastOutputError = new Error("Empty response from OpenAI");
+    } else {
+      try {
+        parsed = parseSummaryResponse(content);
+        break;
+      } catch (error: unknown) {
+        lastOutputError =
+          error instanceof Error
+            ? error
+            : new Error("Invalid response from OpenAI");
+      }
+    }
+
+    logger.warn("Summarizer returned invalid structured output", {
+      model: config.openaiModels.summarizer,
+      attempt,
+      maxAttempts: SUMMARIZER_OUTPUT_ATTEMPTS,
+      error: lastOutputError.message,
+    });
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    logger.error("Failed to parse OpenAI response as JSON", {
-      content: content.slice(0, 500),
-    });
-    throw new Error("Invalid JSON response from OpenAI");
-  }
-
-  if (!validateResponse(parsed)) {
-    logger.error("OpenAI response does not match expected structure", {
-      content: content.slice(0, 500),
-    });
-    throw new Error("Invalid response structure from OpenAI");
+  if (parsed === null) {
+    throw lastOutputError ?? new Error("Empty response from OpenAI");
   }
 
   const groundedNoteEntries = filterGroundedNoteEntries(
