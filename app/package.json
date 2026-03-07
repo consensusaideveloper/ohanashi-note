@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "concurrently -n client,server -c blue,green \"npm --prefix client run dev\" \"npm --prefix server run dev\"",
     "build": "npm --prefix client run build && npm --prefix server run build",
-    "prestart": "test -f server/dist/index.js && test -f client/dist/index.html || npm run build",
+    "prestart": "test -f server/dist/index.js || npm --prefix server run build",
     "start": "node server/dist/index.js",
     "db:migrate": "npm --prefix server run db:migrate",
     "db:migrate:status": "npm --prefix server run db:migrate:status",
