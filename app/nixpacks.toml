@@ -5,4 +5,4 @@ cmds = ["npm ci --include=optional"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "node server/dist/index.js"
